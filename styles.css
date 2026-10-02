@@ -707,6 +707,8 @@ footer {
   margin:var(--s8) 0 var(--s4);
 }
 .field-label span { font-weight:500; color:var(--ink-soft); }
+.field-label.attention { color:#B5651D; }
+.field-label .need { display:block; margin-top:2px; font-weight:600; color:#B5651D; }
 .field-hint { font-size:11px; color:var(--ink-soft); line-height:1.5; margin-top:var(--s4); }
 .qty-row { display:flex; gap:var(--s4); }
 .qty-row .field:first-child { flex:1; }
@@ -808,4 +810,11 @@ footer {
   .notch, .status-bar { display:none; }
   .view-pad { padding-top:var(--s8); }
   .fab { bottom:calc(72px + env(safe-area-inset-bottom, 0px)); }
+  /* Screens that slide over the app are positioned against the whole screen, so they need the
+     same room for the clock, notch and home bar; otherwise "Back" sits under the status bar
+     where taps never reach it. */
+  .sub-screen, .detail-overlay, .setup {
+    padding-top:env(safe-area-inset-top, 0px);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
 }
