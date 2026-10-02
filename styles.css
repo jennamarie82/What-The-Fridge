@@ -772,6 +772,28 @@ footer {
 .start-card b { font-size:15px; }
 .start-card span { font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
 
+/* recipe as written + method, on the meal detail screen */
+.as-written .aw-line { font-size:13px; padding:6px 0; border-bottom:1px solid var(--border); line-height:1.4; }
+.as-written .aw-line:last-child { border-bottom:none; }
+.method-tip { font-weight:500; text-transform:none; letter-spacing:0; margin-left:4px; }
+.method { list-style:none; display:flex; flex-direction:column; gap:var(--s4); margin-bottom:var(--s8); }
+.method li {
+  display:flex; gap:var(--s6); align-items:flex-start;
+  background:var(--white); border-radius:var(--r); padding:var(--s6) var(--s8);
+  box-shadow:0 1px 3px var(--shadow);
+  font-size:14px; line-height:1.55; cursor:pointer;
+  transition:opacity .2s var(--ease);
+}
+.method .step-n {
+  flex-shrink:0; width:26px; height:26px; border-radius:50%;
+  background:var(--leaf-light); color:var(--leaf);
+  font-size:13px; font-weight:800;
+  display:flex; align-items:center; justify-content:center;
+}
+.method li.done { opacity:.5; }
+.method li.done span:last-child { text-decoration:line-through; }
+.method li.done .step-n { background:var(--leaf); color:#fff; }
+
 /* ═══════════════ ON A REAL PHONE ═══════════════ */
 /* On a phone, or installed to the home screen, the app fills the screen:
    no mock device frame, notch or fake status bar. The desktop view keeps the frame. */

@@ -854,6 +854,27 @@ function toggleZone(key) { openZones[key] = !openZones[key]; renderPantry(); }
 // ═══════════════ DETAIL VIEW ═══════════════
 var detailIndex = null;
 
+// The recipe exactly as the approved database writes it, ingredient lines and numbered steps,
+// read from recipes.js. Nothing is reworded or rescaled: the database doesn't say how many a
+// recipe serves, so its amounts are shown as written.
+var RECIPE_SOURCE = {};
+(window.WTF_RECIPES || []).forEach(function(r) { RECIPE_SOURCE[r.id] = r; });
+
+function methodHTML(r) {
+  var src = RECIPE_SOURCE[r.id];
+  if (!src || !src.steps || !src.steps.length) return '';
+  return '<div class="section-label">The recipe, as written</div>' +
+    '<div class="ingredient-card as-written">' +
+      src.ing.map(function(line) { return '<div class="aw-line">' + esc(line.text) + '</div>'; }).join('') +
+    '</div>' +
+    '<p class="field-hint">Amounts as the recipe file gives them. The file doesn\'t say how many a recipe serves, ' +
+      'so these can differ from what the plan sets aside for your household above.</p>' +
+    '<div class="section-label">How to make it <span class="method-tip">tap a step when it\'s done</span></div>' +
+    '<ol class="method">' + src.steps.map(function(s, i) {
+      return '<li onclick="this.classList.toggle(\'done\')"><span class="step-n">' + (i + 1) + '</span><span>' + esc(s) + '</span></li>';
+    }).join('') + '</ol>';
+}
+
 function openDetail(idx) {
   detailIndex = idx;
   var entry = plan[idx];
@@ -903,6 +924,8 @@ function openDetail(idx) {
       (line.optional ? 'Not in your pantry, but the dish works fine without it.' : 'Required for this recipe. Swap the meal or pick it up.') +
       '</span></div>';
   });
+
+  html += methodHTML(r);
 
   if (entry.dietBlocked) {
     html += '<div class="missing-callout"><b>Doesn\'t fit your dietary settings</b><span>' +
