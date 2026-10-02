@@ -16,12 +16,22 @@ BUS 860 *Managing Intelligence* · Group 3.
 - Estimates freshness from the purchase date (or a printed use-by date you enter) and the shelf-life
   norms for where the food is kept, and always shows the basis. Food with no date, or no matching
   norm, stays "unknown" and is never assumed fresh.
-- Plans today plus the next two days (breakfast, lunch and dinner). This build still plans from the
-  18 recipes modelled in the prototype; planning from all 300 is the next step.
-- Checks across all nine meals so a scarce ingredient isn't promised to two of them. Where an amount
-  isn't recorded it asks you to check, rather than guessing.
-- Swap, skip or mark a meal cooked. Ingredients are deducted only when you confirm a meal was cooked,
-  and Undo puts back exactly what was taken.
+- Plans today plus the next two days (breakfast, lunch and dinner) from all 300 approved recipes,
+  around what's actually in your kitchen. It fills one meal at a time, setting aside what each uses,
+  so a scarce ingredient is never promised to two meals. It prefers meals with nothing missing, then
+  food closest to the end of its window, then breakfasts of 20 minutes or less, then your favourites.
+  Dietary restrictions and "not for us" are hard filters.
+- Says plainly when the kitchen can't cover the plan: what's missing, which meal runs short because
+  an earlier one uses the same food, and what will have turned before its meal. Where an amount isn't
+  recorded in a comparable unit, it asks you to check rather than guessing. **Re-plan** replaces only
+  the meals that no longer work.
+- Amounts are used as the recipe file writes them. The file doesn't say how many each recipe serves,
+  so nothing is scaled to household size yet.
+- Each meal shows its ingredients in the recipe's own words next to what you have, then the
+  numbered steps.
+- Swap, skip or mark a meal cooked. Ingredients are deducted only when you confirm a meal was cooked
+  (converting grams, ounces, cups and spoons where that's plain arithmetic), and Undo puts back
+  exactly what was taken.
 - Profile counts real activity only: meals cooked, your cooking streak, and ingredients used before
   their window closed.
 
