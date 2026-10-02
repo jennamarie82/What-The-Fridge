@@ -46,6 +46,7 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
   border-radius:36px;
   background:var(--cream);
   overflow:hidden;
+  overflow:clip;      /* unlike hidden, clip can't be scrolled by the browser; see the scroll guard in app.js */
   display:flex; flex-direction:column;
   position:relative;
 }
