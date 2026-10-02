@@ -1606,11 +1606,18 @@ function renderItemScreen() {
       '<input class="field search" id="itemSearch" type="search" placeholder="Search: chicken, spinach, feta…" ' +
         'autocomplete="off" value="' + esc(draft.query) + '" oninput="draft.query=this.value;renderItemResults()">' +
       '<div id="itemResults"></div>' +
-      '<p class="nutri-note">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them.</p>' +
+      '<p class="field-hint">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them.</p>' +
       (justAdded.length ? '<div class="actions"><button class="btn primary" onclick="closeSub()">Done</button></div>' : '');
     renderItemResults();
-    var s = document.getElementById('itemSearch');
-    if (s && window.matchMedia('(hover: hover)').matches) s.focus();
+    // On a computer, put the cursor in the search box, but only once the screen has finished
+    // sliding in, and without letting the browser scroll anything to reveal it. Focusing it
+    // mid-slide made the browser scroll the phone frame sideways, hiding Back and the list.
+    setTimeout(function() {
+      var s = document.getElementById('itemSearch');
+      if (s && window.matchMedia('(hover: hover)').matches) {
+        try { s.focus({ preventScroll:true }); } catch (e) { s.focus(); }
+      }
+    }, 400);
     return;
   }
   var ing = ingById(draft.ing);
@@ -1880,6 +1887,16 @@ function startOver() {
   renderAll();
   showSetup();
 }
+
+// The phone frame is never meant to scroll: its sliding screens are moved with transforms. If a
+// browser scrolls it anyway (to reveal a focused field, say), the screens slide out of view and
+// Back can't be reached, so snap it straight back.
+(function() {
+  var frame = document.getElementById('app');
+  frame.addEventListener('scroll', function() {
+    if (frame.scrollLeft || frame.scrollTop) { frame.scrollLeft = 0; frame.scrollTop = 0; }
+  });
+})();
 
 var returning = loadState();
 if (plan.length !== 9) { planKitchen(plan.length > 0); }
