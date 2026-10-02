@@ -1629,7 +1629,10 @@ function renderItemScreen() {
         return '<option' + (draft.unit === u ? ' selected' : '') + '>' + u + '</option>';
       }).join('') + '</select></div>' +
     '<p class="field-hint">Leave it blank if you\'re not sure. The plan will ask you to check rather than guess.</p>' +
-    '<div class="field-label">When did you buy it?</div>' +
+    '<div class="field-label' + (draft.askWhen && !draftReady() ? ' attention' : '') + '" id="whenLabel">When did you buy it?' +
+      (draft.askWhen && !draftReady()
+        ? ' <span class="need">' + (draft.when === 'date' ? 'Pick the date, or choose "Don\'t know".' : 'Choose one to add it. "Don\'t know" is fine.') + '</span>'
+        : '') + '</div>' +
     '<div class="seg wrap">' + whens.map(function(w) {
       return '<button class="' + (draft.when === w[0] ? 'on' : '') + '" onclick="draft.when=\'' + w[0] + '\';renderItemScreen()">' + w[1] + '</button>';
     }).join('') + '</div>' +
@@ -1690,17 +1693,26 @@ function updateItemPreview() {
   if (!box) return;
   if (!draftReady()) {
     box.innerHTML = '<span class="field-hint">Say when you bought it, even if the answer is "don\'t know", to see the freshness estimate.</span>';
-    if (btn) btn.disabled = true;
     return;
   }
-  if (btn) btn.disabled = false;
+  var lbl = document.getElementById('whenLabel');
+  if (lbl && draft.askWhen) { draft.askWhen = false; renderItemScreen(); return; }
   var e = draftEntry(), f = freshness(e);
   box.innerHTML = '<div class="preview-head">' + chipHTML(f.cls, f.text) + '<b>Freshness estimate</b></div>' +
     '<div class="ingredient-basis">' + esc(basisLine(e)) + '</div>';
 }
 
 function saveItem() {
-  if (!draftReady()) return;
+  // The purchase date is the user's answer, never filled in for them. If they haven't given
+  // one yet, point at the question rather than silently refusing.
+  if (!draftReady()) {
+    draft.askWhen = true;
+    renderItemScreen();
+    // Scroll only the form: scrollIntoView would also nudge the sliding screens sideways.
+    var lbl = document.getElementById('whenLabel'), body = document.getElementById('subBody');
+    if (lbl && body) body.scrollTop = Math.max(0, lbl.offsetTop - body.offsetTop - 60);
+    return;
+  }
   var e = draftEntry(), name = ingName(e.ing);
   if (draft.id) {
     var old = entryById(draft.id);
