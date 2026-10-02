@@ -1,0 +1,330 @@
+id,name,zone,norm,staple,match
+# The shared ingredient list. Each recipe ingredient line is matched against `match`
+# (a regular expression, case-insensitive) from TOP to BOTTOM — the first row that matches
+# wins, so specific wordings must sit above general ones ("chicken broth" above "chicken").
+# zone   = where a user would usually keep it: fridge, freezer or cupboard
+# norm   = row key in shelf-life.csv, blank when knowledge/shelf-life-norms.md has no row for it
+# staple = 1 for the database's "Standard Pantry Staples Assumed On Hand" — never tracked or "missing"
+#
+# ── compound wordings that would otherwise be caught by a staple ──
+peanut-butter,Peanut butter,cupboard,,0,peanut butter
+garlic-sauce,Garlic sauce (toum),fridge,,0,garlic sauce|toum
+buffalo-sauce,Buffalo sauce,fridge,,0,buffalo
+balsamic-vinegar,Balsamic vinegar,cupboard,,0,balsamic vinegar
+apple-cider-vinegar,Apple cider vinegar,cupboard,,0,cider vinegar
+ground-ginger,Ground ginger,cupboard,,0,ground ginger
+smoked-paprika,Smoked paprika,cupboard,,0,smoked paprika
+cumin-seeds,Cumin seeds,cupboard,,0,cumin seeds
+mustard-seeds,Mustard seeds,cupboard,,0,mustard seeds
+sichuan-peppercorns,Sichuan peppercorns,cupboard,,0,sichuan
+whole-wheat-flour,Whole wheat flour,cupboard,,0,whole wheat flour|wheat flour
+masa-harina,Masa harina,cupboard,,0,masa harina|\bmasa\b
+powdered-sugar,Powdered sugar,cupboard,,0,powdered sugar|icing sugar
+coconut-milk,Coconut milk,cupboard,,0,coconut milk|coconut cream
+cream-of-chicken,Cream of chicken soup,cupboard,,0,cream of chicken
+chili-oil,Chili oil,cupboard,,0,chili oil
+chili-paste,Chili paste,fridge,,0,chili paste|sambal
+cocoa,Cocoa powder,cupboard,,0,cocoa
+dark-chocolate,Dark chocolate,cupboard,,0,chocolate
+tuna-steak,Fresh tuna,fridge,fish,0,tuna steak|sushi-grade tuna|\bahi\b
+tortellini,Fresh tortellini / ravioli,fridge,fresh-pasta,0,tortellini|ravioli
+asian-noodles,Ramen / udon / soba noodles,cupboard,,0,ramen|udon|soba|glass noodles|dangmyeon|chow mein|wheat noodles|lo mein
+wild-rice,Wild rice,cupboard,,0,wild rice
+smoked-sausage,Smoked sausage,fridge,,0,smoked sausage|andouille|kielbasa
+thyme,Dried thyme,cupboard,,1,dried thyme
+frozen-veg,Frozen mixed vegetables,freezer,,0,stir-fry vegetable|mixed vegetables|peas & carrots|roasted vegetables
+# staple phrases that contain another food's name
+olive-oil,Olive oil,cupboard,olive-oil,1,olive oil
+sesame-oil,Sesame oil,cupboard,,1,sesame oil
+coconut-oil,Coconut oil,cupboard,,1,coconut oil
+soy-sauce,Soy sauce,cupboard,soy-sauce,1,soy sauce|tamari
+dijon,Dijon mustard,fridge,mustard,1,dijon
+hot-sauce,Hot sauce,cupboard,,1,hot sauce|sriracha
+balsamic-glaze,Balsamic glaze,cupboard,,1,balsamic
+maple-syrup,Maple syrup,cupboard,,1,maple
+rice-vinegar,Rice vinegar,cupboard,,1,rice vinegar|rice wine vinegar
+red-wine-vinegar,Red wine vinegar,cupboard,,1,red wine vinegar
+garlic-powder,Garlic powder,cupboard,,1,garlic powder
+onion-powder,Onion powder,cupboard,,1,onion powder
+italian-seasoning,Italian seasoning,cupboard,,1,italian seasoning
+chili-powder,Chili powder,cupboard,,1,chili powder|chilli powder
+red-pepper-flakes,Red pepper flakes,cupboard,,1,red pepper flakes|crushed red pepper|chili flakes
+black-pepper,Black pepper,cupboard,,1,black pepper|white pepper|white or black pepper|\bpepper to taste|ground pepper|cracked pepper|peppercorns
+brown-sugar,Brown sugar,cupboard,,1,brown sugar
+baking-powder,Baking powder,cupboard,,1,baking powder
+baking-soda,Baking soda,cupboard,,1,baking soda
+cornstarch,Cornstarch,cupboard,,1,cornstarch|corn starch
+#
+#
+# ── broths and stocks (above the meats they name) ──
+chicken-broth,Chicken broth,cupboard,,0,chicken broth|chicken stock|bouillon
+vegetable-broth,Vegetable broth,cupboard,,0,vegetable broth|vegetable stock
+beef-broth,Beef broth,cupboard,,0,beef broth|beef stock
+seafood-stock,Seafood stock / clam juice,cupboard,,0,seafood broth|seafood stock|fish stock|clam juice|dashi
+#
+# ── poultry ──
+chicken-breast,Chicken breast,fridge,poultry,0,chicken breast|chicken tenders|chicken cutlets|thin cutlets
+chicken-thighs,Chicken thighs,fridge,poultry,0,chicken thigh|\bthighs\b
+chicken-drumsticks,Chicken drumsticks,fridge,poultry,0,drumstick
+ground-chicken,Ground chicken,fridge,ground-meat,0,ground chicken
+chicken-wings,Chicken wings,fridge,poultry,0,chicken wings
+cooked-chicken,Cooked chicken,fridge,cooked-meat,0,rotisserie chicken|cooked chicken|cooked shredded chicken|shredded chicken
+chicken,Chicken (whole / pieces),fridge,poultry,0,\bchicken\b
+ground-turkey,Ground turkey,fridge,ground-meat,0,ground turkey(?! sausage)
+turkey-sausage,Turkey sausage,fridge,sausage-raw,0,turkey sausage
+deli-turkey,Deli turkey,fridge,deli-meat,0,deli turkey|deli.*turkey|sliced deli|turkey slices
+cooked-turkey,Cooked turkey,fridge,cooked-meat,0,cooked shredded turkey|cooked turkey|leftover turkey
+turkey-breast,Turkey breast,fridge,poultry,0,turkey breast|\bturkey\b
+#
+# ── pork and cured meats ──
+canadian-bacon,Canadian bacon,fridge,deli-meat,0,canadian bacon
+bacon,Bacon,fridge,bacon,0,\bbacon\b
+pancetta,Pancetta / prosciutto,fridge,bacon,0,pancetta|prosciutto
+ham,Ham,fridge,deli-meat,0,\bham\b
+pepperoni,Pepperoni,fridge,deli-meat,0,pepperoni
+salami,Salami,fridge,deli-meat,0,salami
+hot-dogs,Hot dogs,fridge,hot-dogs,0,hot dogs?\b(?! buns)|frankfurter|wieners
+sausage,Sausage,fridge,sausage-raw,0,sausage|chorizo
+ground-pork,Ground pork,fridge,ground-meat,0,ground pork
+pork-chops,Pork chops,fridge,steak-chop,0,pork chop
+pork,Pork (shoulder / loin),fridge,steak-chop,0,pork shoulder|pork loin|pork tenderloin|pork belly|pork butt
+ribs,Pork ribs,fridge,steak-chop,0,\bribs\b
+#
+# ── beef, lamb and veal ──
+ground-beef,Ground beef,fridge,ground-meat,0,ground beef|lean ground beef|90% lean
+corned-beef,Corned beef,fridge,deli-meat,0,corned beef
+roast-beef,Deli roast beef,fridge,deli-meat,0,roast beef
+beef-roast,Beef roast / stew meat,fridge,steak-chop,0,chuck|stew meat|brisket|short rib|beef roast
+beef-steak,Beef steak,fridge,steak-chop,0,steak|sirloin|ribeye|rib eye|flank|skirt|tenderloin|sliced beef|beef strips|\bbeef\b
+ground-lamb,Ground lamb,fridge,ground-meat,0,ground lamb
+lamb,Lamb,fridge,steak-chop,0,\blamb\b
+veal,Veal,fridge,steak-chop,0,veal
+#
+# ── fish and seafood ──
+smoked-salmon,Smoked salmon,fridge,,0,smoked salmon
+salmon,Salmon,fridge,fish,0,salmon
+canned-tuna,Canned tuna,cupboard,,0,tuna
+white-fish,White fish (cod / tilapia),fridge,fish,0,\bcod\b|tilapia|halibut|haddock|white fish|fish fillets
+shrimp,Shrimp,fridge,shellfish,0,shrimp|prawn
+scallops,Scallops,fridge,shellfish,0,scallop
+mussels,Mussels,fridge,shellfish,0,mussel
+clams,Clams,fridge,shellfish,0,\bclams?\b
+crab,Crab,fridge,shellfish,0,\bcrab
+lobster,Lobster,fridge,cooked-fish,0,lobster
+anchovies,Anchovies,cupboard,,0,anchov
+fish-sauce,Fish sauce,cupboard,,0,fish sauce
+#
+# ── eggs and plant proteins ──
+eggs,Eggs,fridge,eggs,0,\beggs?\b(?! noodles)|egg yolks?|egg whites?
+tofu,Tofu,fridge,,0,tofu
+paneer,Paneer,fridge,,0,paneer
+#
+# ── dairy (specific before general) ──
+buttermilk,Buttermilk,fridge,,0,buttermilk
+sour-cream,Sour cream,fridge,,0,sour cream
+cream-cheese,Cream cheese,fridge,,0,cream cheese
+heavy-cream,Heavy cream,fridge,,0,heavy cream|whipping cream|whipped cream|half-and-half|\bcream\b
+greek-yogurt,Greek yogurt,fridge,greek-yogurt,0,greek yogurt
+yogurt,Yogurt,fridge,yogurt,0,yogurt
+milk,Milk,fridge,milk,0,\bmilk\b
+parmesan,Parmesan / pecorino,fridge,hard-cheese,0,parmesan|pecorino|asiago
+feta,Feta,fridge,,0,feta
+ricotta,Ricotta,fridge,,0,ricotta
+cottage-cheese,Cottage cheese,fridge,,0,cottage cheese
+goat-cheese,Goat cheese,fridge,,0,goat cheese
+blue-cheese,Blue cheese,fridge,,0,blue cheese
+queso-fresco,Queso fresco / cotija,fridge,,0,queso fresco|cotija
+mozzarella,Mozzarella,fridge,,0,mozzarella|quesillo
+provolone,Provolone,fridge,sliced-cheese,0,provolone
+american-cheese,American cheese,fridge,sliced-cheese,0,american cheese
+swiss,Swiss / Gruyère,fridge,semi-hard-cheese,0,swiss|gruy
+monterey-jack,Monterey Jack,fridge,semi-hard-cheese,0,monterey jack|pepper jack
+cheddar,Cheddar,fridge,semi-hard-cheese,0,cheddar
+cheese,Cheese (shredded / mixed),fridge,semi-hard-cheese,0,\bcheese\b
+#
+# ── vegetables ──
+spinach,Spinach,fridge,leafy-greens,0,spinach
+kale,Kale,fridge,leafy-greens,0,\bkale\b
+arugula,Arugula,fridge,leafy-greens,0,arugula
+lettuce,Lettuce,fridge,leafy-greens,0,lettuce|romaine|salad greens|mixed greens|escarole
+bok-choy,Bok choy,fridge,leafy-greens,0,bok choy|chinese broccoli
+coleslaw-mix,Coleslaw mix,fridge,,0,coleslaw
+cabbage,Cabbage,fridge,,0,cabbage
+asparagus,Asparagus,fridge,asparagus,0,asparagus
+dried-chiles,Dried chiles,cupboard,,0,dried.*chil|ancho|guajillo|pasilla|de arbol|gochugaru
+chipotle,Chipotle in adobo,cupboard,,0,chipotle|adobo
+chili-peppers,Fresh chili peppers,fridge,,0,jalape|poblano|serrano|thai chil|red chil|fresh chil|green chil|\bchilies\b|\bchiles\b
+bell-pepper,Bell pepper,fridge,bell-peppers,0,bell pepper|red pepper|green pepper|yellow pepper|roasted pepper
+broccoli,Broccoli,fridge,broccoli,0,broccoli
+cauliflower,Cauliflower,fridge,broccoli,0,cauliflower
+carrot,Carrots,fridge,carrots,0,carrot
+celery,Celery,fridge,celery,0,celery
+corn-cob,Corn on the cob,fridge,corn-cob,0,corn on the cob|ears? of corn
+corn-tortillas,Corn tortillas,fridge,tortillas,0,corn tortilla
+cornmeal,Cornmeal / grits,cupboard,,0,cornmeal|grits|polenta
+corn,Corn kernels,cupboard,,0,\bcorn\b
+hominy,Hominy,cupboard,,0,hominy
+cucumber,Cucumber,fridge,cucumber,0,cucumber
+green-beans,Green beans,fridge,green-beans,0,green beans
+mushrooms,Mushrooms,fridge,mushrooms,0,mushroom|shiitake|enoki|portobello|cremini
+green-onion,Green onions,fridge,,0,green onion|scallion|spring onion|chives
+shallot,Shallots,cupboard,,0,shallot
+leeks,Leeks,fridge,,0,leek
+red-onion,Red onion,cupboard,onions,0,red onion
+onion,Onion,cupboard,onions,0,\bonions?\b
+sweet-potato,Sweet potatoes,cupboard,,0,sweet potato
+frozen-fries,Frozen fries,freezer,,0,french fries
+gnocchi,Potato gnocchi,fridge,fresh-pasta,0,gnocchi
+potatoes,Potatoes,cupboard,potatoes,0,potato
+cherry-tomatoes,Cherry tomatoes,cupboard,tomatoes,0,cherry tomato|grape tomato
+tomato-paste,Tomato paste,cupboard,,0,tomato paste
+marinara,Marinara / pizza sauce,cupboard,,0,marinara|pizza sauce|pasta sauce
+canned-tomatoes,Canned tomatoes,cupboard,,0,diced tomatoes|crushed tomatoes|tomato sauce|whole peeled tomatoes|canned tomatoes|san marzano
+tomatoes,Tomatoes,cupboard,tomatoes,0,tomato
+zucchini,Zucchini,fridge,zucchini,0,zucchini|summer squash
+eggplant,Eggplant,fridge,,0,eggplant
+butternut-squash,Butternut squash,cupboard,,0,butternut|squash
+okra,Okra,fridge,,0,okra
+radishes,Radishes,fridge,,0,\bradish|daikon
+edamame,Edamame,freezer,,0,edamame
+bean-sprouts,Bean sprouts,fridge,,0,bean sprouts
+bamboo-shoots,Bamboo shoots,cupboard,,0,bamboo
+peas,Peas,freezer,,0,(?<!split )\bpeas\b
+avocado,Avocados,cupboard,avocado,0,avocado
+#
+# ── fresh herbs ──
+cilantro,Cilantro,fridge,,0,cilantro|coriander leaves
+parsley,Parsley,fridge,,0,parsley
+thai-basil,Thai basil,fridge,,0,thai basil
+dried-basil,Dried basil,cupboard,,0,dried basil
+basil,Basil,fridge,,0,basil|pesto
+dill,Dill,fridge,,0,\bdill\b(?! pickle)
+mint,Mint,fridge,,0,\bmint\b
+rosemary,Rosemary,fridge,,0,rosemary
+sage,Sage,fridge,,0,\bsage\b
+fresh-oregano,Fresh oregano,fridge,,0,fresh oregano
+fresh-thyme,Fresh thyme,fridge,,0,thyme
+lemongrass,Lemongrass,fridge,,0,lemongrass
+#
+# ── fruit ──
+apples,Apples,fridge,apples,0,\bapples?\b
+bananas,Bananas,cupboard,bananas,0,banana
+strawberries,Strawberries,fridge,strawberries,0,strawberr
+blueberries,Blueberries,fridge,berries,0,blueberr
+berries,Mixed berries,freezer,berries,0,\bberries\b|raspberr
+lemon,Lemons,fridge,citrus,0,lemon
+lime,Limes,fridge,citrus,0,\blimes?\b
+orange,Oranges,fridge,citrus,0,orange
+grapes,Grapes,fridge,grapes,0,grapes
+pineapple,Pineapple,cupboard,pineapple,0,pineapple
+mango,Mango,cupboard,mango,0,mango
+pear,Pears,fridge,,0,\bpears?\b
+dried-fruit,Dried fruit,cupboard,,0,raisin|dried cranberr|dried apricot
+fresh-fruit,Fresh fruit (any),fridge,,0,fresh fruit
+cranberry-sauce,Cranberry sauce,cupboard,,0,cranberry sauce
+#
+# ── rice, grains and pasta ──
+rice-noodles,Rice noodles,cupboard,,0,rice noodles|rice vermicelli|pho noodles|flat rice|vermicelli
+cooked-rice,Cooked rice,fridge,cooked-rice,0,cooked.*rice|leftover rice|chilled.*rice|pouch brown rice
+brown-rice,Brown rice,cupboard,brown-rice,0,brown rice
+rice,White rice,cupboard,white-rice,0,\brice\b|arborio|basmati|jasmine
+egg-noodles,Egg noodles,cupboard,dry-pasta,0,egg noodles
+pasta,Dry pasta,cupboard,dry-pasta,0,spaghetti|linguine|fettuccine|penne|rotini|fusilli|macaroni|ziti|orzo|ditalini|pappardelle|lasagna|pasta shells|acini|\bpasta\b|noodles
+quinoa,Quinoa,cupboard,,0,quinoa
+bulgur,Bulgur,cupboard,,0,bulgur
+farro,Farro,cupboard,,0,farro
+barley,Pearl barley,cupboard,,0,barley
+oats,Oats,cupboard,,0,\boats\b
+granola,Granola,cupboard,,0,granola
+#
+# ── bread and dough ──
+breadcrumbs,Breadcrumbs,cupboard,,0,breadcrumbs|bread crumbs|panko
+croutons,Croutons,cupboard,,0,crouton
+tortilla-chips,Tortilla chips / tostadas,cupboard,,0,tortilla chips|tostada
+flour-tortillas,Flour tortillas / wraps,cupboard,tortillas,0,tortilla|\bwraps?\b
+pita,Pita / flatbread,cupboard,bread,0,pita|flatbread|naan
+bagels,Bagels,cupboard,bread,0,bagel(?! seasoning)
+english-muffins,English muffins,cupboard,bread,0,english muffin
+buns,Buns and rolls,cupboard,bread,0,\bbuns?\b|\brolls?\b|ciabatta|baguette|focaccia|hoagie
+pizza-dough,Pizza dough,fridge,,0,pizza dough
+pastry,Pie crust / phyllo,fridge,,0,pie crust|phyllo|puff pastry
+bread,Bread,cupboard,bread,0,\bbread\b|sourdough|\brye\b|\btoast\b
+#
+# ── beans, lentils and legumes ──
+chickpeas,Chickpeas,cupboard,,0,chickpea|garbanzo
+black-beans,Black beans,cupboard,,0,black beans
+kidney-beans,Kidney beans,cupboard,,0,kidney beans
+white-beans,White beans,cupboard,,0,cannellini|white beans|navy beans|great northern
+refried-beans,Refried beans,cupboard,,0,refried
+lentils,Lentils,cupboard,,0,lentil|\bdal\b
+split-peas,Split peas,cupboard,,0,split peas
+hummus,Hummus,fridge,,0,hummus
+falafel,Falafel,freezer,,0,falafel
+#
+# ── nuts and seeds ──
+peanuts,Peanuts,cupboard,,0,peanut
+almonds,Almonds,cupboard,,0,almond
+walnuts,Walnuts,cupboard,,0,walnut
+pecans,Pecans,cupboard,,0,pecan
+cashews,Cashews,cupboard,,0,cashew
+sesame-seeds,Sesame seeds,cupboard,,0,sesame seeds
+chia-seeds,Chia / flax seeds,cupboard,,0,chia|flax
+tahini,Tahini,cupboard,,0,tahini|sesame paste
+#
+# ── sauces, condiments and seasonings ──
+mayonnaise,Mayonnaise,fridge,mayonnaise,0,mayo
+ketchup,Ketchup,fridge,ketchup,0,ketchup
+mustard,Yellow mustard,fridge,mustard,0,mustard
+salsa,Salsa,fridge,salsa,0,salsa
+bbq-sauce,Barbecue sauce,fridge,,0,barbecue|bbq
+worcestershire,Worcestershire sauce,cupboard,,0,worcestershire
+oyster-sauce,Oyster sauce,fridge,,0,oyster sauce
+hoisin,Hoisin sauce,fridge,,0,hoisin
+teriyaki,Teriyaki sauce,fridge,,0,teriyaki
+enchilada-sauce,Enchilada sauce,cupboard,,0,enchilada sauce
+gochujang,Gochujang,fridge,,0,gochujang
+doubanjiang,Doubanjiang,fridge,,0,doubanjiang
+miso,Miso paste,fridge,,0,miso
+curry-paste,Curry paste,fridge,,0,curry paste
+tamarind,Tamarind paste,cupboard,,0,tamarind
+kimchi,Kimchi,fridge,,0,kimchi
+sauerkraut,Sauerkraut,fridge,,0,sauerkraut
+pickles,Pickles / relish,fridge,,0,pickle|relish
+olives,Olives,cupboard,,0,olive
+capers,Capers,cupboard,,0,caper
+horseradish,Horseradish,fridge,,0,horseradish
+dressing,Bottled dressing,fridge,,0,ranch|caesar dressing|thousand island|russian
+nori,Nori / wakame,cupboard,,0,nori|wakame|seaweed
+mirin,Mirin,cupboard,,0,mirin
+white-wine,White wine,cupboard,,0,white wine|marsala|sherry|shaoxing
+red-wine,Red wine,cupboard,,0,red wine
+other-alcohol,Sake beer / vodka,cupboard,,0,\bsake\b|\bbeer\b|vodka
+curry-powder,Curry powder,cupboard,,0,curry powder|curry spice|tikka masala spice
+garam-masala,Garam masala,cupboard,,0,garam masala
+turmeric,Turmeric,cupboard,,0,turmeric
+coriander,Ground coriander,cupboard,,0,coriander
+cayenne,Cayenne pepper,cupboard,,0,cayenne
+cajun,Cajun seasoning,cupboard,,0,cajun
+taco-seasoning,Taco / fajita seasoning,cupboard,,0,taco seasoning|fajita seasoning
+everything-seasoning,Everything bagel seasoning,cupboard,,0,everything
+sumac,Sumac,cupboard,,0,sumac
+saffron,Saffron,cupboard,,0,saffron
+star-anise,Star anise,cupboard,,0,star anise
+bay-leaves,Bay leaves,cupboard,,0,bay lea
+#
+# ── staples: assumed on hand, never tracked; general words last so they never shadow a food ──
+vegetable-oil,Vegetable oil,cupboard,,1,vegetable oil|canola oil|neutral oil|cooking spray|oil for frying|\boil\b
+butter,Butter,fridge,butter,1,\bbutter\b
+honey,Honey,cupboard,,1,\bhoney\b
+white-vinegar,White vinegar,cupboard,,1,\bvinegar\b
+garlic,Garlic,cupboard,,1,garlic
+ginger,Fresh ginger,cupboard,,1,ginger|galangal
+oregano,Dried oregano,cupboard,,1,oregano
+cumin,Cumin,cupboard,,1,cumin
+paprika,Paprika,cupboard,,1,paprika
+salt,Salt,cupboard,,1,\bsalt\b|salted
+cinnamon,Cinnamon,cupboard,,1,cinnamon
+sugar,Sugar,cupboard,,1,\bsugar\b
+vanilla,Vanilla extract,cupboard,,1,vanilla
+flour,All-purpose flour,cupboard,,1,\bflour\b
+water,Water,cupboard,,1,\bwater\b|\bice\b

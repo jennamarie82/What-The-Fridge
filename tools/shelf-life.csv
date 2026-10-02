@@ -1,0 +1,59 @@
+key,fridge,freezer,cupboard,printed,basis
+# Days, transcribed from knowledge/shelf-life-norms.md (USDA FSIS / FoodKeeper / StillTasty / EatByDate).
+# A blank column means the norms file gives no window for that storage spot.
+# printed=1 means the norm counts from the package's printed date, not the purchase date.
+ground-meat,1-2,90-120,,,Ground meats: 1–2 days refrigerated; 3–4 months frozen
+steak-chop,3-5,120-360,,,"Steaks, chops, roasts: 3–5 days refrigerated; 4–12 months frozen"
+poultry,1-2,270-270,,,Fresh poultry pieces: 1–2 days refrigerated; 9 months frozen
+fish,1-3,90-240,,,Fresh fish: 1–3 days refrigerated; 3–8 months frozen
+shellfish,1-2,90-180,,,Shrimp / shellfish: 1–2 days refrigerated; 3–6 months frozen
+cooked-meat,3-4,60-180,,,Cooked meat / poultry: 3–4 days refrigerated; 2–6 months frozen
+cooked-fish,3-4,120-180,,,Cooked fish: 3–4 days refrigerated; 4–6 months frozen
+hot-dogs,7-7,30-60,,,Hot dogs (opened): 1 week refrigerated; 1–2 months frozen
+deli-meat,3-5,30-60,,,Deli meat (opened): 3–5 days refrigerated; 1–2 months frozen
+bacon,7-7,30-30,,,Bacon (opened): 1 week refrigerated; 1 month frozen
+sausage-raw,1-2,30-60,,,"Sausage, raw: 1–2 days refrigerated; 1–2 months frozen"
+eggs,21-35,,,,Fresh eggs in shell: 3–5 weeks refrigerated
+milk,5-7,90-90,,1,Whole milk: 5–7 days past the printed date; ~3 months frozen
+greek-yogurt,7-14,30-60,,,Greek yogurt (unopened): 1–2 weeks refrigerated; 1–2 months frozen
+yogurt,14-21,30-60,,,Yogurt (unopened): 2–3 weeks refrigerated; 1–2 months frozen
+hard-cheese,21-42,180-240,,,"Hard cheese, opened: 3–6 weeks refrigerated; 6–8 months frozen"
+semi-hard-cheese,21-42,180-240,,,"Semi-hard cheese (Cheddar, Swiss), opened: 3–6 weeks refrigerated; 6–8 months frozen"
+sliced-cheese,14-14,180-240,,,Sliced cheese (opened): 2 weeks refrigerated; 6–8 months frozen
+butter,30-90,180-270,,,Butter: 1–3 months refrigerated; 6–9 months frozen
+leafy-greens,3-7,300-360,,,"Leafy greens: 3–7 days refrigerated; 10–12 months frozen (blanched)"
+asparagus,3-5,300-360,,,Asparagus: 3–5 days refrigerated
+bell-peppers,7-14,300-360,,,Bell peppers: 1–2 weeks refrigerated; 10–12 months frozen
+broccoli,3-5,300-360,,,Broccoli / cauliflower: 3–5 days refrigerated
+carrots,14-21,300-360,,,Carrots: 2–3 weeks refrigerated
+celery,7-14,300-360,,,Celery: 1–2 weeks refrigerated
+corn-cob,1-3,300-360,,,Corn on the cob: 1–3 days refrigerated
+cucumber,7-7,,,,Cucumbers: 1 week refrigerated; freezing not recommended
+green-beans,3-5,300-360,,,Green beans: 3–5 days refrigerated
+mushrooms,4-7,300-360,,,Mushrooms: 4–7 days refrigerated
+onions,7-10,90-180,60-90,,"Onions: 2–3 months whole in a cool, dry cupboard; cut onions 7–10 days refrigerated"
+potatoes,,300-360,7-14,,"Potatoes: 1–2 weeks in a cool, dark cupboard; do not refrigerate raw"
+tomatoes,2-3,60-90,3-5,,"Tomatoes: 3–5 days on the counter until ripe, then 2–3 days refrigerated"
+zucchini,4-5,300-360,,,Zucchini / summer squash: 4–5 days refrigerated
+avocado,3-5,90-180,3-5,,"Avocado: 3–5 days on the counter until ripe, then 3–5 days refrigerated"
+apples,28-56,300-360,5-7,,Apples: 4–8 weeks refrigerated; 5–7 days on the counter
+bananas,5-7,60-90,2-5,,"Bananas: 2–5 days on the counter until ripe, then 5–7 days refrigerated"
+strawberries,3-5,300-360,,,Strawberries: 3–5 days refrigerated
+berries,5-7,300-360,,,"Blueberries, raspberries: 5–7 days refrigerated; 10–12 months frozen"
+citrus,14-28,90-120,7-7,,"Citrus (lemons, limes, oranges): 2–4 weeks refrigerated; about 1 week on the counter"
+grapes,7-14,300-360,,,Grapes: 1–2 weeks refrigerated
+pineapple,3-5,300-360,2-3,,Pineapple (whole): 3–5 days refrigerated; 2–3 days on the counter
+mango,5-5,300-360,3-5,,"Mangoes: 3–5 days on the counter until ripe, then 5 days refrigerated"
+white-rice,,,1460-1825,,White rice (dry): 4–5 years in the cupboard
+brown-rice,240-360,,180-240,,Brown rice (dry): 6–8 months in the cupboard; 8–12 months refrigerated
+cooked-rice,4-7,180-240,,,Cooked rice: 4–7 days refrigerated; 6–8 months frozen
+dry-pasta,,,365-730,1,Dry pasta: 1–2 years past the printed date
+fresh-pasta,4-5,180-240,,,Fresh pasta: 4–5 days refrigerated; 6–8 months frozen
+bread,7-14,90-180,5-7,,Bread (store-bought): 5–7 days in the cupboard; 7–14 days refrigerated; 3–6 months frozen
+tortillas,21-28,180-240,7-7,,Flour tortillas: 1 week in the cupboard; 3–4 weeks refrigerated
+ketchup,180-180,,,,Ketchup (opened): 6 months refrigerated
+mustard,365-365,,,,Mustard (opened): 12 months refrigerated
+mayonnaise,60-90,,,,Mayonnaise (opened): 2–3 months refrigerated
+soy-sauce,730-730,,,,Soy sauce (opened): 2 years refrigerated
+salsa,30-30,,,,"Salsa (jarred, opened): 1 month refrigerated"
+olive-oil,,,365-730,,"Olive oil: 1–2 years in a cool, dark cupboard"
