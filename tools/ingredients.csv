@@ -32,6 +32,7 @@ asian-noodles,Ramen / udon / soba noodles,cupboard,,0,ramen|udon|soba|glass nood
 wild-rice,Wild rice,cupboard,,0,wild rice
 smoked-sausage,Smoked sausage,fridge,,0,smoked sausage|andouille|kielbasa
 thyme,Dried thyme,cupboard,,1,dried thyme
+frozen-veg,Frozen mixed vegetables,freezer,,0,stir-fry vegetable|mixed vegetables|peas & carrots|roasted vegetables
 # staple phrases that contain another food's name
 olive-oil,Olive oil,cupboard,olive-oil,1,olive oil
 sesame-oil,Sesame oil,cupboard,,1,sesame oil
@@ -188,7 +189,6 @@ radishes,Radishes,fridge,,0,\bradish|daikon
 edamame,Edamame,freezer,,0,edamame
 bean-sprouts,Bean sprouts,fridge,,0,bean sprouts
 bamboo-shoots,Bamboo shoots,cupboard,,0,bamboo
-frozen-veg,Frozen mixed vegetables,freezer,,0,stir-fry vegetable|mixed vegetables|peas & carrots|roasted vegetables
 peas,Peas,freezer,,0,(?<!split )\bpeas\b
 avocado,Avocados,cupboard,avocado,0,avocado
 #

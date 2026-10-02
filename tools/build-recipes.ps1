@@ -212,7 +212,8 @@ foreach ($r in $recipes) {
 
 # -- write outputs --
 $ingOut = @($ingredients | ForEach-Object {
-  $o = [ordered]@{ id = $_.id; name = $_.name; zone = $_.zone }
+  # `match` goes along so the app's pantry search finds "scallions" under Green onions.
+  $o = [ordered]@{ id = $_.id; name = $_.name; zone = $_.zone; match = $_.match }
   if ($_.norm) { $o['norm'] = $_.norm }
   if ($_.staple -eq '1') { $o['staple'] = $true }
   $o
