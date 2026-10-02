@@ -45,12 +45,17 @@
     <div class="detail-scroll" id="detailContent"></div>
   </div>
 
-  <!-- ══════ SETTINGS SUB-SCREEN ══════ -->
+  <!-- ══════ FIRST-TIME SETUP ══════ -->
+  <div class="setup" id="setup">
+    <div class="setup-body" id="setupBody"></div>
+  </div>
+
+  <!-- ══════ SUB-SCREEN (settings, add & edit food) ══════ -->
   <div class="sub-screen" id="subScreen">
     <div class="sub-head">
       <button class="back" onclick="closeSub()">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 18.5 8 12l6.5-6.5"/></svg>
-        Profile
+        <span id="subBackLabel">Profile</span>
       </button>
     </div>
     <div class="sub-title" id="subTitle"></div>
@@ -67,7 +72,7 @@
     <div class="tab-content active" id="planTab">
       <div class="view-pad">
         <div class="top-row">
-          <p class="greet" id="greet">Hello, Ren</p>
+          <p class="greet" id="greet">Hello</p>
           <span class="wtf">WTF</span>
         </div>
         <h3 class="plan-title">Your next<br>three days</h3>
@@ -106,9 +111,6 @@
                 <tbody id="allocBody"></tbody>
               </table>
             </div>
-            <div style="font-size:11px;color:var(--ink-soft);padding:var(--s4);line-height:1.5;">
-              <strong>Why this order:</strong> Asparagus and chicken get their send-off on Day 1 while they still have dignity. The thawed shrimp can't wait past Friday. Saturday's rice has been waiting since Wednesday — it gets the finale.
-            </div>
           </div>
         </div>
 
@@ -129,61 +131,17 @@
         <div class="section-label">Everything else</div>
         <div id="pantryZones"></div>
 
-        <p class="pantry-note">Food is deducted only after you mark a meal cooked &mdash; never on a schedule.</p>
+        <p class="pantry-note">Tap anything to change it. Food is deducted only after you mark a meal cooked &mdash; never on a schedule.
+          Freshness is an estimate from the purchase date and USDA-based shelf-life norms, not a check of the food itself.</p>
       </div>
     </div>
 
     <!-- ───── PROFILE TAB ───── -->
     <div class="tab-content" id="profileTab">
       <div class="view-pad">
-        <div class="profile-avatar">R</div>
-        <div class="profile-name">Ren</div>
-        <div class="profile-sub">Household of 2 &middot; Member since Sep 2026</div>
-
-        <div class="profile-stat-row">
-          <div class="profile-stat"><div class="num">6</div><div class="label">Items saved<br>this week</div></div>
-          <div class="profile-stat"><div class="num">$18</div><div class="label">Est. waste<br>prevented</div></div>
-          <div class="profile-stat"><div class="num">3</div><div class="label">Plans<br>completed</div></div>
-        </div>
-
-        <div class="section-label">Savings milestones</div>
-        <div class="reward-card">
-          <div class="reward-head">
-            <div class="reward-icon coin">&#128176;</div>
-            <div>
-              <div class="t">Next milestone &mdash; $100 saved</div>
-              <div class="s">$18 banked &middot; $82 to go</div>
-            </div>
-          </div>
-          <div class="progress-track"><div class="progress-fill leaf" style="width:18%;"></div></div>
-          <div class="ladder">
-            <div class="rung next">$100</div>
-            <div class="rung">$500</div>
-            <div class="rung">$1,000</div>
-            <div class="rung">$2,000</div>
-          </div>
-          <p class="witty">$82 from your first hundred. That's roughly eleven bags of spinach you didn't buy twice &mdash; keep going and the fridge starts paying rent.</p>
-        </div>
-
-        <div class="section-label">Cooking streak</div>
-        <div class="reward-card">
-          <div class="reward-head">
-            <div class="reward-icon flame">&#128293;</div>
-            <div>
-              <div class="t">2-week streak</div>
-              <div class="s">Next badge: 1 month &middot; 16 days to go</div>
-            </div>
-          </div>
-          <div class="progress-track"><div class="progress-fill amber" style="width:47%;"></div></div>
-          <div class="ladder">
-            <div class="rung done">1 wk</div>
-            <div class="rung done">2 wk</div>
-            <div class="rung next">1 mo</div>
-            <div class="rung">2 mo</div>
-            <div class="rung">6 mo</div>
-          </div>
-          <p class="witty">Two weeks without a mystery container achieving sentience. Your crisper drawer has never felt so seen.</p>
-        </div>
+        <div id="profileHead"></div>
+        <div class="profile-stat-row" id="profileStats"></div>
+        <div id="profileRewards"></div>
 
         <div class="section-label">Settings</div>
         <div>
@@ -197,7 +155,8 @@
         <div class="section-label">Demo controls</div>
         <div>
           <div class="profile-menu-item" onclick="simulateMidnight()"><span>Simulate midnight</span><span class="arrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="resetState()"><span>Reset to sample data</span><span class="arrow">&rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="loadSampleKitchen()"><span>Load the sample kitchen</span><span class="arrow">&rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="startOver()"><span>Start over</span><span class="arrow">&rsaquo;</span></div>
         </div>
         <p class="pantry-note">Saved in this browser only &mdash; nothing leaves your phone.</p>
       </div>
@@ -206,7 +165,7 @@
   </div>
 
   <!-- ══════ FAB ══════ -->
-  <button class="fab" id="fab" onclick="showToast('Receipt upload coming in Exercise 4')">
+  <button class="fab" id="fab" onclick="openAddItem()" aria-label="Add food">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
 
@@ -230,16 +189,18 @@
 </div>
 
 <footer>
-  What the Fridge &middot; BUS 860 Group 3 &middot; web build of prototype10 &middot; starts from sample data.<br>
+  What the Fridge &middot; BUS 860 Group 3 &middot; Phase A build &middot; plan around your own food, or look around with a sample kitchen.<br>
   Recipes from <i>Combined_Recipe_Database.md</i> (300 approved recipes; 18 modelled here with pantry quantities).<br>
   Your plan, pantry and settings are saved in this browser only &mdash; nothing is sent anywhere.<br>
   <span style="display:inline-block;margin-top:10px;">
     Demo controls (not part of the app):
     <button class="demo-btn" onclick="simulateMidnight()">Simulate midnight →</button>
-    <button class="demo-btn" onclick="resetState()">Reset to sample data</button>
+    <button class="demo-btn" onclick="loadSampleKitchen()">Load sample kitchen</button>
+    <button class="demo-btn" onclick="startOver()">Start over</button>
   </span>
 </footer>
 
+<script src="recipes.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

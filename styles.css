@@ -492,17 +492,7 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
 .zone-line .zl-qty { font-weight:700; font-size:13px; white-space:nowrap; }
 .zone-line.out .zl-name, .zone-line.out .zl-qty { color:var(--ink-soft); text-decoration:line-through; }
 
-/* ─── nutrition ─── */
-.nutri {
-  display:flex; gap:var(--s4); margin-bottom:var(--s8);
-}
-.nutri-cell {
-  flex:1; text-align:center; background:var(--white);
-  border-radius:var(--r); padding:var(--s6) 2px;
-  box-shadow:0 1px 3px var(--shadow);
-}
-.nutri-cell .n { font-size:15px; font-weight:800; color:var(--ink); }
-.nutri-cell .l { font-size:10px; color:var(--ink-soft); margin-top:1px; text-transform:uppercase; letter-spacing:.4px; }
+/* ─── small italic footnote ─── */
 .nutri-note { font-size:11px; color:var(--ink-soft); margin:-8px 0 var(--s8); font-style:italic; }
 
 /* ─── accepted / skipped meal states ─── */
@@ -682,6 +672,105 @@ footer {
   font-family:inherit; font-size:11px; font-weight:700; color:#2F8F6B; background:none;
   border:1px solid #2F8F6B; border-radius:20px; padding:4px 12px; cursor:pointer; margin-left:4px;
 }
+
+/* ═══════════════ PHASE A: SETUP, ADD & EDIT FOOD ═══════════════ */
+.actions { display:flex; gap:var(--s4); margin-top:var(--s8); }
+.btn.small { flex:none; min-height:36px; padding:8px 16px; font-size:13px; margin-top:var(--s6); align-self:flex-start; }
+.btn:disabled { opacity:.45; cursor:default; }
+.sub-intro a { color:var(--leaf); font-weight:600; }
+.opt { font-size:10px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.4px; }
+
+/* empty kitchen: on the Plan tab and in Pantry */
+.banner.empty { background:var(--cream-deep); align-items:flex-start; }
+.banner.empty .text, .empty-card { display:flex; flex-direction:column; }
+.banner.check { background:var(--amber-soft); }
+.empty-card {
+  background:var(--white); border-radius:var(--r); padding:var(--s8);
+  box-shadow:0 1px 3px var(--shadow); font-size:13px; line-height:1.5;
+}
+.empty-card strong { font-size:15px; margin-bottom:var(--s2); }
+.empty-card span { color:var(--ink-soft); }
+.pantry-item, .zone-line { cursor:pointer; }
+.zone-line .zl-right { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
+.zone-line.empty { cursor:default; }
+
+/* form fields */
+.field {
+  width:100%; min-height:44px; padding:10px 12px;
+  border:1.5px solid var(--border); border-radius:var(--r);
+  background:var(--white); color:var(--ink);
+  font-family:inherit; font-size:16px;            /* 16px stops iOS zooming in on focus */
+}
+.field:focus { outline:none; border-color:var(--leaf); }
+.field-label {
+  font-size:12px; font-weight:700; color:var(--ink);
+  margin:var(--s8) 0 var(--s4);
+}
+.field-label span { font-weight:500; color:var(--ink-soft); }
+.field-hint { font-size:11px; color:var(--ink-soft); line-height:1.5; margin-top:var(--s4); }
+.qty-row { display:flex; gap:var(--s4); }
+.qty-row .field:first-child { flex:1; }
+.qty-row select.field { width:auto; min-width:96px; }
+.seg { display:flex; gap:6px; }
+.seg.wrap { flex-wrap:wrap; }
+.seg button {
+  flex:1; min-height:40px; padding:8px 10px; border-radius:20px;
+  border:1.5px solid var(--border); background:var(--white); color:var(--ink);
+  font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;
+}
+.seg.wrap button { flex:1 1 40%; }
+.seg button.on { background:var(--leaf); border-color:var(--leaf); color:#fff; }
+.seg + .field { margin-top:var(--s4); }
+.preview {
+  margin-top:var(--s8); padding:var(--s6) var(--s8);
+  background:var(--cream-deep); border-radius:var(--r);
+}
+.preview-head { display:flex; align-items:center; gap:var(--s4); font-size:13px; margin-bottom:var(--s2); }
+
+/* ingredient picker */
+.search { margin-bottom:var(--s4); }
+.pick-list { display:flex; flex-direction:column; background:var(--white); border-radius:var(--r); box-shadow:0 1px 3px var(--shadow); }
+.pick {
+  display:flex; justify-content:space-between; align-items:center; gap:var(--s4);
+  min-height:46px; padding:10px var(--s8);
+  background:none; border:none; border-bottom:1px solid var(--border);
+  font-family:inherit; font-size:14px; font-weight:600; color:var(--ink);
+  text-align:left; cursor:pointer;
+}
+.pick:last-child { border-bottom:none; }
+.pick small { font-size:11px; font-weight:500; color:var(--ink-soft); white-space:nowrap; }
+.added-strip {
+  background:var(--leaf-light); color:var(--leaf); font-size:12px; font-weight:600;
+  padding:var(--s4) var(--s6); border-radius:var(--r); margin-bottom:var(--s6);
+}
+
+/* first-time setup */
+.setup {
+  position:absolute; inset:0; z-index:70;
+  background:var(--cream);
+  display:flex; flex-direction:column;
+  opacity:0; pointer-events:none; transition:opacity .3s var(--ease);
+}
+.setup.open { opacity:1; pointer-events:auto; }
+.setup-body { flex:1; overflow-y:auto; padding:var(--s16) var(--s12) var(--s12); }
+.setup-body::-webkit-scrollbar { display:none; }
+.setup-body h2 { font-size:24px; font-weight:800; line-height:1.2; margin-bottom:var(--s4); }
+.setup-lede { font-size:14px; color:var(--ink-soft); line-height:1.55; margin-bottom:var(--s4); }
+.setup-mark { font-size:40px; font-weight:800; letter-spacing:3px; color:var(--leaf); margin:var(--s8) 0 var(--s4); }
+.setup-dots { display:flex; gap:6px; margin-bottom:var(--s8); }
+.setup-dots i { width:8px; height:8px; border-radius:50%; background:var(--border); }
+.setup-dots i.on { background:var(--leaf); width:22px; border-radius:4px; }
+.setup .stepper { margin:var(--s8) 0; }
+.start-card {
+  display:flex; flex-direction:column; gap:4px; width:100%; text-align:left;
+  margin-top:var(--s6); padding:var(--s8);
+  background:var(--white); border:1.5px solid var(--border); border-radius:var(--r);
+  font-family:inherit; color:var(--ink); cursor:pointer;
+  box-shadow:0 1px 3px var(--shadow); transition:border-color .2s var(--ease);
+}
+.start-card:hover { border-color:var(--leaf); }
+.start-card b { font-size:15px; }
+.start-card span { font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
 
 /* ═══════════════ ON A REAL PHONE ═══════════════ */
 /* On a phone, or installed to the home screen, the app fills the screen:

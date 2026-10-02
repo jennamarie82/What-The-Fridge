@@ -1,47 +1,60 @@
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
+  name: '',                       // what the app calls the user; blank is fine
+  since: null,                    // YYYY-MM-DD the household was set up; null until setup is finished
   household: 2,
   dietary: { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false },
   notify:  { cooked:true, expiry:true, planReady:false }
 };
 
+// Every meal marked cooked, for the Profile stats. Nothing here is estimated: `rescued`
+// counts ingredients that were still inside their freshness window when they were used.
+var cookLog = [];                 // { date:'YYYY-MM-DD', recipe:id, rescued:n }
+
+// ═══════════════ INGREDIENTS & SHELF-LIFE NORMS ═══════════════
+// Both generated from the approved files by tools/build-recipes.ps1 — see recipes.js.
+var INGREDIENTS = window.WTF_INGREDIENTS || [];
+var NORMS = window.WTF_NORMS || {};
+var ingIndex = {};
+INGREDIENTS.forEach(function(i) { ingIndex[i.id] = i; });
+function ingById(id) { return ingIndex[id] || null; }
+function ingName(id) { var i = ingIndex[id]; return i ? i.name : id; }
+
 // ═══════════════ PANTRY ═══════════════
-// qty is live and changes when Ren marks a meal cooked.
-// `ago` = days since purchase, `life` = typical shelf life in days for its storage zone.
-// Both null means no date on record — the item stays "unknown", never assumed fresh.
-var pantry = [
-  { id:'eggs',       name:'Eggs',                   qty:12,   unit:'ea',    zone:'fridge',   ago:4,    life:28,  note:'3–5 weeks in shell' },
-  { id:'spinach',    name:'Spinach',                qty:200,  unit:'g',     zone:'fridge',   ago:3,    life:6,   note:'5–7 days refrigerated' },
-  { id:'chicken',    name:'Chicken breast',         qty:24,   unit:'oz',    zone:'fridge',   ago:1,    life:2,   note:'1–2 days, fresh poultry' },
-  { id:'asparagus',  name:'Asparagus',              qty:1,    unit:'bunch', zone:'fridge',   ago:3,    life:5,   note:'3–5 days refrigerated' },
-  { id:'shrimp',     name:'Shrimp (thawed)',        qty:8,    unit:'oz',    zone:'fridge',   ago:1,    life:2,   note:'1–2 days once thawed' },
-  { id:'lemon',      name:'Lemons',                 qty:2,    unit:'ea',    zone:'fridge',   ago:4,    life:21,  note:'2–4 weeks refrigerated' },
-  { id:'cucumber',   name:'Cucumber',               qty:1,    unit:'ea',    zone:'fridge',   ago:2,    life:7,   note:'about 1 week' },
-  { id:'tomatoes',   name:'Cherry tomatoes',        qty:2,    unit:'cup',   zone:'fridge',   ago:3,    life:6,   note:'5–7 days' },
-  { id:'rice',       name:'Cooked rice',            qty:3,    unit:'cup',   zone:'fridge',   ago:2,    life:4,   note:'leftovers, 3–4 days' },
-  { id:'yogurt',     name:'Greek yogurt',           qty:500,  unit:'g',     zone:'fridge',   ago:2,    life:14,  note:'1–2 weeks' },
-  { id:'milk',       name:'Milk',                   qty:1000, unit:'ml',    zone:'fridge',   ago:3,    life:8,   note:'5–7 days past printed date' },
-  { id:'mozzarella', name:'Fresh mozzarella',       qty:8,    unit:'oz',    zone:'fridge',   ago:3,    life:7,   note:'1 week once opened' },
-  { id:'salsa',      name:'Salsa',                  qty:2,    unit:'cup',   zone:'fridge',   ago:6,    life:14,  note:'2 weeks once opened' },
-  { id:'cheese',     name:'Shredded cheese',        qty:200,  unit:'g',     zone:'fridge',   ago:6,    life:25,  note:'3–4 weeks' },
-  { id:'mystery',    name:'Container of something', qty:1,    unit:'ea',    zone:'fridge',   ago:null, life:null, note:null },
-  { id:'berries',    name:'Mixed berries',          qty:2,    unit:'cup',   zone:'freezer',  ago:8,    life:240, note:'6–8 months frozen' },
-  { id:'peas',       name:'Peas & carrots',         qty:500,  unit:'g',     zone:'freezer',  ago:20,   life:300, note:'8–12 months frozen' },
-  { id:'avocado',    name:'Avocados',               qty:2,    unit:'ea',    zone:'cupboard', ago:4,    life:5,   note:'ripening on the counter' },
-  { id:'banana',     name:'Bananas',                qty:3,    unit:'ea',    zone:'cupboard', ago:2,    life:5,   note:'3–5 days on the counter' },
-  { id:'ciabatta',   name:'Ciabatta rolls',         qty:4,    unit:'ea',    zone:'cupboard', ago:2,    life:3,   note:'best within 2–3 days' },
-  { id:'onion',      name:'Red onion',              qty:1,    unit:'ea',    zone:'cupboard', ago:4,    life:30,  note:'weeks while whole' },
-  { id:'tortilla',   name:'Whole wheat tortillas',  qty:6,    unit:'ea',    zone:'cupboard', ago:5,    life:60,  note:'check the printed date' },
-  { id:'oats',       name:'Rolled oats',            qty:500,  unit:'g',     zone:'cupboard', ago:20,   life:365, note:'shelf-stable' },
-  { id:'pb',         name:'Peanut butter',          qty:32,   unit:'tbsp',  zone:'cupboard', ago:30,   life:365, note:'shelf-stable' },
-  { id:'chickpeas',  name:'Chickpeas',              qty:2,    unit:'can',   zone:'cupboard', ago:40,   life:730, note:'shelf-stable' },
-  { id:'blackbeans', name:'Black beans',            qty:2,    unit:'can',   zone:'cupboard', ago:40,   life:730, note:'shelf-stable' },
-  { id:'spaghetti',  name:'Whole wheat spaghetti',  qty:12,   unit:'oz',    zone:'cupboard', ago:25,   life:540, note:'shelf-stable' },
-  { id:'pork',       name:'Pork chops',             qty:4,    unit:'ea',    zone:'fridge',   ago:1,    life:4,   note:'3–5 days refrigerated' },
-  { id:'bellpepper', name:'Bell peppers',           qty:2,    unit:'ea',    zone:'fridge',   ago:3,    life:9,   note:'1–2 weeks refrigerated' },
-  { id:'quinoa',     name:'Quinoa',                 qty:400,  unit:'g',     zone:'cupboard', ago:30,   life:540, note:'shelf-stable' },
-  { id:'corn',       name:'Sweet corn',             qty:2,    unit:'can',   zone:'cupboard', ago:40,   life:730, note:'shelf-stable' }
-];
+// One entry per thing on the shelf: two packs of chicken bought on different days are two entries.
+//   ing       ingredient id from the shared list
+//   zone      fridge | freezer | cupboard
+//   qty/unit  how much, when the user says. null means unknown, and is never guessed.
+//   bought    purchase date (YYYY-MM-DD), or null when the user doesn't know it
+//   expires   a printed use-by date the user typed, or null
+var pantry = [];
+var ZONES = [ { key:'fridge', label:'Fridge' }, { key:'freezer', label:'Freezer' }, { key:'cupboard', label:'Cupboard' } ];
+var UNITS = ['ea','g','kg','oz','lb','ml','l','cup','tbsp','tsp','can','bunch','package','slice','head','jar'];
+
+function newEntryId() { return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+// The sample kitchen, for demos and for anyone who wants to look around before adding their
+// own food. Purchase dates are set relative to the day it is loaded. The feta has no quantity
+// and no date on purpose, to show how the app treats what it doesn't know.
+function samplePantry() {
+  var rows = [
+    ['eggs','fridge',12,'ea',4],          ['spinach','fridge',200,'g',3],        ['chicken-breast','fridge',24,'oz',1],
+    ['asparagus','fridge',1,'bunch',3],   ['shrimp','fridge',8,'oz',1],          ['lemon','fridge',2,'ea',4],
+    ['cucumber','fridge',1,'ea',2],       ['cherry-tomatoes','cupboard',2,'cup',3], ['cooked-rice','fridge',3,'cup',2],
+    ['greek-yogurt','fridge',500,'g',2],  ['milk','fridge',1000,'ml',3],         ['mozzarella','fridge',8,'oz',3],
+    ['salsa','fridge',2,'cup',6],         ['cheese','fridge',200,'g',6],         ['feta','fridge',null,null,null],
+    ['berries','freezer',2,'cup',8],      ['frozen-veg','freezer',500,'g',20],   ['avocado','cupboard',2,'ea',4],
+    ['bananas','cupboard',3,'ea',2],      ['buns','cupboard',4,'ea',2],          ['red-onion','cupboard',1,'ea',4],
+    ['flour-tortillas','cupboard',6,'ea',5], ['oats','cupboard',500,'g',20],     ['peanut-butter','cupboard',32,'tbsp',30],
+    ['chickpeas','cupboard',2,'can',40],  ['black-beans','cupboard',2,'can',40], ['pasta','cupboard',12,'oz',25],
+    ['pork-chops','fridge',4,'ea',1],     ['bell-pepper','fridge',2,'ea',3],     ['quinoa','cupboard',400,'g',30],
+    ['corn','cupboard',2,'can',40]
+  ];
+  return rows.map(function(r) {
+    return { id:newEntryId(), ing:r[0], zone:r[1], qty:r[2], unit:r[3],
+             bought: r[4] === null ? null : todayKey(addDays(new Date(), -r[4])), expires:null };
+  });
+}
 
 // ═══════════════ DIETARY RULES ═══════════════
 // Each recipe carries tags for what it actually contains, from its REQUIRED
@@ -73,10 +86,11 @@ function violatesDiet(recipe) {
   var blocked = activeBlocks();
   return (recipe.tags || []).some(function(t) { return blocked.indexOf(t) > -1; });
 }
-// Optional extras are hidden rather than blocking the recipe.
-function visibleNeeds(recipe) {
+// A recipe's ingredient lines, minus optional extras a restriction rules out —
+// those are dropped rather than blocking the recipe.
+function visibleLines(recipe) {
   var blocked = activeBlocks();
-  return (recipe.needs || []).filter(function(n) { return !(n.tag && blocked.indexOf(n.tag) > -1); });
+  return recipe.ing.filter(function(i) { return !(i.optional && i.tag && blocked.indexOf(i.tag) > -1); });
 }
 
 // ═══════════════ RECIPE CATALOG ═══════════════
@@ -84,119 +98,121 @@ function visibleNeeds(recipe) {
 // `id` is the slug of the recipe title and doubles as the image filename.
 // Dietary tags are derived from the database's own Dietary line, inverted:
 // the file lists what a recipe SATISFIES, these list what it CONTAINS.
-// `ing` quantities are PER SERVING — the app multiplies by household size.
-// `needs` are ingredients not tracked in the pantry; optional ones don't block feasibility.
-// `nutri` is an illustrative estimate — the approved recipe files carry no nutrition data.
+// `ing` lines name an ingredient from the shared list (`any` when the recipe offers a choice).
+// Quantities are PER SERVING in `unit`; the app multiplies by household size. qty:null means the
+// line is checked for presence only and never deducted. Optional lines never block a meal.
+// These 18 were modelled by hand in the prototype; step 5 of Phase A replaces them with all 300
+// recipes generated from the database, which this hand-written set does not always match.
 var recipes = [
   // ── breakfast ──
   { id:'spinach-egg-and-avocado-breakfast-wrap', name:'Spinach, Egg and Avocado Breakfast Wrap', type:'breakfast', time:'10 min',
     tags:[],
-    ing:[{id:'eggs',qty:1},{id:'spinach',qty:30},{id:'avocado',qty:0.5},{id:'tortilla',qty:1}],
-    needs:[], staples:'Olive oil, salt, pepper', nutri:{kcal:340,p:18,c:28,f:18},
+    ing:[{id:'eggs',qty:1,unit:'ea'},{id:'spinach',qty:30,unit:'g'},{id:'avocado',qty:0.5,unit:'ea'},{id:'flour-tortillas',qty:1,unit:'ea'}],
+    staples:'Olive oil, salt, pepper',
     note:'Quick and protein-packed. Uses the avocado at peak ripeness.' },
 
   { id:'high-protein-greek-yogurt-and-berry-parfait', name:'High-Protein Greek Yogurt and Berry Parfait', type:'breakfast', time:'5 min',
     tags:['dairy','nuts'],
-    ing:[{id:'yogurt',qty:150},{id:'berries',qty:0.5}],
-    needs:[{name:'Chopped nuts',optional:true,tag:'nuts'}], staples:'Honey, cinnamon', nutri:{kcal:260,p:20,c:28,f:6},
+    ing:[{id:'greek-yogurt',qty:150,unit:'g'},{id:'berries',qty:0.5,unit:'cup'},{any:['almonds','walnuts'],qty:null,optional:true,tag:'nuts'}],
+    staples:'Honey, cinnamon',
     note:'No cooking at all. The frozen berries thaw into the yogurt overnight.' },
 
   { id:'peanut-butter-banana-oatmeal', name:'Peanut Butter Banana Oatmeal', type:'breakfast', time:'10 min',
     tags:['nuts'],
-    ing:[{id:'oats',qty:50},{id:'banana',qty:0.5},{id:'pb',qty:2},{id:'milk',qty:120}],
-    needs:[], staples:'Cinnamon, maple syrup', nutri:{kcal:420,p:14,c:52,f:18},
+    ing:[{id:'oats',qty:50,unit:'g'},{id:'bananas',qty:0.5,unit:'ea'},{id:'peanut-butter',qty:2,unit:'tbsp'},{id:'milk',qty:120,unit:'ml'}],
+    staples:'Cinnamon, maple syrup',
     note:'Uses up a banana before it turns. Ready in one pot.' },
 
   { id:'veggie-scramble-with-feta-and-herbs', name:'Veggie Scramble with Feta and Herbs', type:'breakfast', time:'10 min',
     tags:['dairy'],
-    ing:[{id:'eggs',qty:2},{id:'tomatoes',qty:0.25},{id:'onion',qty:0.15}],
-    needs:[{name:'Feta cheese',optional:true,tag:'dairy'}], staples:'Olive oil, herbs, salt, pepper', nutri:{kcal:290,p:19,c:7,f:20},
+    ing:[{id:'eggs',qty:2,unit:'ea'},{id:'cherry-tomatoes',qty:0.25,unit:'cup'},{id:'red-onion',qty:0.15,unit:'ea'},{id:'feta',qty:null,optional:true,tag:'dairy'}],
+    staples:'Olive oil, herbs, salt, pepper',
     note:'A fast way to clear soft tomatoes and a bit of onion.' },
 
   { id:'savory-oatmeal-with-soft-egg-and-scallions', name:'Savory Oatmeal with Soft Egg and Scallions', type:'breakfast', time:'15 min',
     tags:[],
-    ing:[{id:'oats',qty:50},{id:'eggs',qty:1}],
-    needs:[{name:'Scallions',optional:true}], staples:'Soy sauce, sesame oil', nutri:{kcal:330,p:15,c:40,f:12},
+    ing:[{id:'oats',qty:50,unit:'g'},{id:'eggs',qty:1,unit:'ea'},{id:'green-onion',qty:null,optional:true}],
+    staples:'Soy sauce, sesame oil',
     note:'Savoury rather than sweet, if the household is tired of sweet breakfasts.' },
 
   // ── lunch ──
   { id:'mediterranean-chickpea-salad', name:'Mediterranean Chickpea Salad', type:'lunch', time:'10 min',
     tags:['dairy'],
-    ing:[{id:'chickpeas',qty:0.5},{id:'cucumber',qty:0.5},{id:'tomatoes',qty:0.5},{id:'onion',qty:0.25}],
-    needs:[{name:'Feta cheese',optional:true,tag:'dairy'}], staples:'Olive oil, lemon, oregano', nutri:{kcal:310,p:12,c:38,f:12},
+    ing:[{id:'chickpeas',qty:0.5,unit:'can'},{id:'cucumber',qty:0.5,unit:'ea'},{id:'cherry-tomatoes',qty:0.5,unit:'cup'},{id:'red-onion',qty:0.25,unit:'ea'},{id:'feta',qty:null,optional:true,tag:'dairy'}],
+    staples:'Olive oil, lemon, oregano',
     note:'A packable, no-cook lunch that uses the tomatoes before they go.' },
 
   { id:'caprese-chicken-ciabatta-sandwich', name:'Caprese Chicken Ciabatta Sandwich', type:'lunch', time:'10 min',
     tags:['meat','dairy'],
-    ing:[{id:'chicken',qty:3},{id:'mozzarella',qty:2},{id:'tomatoes',qty:0.25},{id:'ciabatta',qty:1}],
-    needs:[], staples:'Basil, olive oil, balsamic', nutri:{kcal:480,p:38,c:42,f:16},
+    ing:[{id:'chicken-breast',qty:3,unit:'oz'},{id:'mozzarella',qty:2,unit:'oz'},{id:'cherry-tomatoes',qty:0.25,unit:'cup'},{id:'buns',qty:1,unit:'ea'}],
+    staples:'Basil, olive oil, balsamic',
     note:'Uses the ciabatta while it is still good, and leftover cooked chicken.' },
 
   { id:'quick-black-bean-and-rice-burrito-bowl', name:'Quick Black Bean and Rice Burrito Bowl', type:'lunch', time:'10 min',
     tags:['dairy'],
-    ing:[{id:'blackbeans',qty:0.5},{id:'rice',qty:0.5},{id:'salsa',qty:0.25},{id:'cheese',qty:30},{id:'avocado',qty:0.25}],
-    needs:[], staples:'Lime, cumin, salt', nutri:{kcal:430,p:16,c:58,f:14},
+    ing:[{id:'black-beans',qty:0.5,unit:'can'},{id:'cooked-rice',qty:0.5,unit:'cup'},{id:'salsa',qty:0.25,unit:'cup'},{id:'cheese',qty:30,unit:'g'},{id:'avocado',qty:0.25,unit:'ea'}],
+    staples:'Lime, cumin, salt',
     note:'Assembles cold or warm, and moves the cooked rice along.' },
 
   { id:'southwestern-mason-jar-quinoa-salad', name:'Southwestern Mason Jar Quinoa Salad', type:'lunch', time:'15 min',
     tags:[],
-    ing:[{id:'quinoa',qty:60},{id:'blackbeans',qty:0.25},{id:'corn',qty:0.25},{id:'bellpepper',qty:0.5}],
-    needs:[{name:'Fresh cilantro',optional:true}], staples:'Lime, olive oil, cumin, salt', nutri:{kcal:360,p:13,c:54,f:10},
+    ing:[{id:'quinoa',qty:60,unit:'g'},{id:'black-beans',qty:0.25,unit:'can'},{id:'corn',qty:0.25,unit:'can'},{id:'bell-pepper',qty:0.5,unit:'ea'},{id:'cilantro',qty:null,optional:true}],
+    staples:'Lime, olive oil, cumin, salt',
     note:'Layers in a jar and keeps for days. Entirely plant-based.' },
 
   { id:'healthy-egg-salad-lettuce-boats', name:'Healthy Egg Salad Lettuce Boats', type:'lunch', time:'15 min',
     tags:['dairy'],
-    ing:[{id:'eggs',qty:1.5},{id:'yogurt',qty:30}],
-    needs:[{name:'Romaine lettuce',optional:false}], staples:'Dijon, green onion, salt, pepper', nutri:{kcal:220,p:15,c:6,f:15},
+    ing:[{id:'eggs',qty:1.5,unit:'ea'},{id:'greek-yogurt',qty:30,unit:'g'},{id:'lettuce',qty:null}],
+    staples:'Dijon, green onion, salt, pepper',
     note:'Greek yogurt instead of mayo. Pack the leaves separately.' },
 
   { id:'sesame-peanut-noodle-bowl', name:'Sesame Peanut Noodle Bowl', type:'lunch', time:'15 min',
     tags:['nuts'],
-    ing:[{id:'spaghetti',qty:2},{id:'pb',qty:2},{id:'cucumber',qty:0.25}],
-    needs:[], staples:'Soy sauce, sesame oil, lime', nutri:{kcal:400,p:14,c:52,f:16},
+    ing:[{id:'pasta',qty:2,unit:'oz'},{id:'peanut-butter',qty:2,unit:'tbsp'},{id:'cucumber',qty:0.25,unit:'ea'}],
+    staples:'Soy sauce, sesame oil, lime',
     note:'Eaten cold, so it keeps well in a lunch container.' },
 
   // ── dinner ──
   { id:'sheet-pan-garlic-lemon-chicken-and-asparagus', name:'Sheet Pan Garlic Lemon Chicken and Asparagus', type:'dinner', time:'25 min',
     tags:['meat'],
-    ing:[{id:'chicken',qty:8},{id:'asparagus',qty:0.5},{id:'lemon',qty:0.5}],
-    needs:[], staples:'Garlic, olive oil, salt, pepper', nutri:{kcal:380,p:46,c:10,f:16},
+    ing:[{id:'chicken-breast',qty:8,unit:'oz'},{id:'asparagus',qty:0.5,unit:'bunch'},{id:'lemon',qty:0.5,unit:'ea'}],
+    staples:'Garlic, olive oil, salt, pepper',
     note:'The asparagus and chicken both need using. One pan, minimal cleanup.' },
 
   { id:'garlic-butter-shrimp-and-spinach-pasta', name:'Garlic Butter Shrimp and Spinach Pasta', type:'dinner', time:'20 min',
     tags:['fish','dairy'],
-    ing:[{id:'shrimp',qty:4},{id:'spinach',qty:60},{id:'spaghetti',qty:3}],
-    needs:[{name:'Parmesan',optional:true,tag:'dairy'}], staples:'Butter, garlic, olive oil', nutri:{kcal:450,p:32,c:48,f:12},
+    ing:[{id:'shrimp',qty:4,unit:'oz'},{id:'spinach',qty:60,unit:'g'},{id:'pasta',qty:3,unit:'oz'},{id:'parmesan',qty:null,optional:true,tag:'dairy'}],
+    staples:'Butter, garlic, olive oil',
     note:'Thawed shrimp will not wait. This finishes the spinach too.' },
 
   { id:'easy-egg-and-veggie-fried-rice', name:'Easy Egg and Veggie Fried Rice', type:'dinner', time:'15 min',
     tags:[],
-    ing:[{id:'rice',qty:1},{id:'eggs',qty:1},{id:'peas',qty:100}],
-    needs:[], staples:'Soy sauce, sesame oil, garlic', nutri:{kcal:400,p:16,c:56,f:12},
+    ing:[{id:'cooked-rice',qty:1,unit:'cup'},{id:'eggs',qty:1,unit:'ea'},{id:'frozen-veg',qty:100,unit:'g'}],
+    staples:'Soy sauce, sesame oil, garlic',
     note:'Day-old rice fries better than fresh. Clears the freezer veg too.' },
 
   { id:'skillet-caprese-chicken', name:'Skillet Caprese Chicken', type:'dinner', time:'25 min',
     tags:['meat','dairy'],
-    ing:[{id:'chicken',qty:6},{id:'mozzarella',qty:2},{id:'tomatoes',qty:0.5}],
-    needs:[], staples:'Olive oil, basil, marinara', nutri:{kcal:420,p:44,c:8,f:22},
+    ing:[{id:'chicken-breast',qty:6,unit:'oz'},{id:'mozzarella',qty:2,unit:'oz'},{id:'cherry-tomatoes',qty:0.5,unit:'cup'}],
+    staples:'Olive oil, basil, marinara',
     note:'One skillet. Good when the mozzarella needs using.' },
 
   { id:'honey-mustard-glazed-pork-chops', name:'Honey Mustard Glazed Pork Chops', type:'dinner', time:'20 min',
     tags:['meat','pork'],
-    ing:[{id:'pork',qty:1},{id:'bellpepper',qty:0.5}],
-    needs:[{name:'Green beans',optional:true}], staples:'Dijon, honey, garlic powder, olive oil', nutri:{kcal:410,p:38,c:14,f:22},
+    ing:[{id:'pork-chops',qty:1,unit:'ea'},{id:'bell-pepper',qty:0.5,unit:'ea'},{id:'green-beans',qty:null,optional:true}],
+    staples:'Dijon, honey, garlic powder, olive oil',
     note:'Thin-cut chops sear fast. The glaze is three cupboard staples.' },
 
   { id:'15-minute-tomato-spinach-tortellini', name:'15-Minute Tomato Spinach Tortellini', type:'dinner', time:'15 min',
     tags:['dairy'],
-    ing:[{id:'spinach',qty:60},{id:'tomatoes',qty:0.5}],
-    needs:[{name:'Cheese tortellini',optional:false,tag:'dairy'}], staples:'Marinara, parmesan', nutri:{kcal:460,p:18,c:58,f:18},
+    ing:[{id:'spinach',qty:60,unit:'g'},{id:'cherry-tomatoes',qty:0.5,unit:'cup'},{id:'tortellini',qty:null,tag:'dairy'}],
+    staples:'Marinara, parmesan',
     note:'Fastest dinner in the file, but the tortellini has to be on hand.' },
 
   { id:'tuscan-white-bean-and-spinach-soup', name:'Tuscan White Bean and Spinach Soup', type:'dinner', time:'20 min',
     tags:['dairy'],
-    ing:[{id:'spinach',qty:50},{id:'tomatoes',qty:0.25}],
-    needs:[{name:'Cannellini beans',optional:false},{name:'Vegetable broth',optional:false}], staples:'Garlic, olive oil', nutri:{kcal:300,p:15,c:42,f:8},
+    ing:[{id:'spinach',qty:50,unit:'g'},{id:'cherry-tomatoes',qty:0.25,unit:'cup'},{id:'white-beans',qty:null},{id:'vegetable-broth',qty:null}],
+    staples:'Garlic, olive oil',
     note:'Warming and cheap, but needs beans and broth from the cupboard.' }
 ];
 
@@ -222,17 +238,30 @@ var unreconciled = [];           // meals that left the horizon still unconfirme
 
 // ═══════════════ HELPERS ═══════════════
 function recipeById(id) { for (var i=0;i<recipes.length;i++) { if (recipes[i].id === id) return recipes[i]; } return null; }
-function pantryById(id) { for (var i=0;i<pantry.length;i++)  { if (pantry[i].id === id)  return pantry[i];  } return null; }
+function entryById(id)  { for (var i=0;i<pantry.length;i++)  { if (pantry[i].id === id)  return pantry[i];  } return null; }
 function planIndex(day, type) { return (day - 1) * 3 + MEAL_TYPES.indexOf(type); }
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
 function fmtQty(qty, unit) {
-  var n = round2(qty);
-  var s = (n % 1 === 0) ? String(n) : String(n);
+  if (qty === null || qty === undefined) { return 'amount not recorded'; }
+  var s = String(round2(qty));
   if (!unit || unit === 'ea') { return s; }
   return s + ' ' + unit;
 }
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function(c) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; });
+}
+
+// ─── calendar days ───
+// Dates are kept as local calendar days ('YYYY-MM-DD') so a purchase date never drifts with the clock.
+function todayKey(d) {
+  d = d || new Date();
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+}
+function parseKey(k) { var a = k.split('-'); return new Date(+a[0], a[1] - 1, +a[2]); }
+function addDays(d, n) { var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+function daysBetween(fromKey, toKey) { return Math.round((parseKey(toKey) - parseKey(fromKey)) / 86400000); }
 
 // ─── rolling dates ───
 function dateFor(dayIndex) {           // dayIndex 0,1,2 — 0 is always today
@@ -248,64 +277,200 @@ function dayLabel(dayIndex) {
 function dayShort(dayIndex) {
   return dateFor(dayIndex).toLocaleDateString(undefined, { weekday:'short' });
 }
-function fmtDate(d) { return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }); }
+// Adds the year when it isn't this year, so a freezer use-by next summer can't be misread as past.
+function fmtDate(d) {
+  var o = { month:'short', day:'numeric' };
+  if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
+  return d.toLocaleDateString(undefined, o);
+}
+function fmtKey(k) { return fmtDate(parseKey(k)); }
+function zoneLabel(z) { for (var i=0;i<ZONES.length;i++) { if (ZONES[i].key === z) return ZONES[i].label; } return z; }
 
 // ─── freshness ───
-function freshness(item) {
-  if (item.ago === null || item.life === null) { return { known:false, cls:'unknown', text:'unknown' }; }
-  var left = item.life - item.ago;
-  var cls, text;
-  if (left <= 0)      { cls = 'now';  text = 'past window'; }
-  else if (left <= 1) { cls = 'now';  text = 'today'; }
-  else if (left <= 3) { cls = 'soon'; text = left + ' days'; }
-  else                { cls = 'ok';   text = 'fine'; }
-  return { known:true, left:left, cls:cls, text:text };
+// Estimated only from what the user told us plus knowledge/shelf-life-norms.md:
+//   1. a printed use-by date the user typed wins outright;
+//   2. otherwise purchase date + the norm's window for the storage spot it's in;
+//   3. anything else is unknown, with the reason, and never assumed fresh.
+// Norms are ranges ("3–7 days"), so the chip goes by the short end and "past window" by the long end.
+function freshness(e) {
+  var today = todayKey();
+  var ing = ingById(e.ing);
+  if (e.expires) {
+    var l = daysBetween(today, e.expires);
+    return status({ known:true, min:l, max:l, via:'printed' });
+  }
+  if (!e.bought) { return { known:false, cls:'unknown', text:'no date', via:'nodate' }; }
+  var norm = ing && ing.norm ? NORMS[ing.norm] : null;
+  if (!norm)             { return { known:false, cls:'unknown', text:'unknown', via:'nonorm' }; }
+  if (norm.printed)      { return { known:false, cls:'unknown', text:'check date', via:'needsprinted', norm:norm }; }
+  var win = norm[e.zone];
+  if (!win)              { return { known:false, cls:'unknown', text:'unknown', via:'nozone', norm:norm }; }
+  var age = daysBetween(e.bought, today);
+  return status({ known:true, min:win[0] - age, max:win[1] - age, via:'norm', norm:norm });
 }
-function boughtLine(item) {
-  if (item.ago === null) { return 'No purchase date on record — no freshness estimate possible.'; }
-  var d = new Date(); d.setDate(d.getDate() - item.ago);
-  var f = freshness(item);
-  var use = new Date(); use.setDate(use.getDate() + f.left);
-  return 'Bought ' + fmtDate(d) + ' · ' + item.note + ' · through ' + fmtDate(use);
+function status(f) {
+  f.left = f.min;
+  if (f.max < 0)       { f.cls = 'now';  f.text = 'past window'; }
+  else if (f.min <= 0) { f.cls = 'now';  f.text = 'use today'; }
+  else if (f.min <= 3) { f.cls = 'soon'; f.text = f.min + (f.min === 1 ? ' day' : ' days'); }
+  else                 { f.cls = 'ok';   f.text = 'fine'; }
+  return f;
+}
+// A norm's wording for the storage spot the food is actually in: "Leafy greens: 3–7 days
+// refrigerated; 10–12 months frozen" reads as just the refrigerated part for a fridge item.
+var ZONE_WORDS = { fridge:/refrigerat/, freezer:/frozen|freez/, cupboard:/cupboard|counter|pantry/ };
+function normBasis(norm, zone) {
+  var parts = norm.basis.split('; ');
+  if (parts.length < 2) return norm.basis;
+  for (var i = 0; i < parts.length; i++) {
+    if (ZONE_WORDS[zone].test(parts[i])) {
+      return i === 0 ? parts[0] : parts[0].split(':')[0] + ': ' + parts[i];
+    }
+  }
+  return norm.basis;
+}
+
+// The basis behind an estimate, in plain words. Shown wherever the estimate is.
+function basisLine(e) {
+  var f = freshness(e), name = ingName(e.ing);
+  var bought = e.bought ? 'Bought ' + fmtKey(e.bought) : '';
+  if (f.via === 'printed') {
+    return (bought ? bought + ' · ' : '') + 'use-by date you entered: ' + fmtKey(e.expires);
+  }
+  if (f.via === 'nodate') { return 'No purchase date on record, so no freshness estimate.'; }
+  if (f.via === 'nonorm') {
+    return bought + ' · the shelf-life norms have no entry for ' + name.toLowerCase() + '. Add the printed date for an estimate.';
+  }
+  if (f.via === 'nozone') {
+    return bought + ' · the norms give no window for ' + name.toLowerCase() + ' kept in the ' + zoneLabel(e.zone).toLowerCase() + '. Add the printed date for an estimate.';
+  }
+  if (f.via === 'needsprinted') {
+    return bought + ' · ' + f.norm.basis + '. That counts from the printed date, so add it for an estimate.';
+  }
+  var from = addDays(parseKey(e.bought), f.norm[e.zone][0]), to = addDays(parseKey(e.bought), f.norm[e.zone][1]);
+  return bought + ' · ' + normBasis(f.norm, e.zone) + ' · estimated use-by ' +
+    (todayKey(from) === todayKey(to) ? fmtDate(from) : fmtDate(from) + '–' + fmtDate(to));
+}
+// Soonest-to-turn first; unknowns last, since nothing is known about them.
+function byUrgency(a, b) {
+  var fa = freshness(a), fb = freshness(b);
+  if (!fa.known && !fb.known) return 0;
+  if (!fa.known) return 1;
+  if (!fb.known) return -1;
+  return fa.min - fb.min;
+}
+
+// ═══════════════ STOCK ═══════════════
+// What the kitchen holds of one ingredient, across every pantry entry for it.
+function entriesFor(ingId) { return pantry.filter(function(p) { return p.ing === ingId; }); }
+function inStock(e) { return e.qty === null || e.qty > 0; }
+
+// How much is KNOWN to be on hand in `unit`. Entries with no quantity, or kept in another unit,
+// can't be counted, so they make the answer `uncertain` rather than being guessed at.
+function stockOf(ingId, unit) {
+  var known = 0, uncertain = false, any = false;
+  entriesFor(ingId).forEach(function(e) {
+    if (!inStock(e)) return;
+    any = true;
+    if (e.qty === null || (unit && e.unit !== unit)) { uncertain = true; return; }
+    known += e.qty;
+  });
+  return { any:any, known:round2(known), uncertain:uncertain };
+}
+
+function lineIds(line) { return line.any || [line.id]; }
+function lineName(line) { return lineIds(line).map(ingName).join(' or '); }
+function amountFor(line) { return line.qty === null || line.qty === undefined ? null : round2(line.qty * settings.household); }
+
+// Whether the kitchen covers one recipe line, needing `amount` (null = presence only):
+//   ok       enough is known to be on hand (or, for presence-only lines, some is)
+//   check    some is on hand but how much isn't known, so the user should check
+//   short    the known amount isn't enough
+//   missing  none on hand at all
+var COVER_RANK = { missing:0, short:1, check:2, ok:3 };
+function coverage(line, amount) {
+  var best = null;
+  lineIds(line).forEach(function(id) {
+    var s = stockOf(id, line.unit), st;
+    if (!s.any) st = 'missing';
+    else if (amount === null || s.known >= amount - 1e-9) st = 'ok';
+    else if (s.uncertain) st = 'check';
+    else st = 'short';
+    if (!best || COVER_RANK[st] > COVER_RANK[best.status]) { best = { status:st, id:id, stock:s }; }
+  });
+  return best;
+}
+
+// The entry a recipe line would draw on first: the one closest to the end of its window.
+function urgentEntryFor(line) {
+  var es = [];
+  lineIds(line).forEach(function(id) { es = es.concat(entriesFor(id).filter(inStock)); });
+  es.sort(byUrgency);
+  return es[0] || null;
+}
+
+// Takes what a cooked meal used out of the pantry, soonest-to-turn first. Only entries with a
+// known quantity in the recipe's unit can be drawn down; the rest are left alone (the user is
+// told), because subtracting from an unknown amount would invent a number.
+// Returns what was taken, so Undo can put it back.
+function deductLine(line) {
+  var amount = amountFor(line);
+  if (amount === null) return [];
+  var id = coverage(line, amount).id;
+  var es = entriesFor(id).filter(function(e) { return e.qty !== null && e.qty > 0 && e.unit === line.unit; }).sort(byUrgency);
+  var left = amount, taken = [];
+  es.forEach(function(e) {
+    if (left <= 0) return;
+    var t = round2(Math.min(e.qty, left));
+    e.qty = round2(e.qty - t); left = round2(left - t);
+    taken.push({ entry:e.id, qty:t });
+  });
+  return taken;
+}
+function restoreTaken(taken) {
+  (taken || []).forEach(function(t) {
+    var e = entryById(t.entry);
+    if (e && e.qty !== null) { e.qty = round2(e.qty + t.qty); }
+  });
+}
+// Uses up a whole meal. Returns what was taken plus how many lines were used inside their window.
+function deductRecipe(r) {
+  var taken = [], rescued = 0;
+  visibleLines(r).forEach(function(line) {
+    var u = urgentEntryFor(line);
+    if (u) { var f = freshness(u); if (f.known && f.max >= 0) rescued++; }
+    taken = taken.concat(deductLine(line));
+  });
+  return { taken:taken, rescued:rescued };
 }
 
 // ─── requirements & feasibility ───
-function requiredFor(recipe, id) {
-  for (var i=0;i<recipe.ing.length;i++) { if (recipe.ing[i].id === id) return recipe.ing[i].qty * settings.household; }
-  return 0;
-}
-// Totals still to be cooked (pending meals only — accepted meals are already deducted).
-function pendingTotals() {
-  var totals = {};
+// Everything the pending meals still need, added up per ingredient and unit, then compared with
+// the kitchen. Accepted meals are already deducted; skipped ones need nothing.
+function planNeeds() {
+  var totals = {}, presence = {};
   plan.forEach(function(entry) {
-    if (entry.status !== 'pending') return;
+    if (entry.status !== 'pending' || entry.dietBlocked) return;
     var r = recipeById(entry.recipe);
     if (!r) return;
-    r.ing.forEach(function(i) {
-      totals[i.id] = (totals[i.id] || 0) + i.qty * settings.household;
+    visibleLines(r).forEach(function(line) {
+      if (line.optional) return;
+      var amount = amountFor(line);
+      if (amount === null) { presence[lineIds(line).join('|')] = line; return; }
+      var key = lineIds(line).join('|') + '@' + line.unit;
+      if (!totals[key]) totals[key] = { line:line, amount:0 };
+      totals[key].amount = round2(totals[key].amount + amount);
     });
   });
-  return totals;
-}
-function shortfalls() {
-  var totals = pendingTotals(), out = [];
-  for (var id in totals) {
-    var p = pantryById(id);
-    if (!p) continue;
-    if (round2(totals[id]) > round2(p.qty)) {
-      out.push({ item:p, need:round2(totals[id]), have:round2(p.qty) });
-    }
-  }
-  // required (non-optional) ingredients the pantry does not track at all
-  plan.forEach(function(entry) {
-    if (entry.status !== 'pending') return;
-    var r = recipeById(entry.recipe);
-    visibleNeeds(r).forEach(function(n) {
-      if (n.optional) return;
-      if (!out.some(function(o){ return o.missingName === n.name; })) {
-        out.push({ missingName:n.name, recipe:r.name });
-      }
-    });
+  var out = { short:[], missing:[], check:[] };
+  Object.keys(totals).forEach(function(k) {
+    var t = totals[k], c = coverage(t.line, t.amount);
+    if (c.status === 'missing') out.missing.push({ name:lineName(t.line) });
+    else if (c.status === 'short') out.short.push({ name:ingName(c.id), need:t.amount, have:c.stock.known, unit:t.line.unit });
+    else if (c.status === 'check') out.check.push({ name:ingName(c.id), need:t.amount, unit:t.line.unit });
+  });
+  Object.keys(presence).forEach(function(k) {
+    if (coverage(presence[k], null).status === 'missing') out.missing.push({ name:lineName(presence[k]) });
   });
   return out;
 }
@@ -314,9 +479,23 @@ function optionalMissing() {
   plan.forEach(function(entry) {
     if (entry.status === 'skipped') return;
     var r = recipeById(entry.recipe);
-    visibleNeeds(r).forEach(function(n) { if (n.optional && names.indexOf(n.name) === -1) names.push(n.name); });
+    visibleLines(r).forEach(function(line) {
+      if (!line.optional) return;
+      var n = lineName(line);
+      if (coverage(line, null).status === 'missing' && names.indexOf(n) === -1) names.push(n);
+    });
   });
   return names;
+}
+// How well the kitchen covers a whole recipe, for ranking Swap and new-day picks.
+function recipeCover(r) {
+  var covered = 0, gaps = 0;
+  visibleLines(r).forEach(function(line) {
+    var st = coverage(line, amountFor(line)).status;
+    if (st === 'ok') covered++;
+    else if (!line.optional && st === 'missing') gaps++;
+  });
+  return { covered:covered, gaps:gaps };
 }
 
 // ═══════════════ RECIPE IMAGERY ═══════════════
@@ -490,49 +669,62 @@ function renderDaySelector() {
 }
 function selectDay(d) { currentDay = d; renderMeals(); renderDaySelector(); }
 
+function pantryEmpty() { return !pantry.some(inStock); }
+
+var TICK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg>';
+var BANG_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M12 7v6"/><path d="M12 17h.01"/></svg>';
+
 function renderBanner() {
   var el = document.getElementById('banner');
-  var short = shortfalls();
-  var pendingCount = plan.filter(function(e){ return e.status === 'pending'; }).length;
 
-  if (short.length === 0) {
-    var opt = optionalMissing();
-    el.className = 'banner';
+  if (pantryEmpty()) {
+    el.className = 'banner empty';
     el.innerHTML =
-      '<span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5.5 5.5L20 7"/></svg></span>' +
-      '<div class="text"><strong>No grocery trip required</strong><span>' +
-        (pendingCount ? pendingCount + ' meals still to cook, all covered by what you have.' : 'Every meal in this plan is logged. Nice work.') +
-        (opt.length ? ' Optional extras missing: ' + opt.join(', ') + '.' : '') +
-      '</span></div>';
-  } else {
-    var lines = short.map(function(s) {
-      if (s.missingName) { return s.missingName + ' (not in your pantry)'; }
-      return s.item.name + ': need ' + fmtQty(s.need, s.item.unit) + ', have ' + fmtQty(s.have, s.item.unit);
-    });
-    el.className = 'banner short';
-    el.innerHTML =
-      '<span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M12 7v6"/><path d="M12 17h.01"/></svg></span>' +
-      '<div class="text"><strong>' + short.length + ' shortfall' + (short.length > 1 ? 's' : '') + ' in this plan</strong>' +
-      '<span>' + lines.join(' · ') + '. Swap a meal or shop for the gap.</span></div>';
+      '<div class="text"><strong>Your fridge is a mystery to us</strong>' +
+      '<span>Tell us what\'s in it and the plan will work around what you actually have. Nothing is assumed.</span>' +
+      '<button class="btn primary small" onclick="openAddItem()">Add food</button></div>';
+    return;
   }
+
+  var n = planNeeds();
+  var pendingCount = plan.filter(function(e){ return e.status === 'pending'; }).length;
+  var gaps = n.short.length + n.missing.length;
+  var check = n.check.length ? ' Check you have enough ' + n.check.map(function(c){ return c.name.toLowerCase(); }).join(', ') +
+                               ': how much isn\'t recorded.' : '';
+
+  if (gaps === 0) {
+    var opt = optionalMissing();
+    el.className = 'banner' + (n.check.length ? ' check' : '');
+    el.innerHTML = '<span class="tick">' + TICK_SVG + '</span>' +
+      '<div class="text"><strong>No grocery trip required</strong><span>' +
+        (pendingCount ? pendingCount + ' meals still to cook, covered by what you have.' : 'Every meal in this plan is logged. Nice work.') +
+        check + (opt.length ? ' Optional extras missing: ' + opt.join(', ') + '.' : '') +
+      '</span></div>';
+    return;
+  }
+  var lines = n.missing.map(function(m) { return m.name + ' (not in your pantry)'; })
+    .concat(n.short.map(function(s) { return s.name + ': need ' + fmtQty(s.need, s.unit) + ', have ' + fmtQty(s.have, s.unit); }));
+  el.className = 'banner short';
+  el.innerHTML = '<span class="tick">' + BANG_SVG + '</span>' +
+    '<div class="text"><strong>' + gaps + ' gap' + (gaps > 1 ? 's' : '') + ' in this plan</strong>' +
+    '<span>' + esc(lines.join(' · ')) + '. Swap a meal or shop for the gap.' + check + '</span></div>';
 }
 
 function mealChips(recipe) {
-  // Surface the most urgent ingredient this recipe uses.
-  var out = [], urgent = null;
-  recipe.ing.forEach(function(i) {
-    var p = pantryById(i.id); if (!p) return;
-    var f = freshness(p);
-    if (!f.known) return;
-    if (!urgent || f.left < urgent.f.left) { urgent = { p:p, f:f }; }
+  // Surface the most urgent ingredient this recipe uses, and the first thing it's missing.
+  var out = [], urgent = null, missing = null;
+  visibleLines(recipe).forEach(function(line) {
+    var e = urgentEntryFor(line);
+    if (!e) { if (!line.optional && !missing) missing = line; return; }
+    var f = freshness(e);
+    if (f.known && (!urgent || f.min < urgent.f.min)) { urgent = { e:e, f:f }; }
   });
-  if (urgent && urgent.f.left <= 3) {
-    out.push({ cls:urgent.f.cls, text:'uses ' + urgent.p.name.toLowerCase().split(' ')[0] + ' · ' + urgent.f.text });
-  } else {
+  if (urgent && urgent.f.min <= 3) {
+    out.push({ cls:urgent.f.cls, text:'uses ' + ingName(urgent.e.ing).toLowerCase() + ' · ' + urgent.f.text });
+  } else if (!missing) {
     out.push({ cls:'ok', text:'all in window' });
   }
-  var req = (recipe.needs || []).filter(function(n){ return !n.optional; });
-  if (req.length) { out.push({ cls:'now', text:'needs ' + req[0].name.toLowerCase() }); }
+  if (missing) { out.push({ cls:'now', text:'needs ' + lineName(missing).toLowerCase() }); }
   return out;
 }
 
@@ -552,7 +744,7 @@ function renderMeals() {
     card.className = 'meal-card' + (slot === spot ? ' spotlight' : '') + (entry.status !== 'pending' ? ' done' : '') + (entry.dietBlocked ? ' blocked' : '');
     card.onclick = function() { openDetail(idx); };
 
-    var chips = mealChips(r).map(function(c) { return chipHTML(c.cls, c.text); }).join('');
+    var chips = mealChips(r).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
     var badge = '';
     if (entry.status === 'accepted') { badge = '<span class="state-badge cooked">✓ cooked</span>'; }
     if (entry.status === 'skipped')  { badge = '<span class="state-badge skipped">skipped</span>'; }
@@ -568,7 +760,7 @@ function renderMeals() {
       '<div class="meal-info">' +
         '<h4>' + r.name + '</h4>' +
         '<p class="meta">' + r.type.charAt(0).toUpperCase() + r.type.slice(1) + ' · ' + r.time +
-          ' · serves ' + settings.household + ' · ' + r.nutri.kcal + ' kcal</p>' +
+          ' · serves ' + settings.household + '</p>' +
         '<div class="chip-row">' + chips + '</div>' +
       '</div>';
 
@@ -576,79 +768,81 @@ function renderMeals() {
   });
 }
 
+// Where everything goes: each measured ingredient, and how much each day's meals take.
 function renderAlloc() {
   var body = document.getElementById('allocBody');
   if (!body) return;
-  var ids = [];
-  plan.forEach(function(entry) {
+  var rows = {}, order = [];
+  plan.forEach(function(entry, idx) {
     if (entry.status === 'skipped') return;
     var r = recipeById(entry.recipe);
-    r.ing.forEach(function(i) { if (ids.indexOf(i.id) === -1) ids.push(i.id); });
+    var day = Math.floor(idx / 3);
+    visibleLines(r).forEach(function(line) {
+      var amount = amountFor(line);
+      if (amount === null) return;
+      var key = lineIds(line).join('|') + '@' + line.unit;
+      if (!rows[key]) { rows[key] = { name:lineName(line), unit:line.unit, days:[0,0,0] }; order.push(key); }
+      rows[key].days[day] = round2(rows[key].days[day] + amount);
+    });
   });
-  var rows = ids.map(function(id) {
-    var p = pantryById(id);
-    var cells = '';
-    for (var d=1; d<=3; d++) {
-      var tot = 0;
-      MEAL_TYPES.forEach(function(t) {
-        var e = plan[planIndex(d,t)];
-        if (e.status === 'skipped') return;
-        tot += requiredFor(recipeById(e.recipe), id);
-      });
-      cells += tot > 0 ? '<td>' + fmtQty(tot, p.unit) + '</td>' : '<td class="nil">&mdash;</td>';
-    }
-    return '<tr><td>' + p.name + '</td>' + cells + '</tr>';
+  body.innerHTML = order.map(function(k) {
+    var row = rows[k];
+    return '<tr><td>' + esc(row.name) + '</td>' + row.days.map(function(t) {
+      return t > 0 ? '<td>' + fmtQty(t, row.unit) + '</td>' : '<td class="nil">&mdash;</td>';
+    }).join('') + '</tr>';
   }).join('');
-  body.innerHTML = rows;
 }
 
 // ═══════════════ PANTRY RENDERING ═══════════════
+function entryQty(e) { return e.qty === null ? 'amount not recorded' : (e.qty > 0 ? fmtQty(e.qty, e.unit) : 'used up'); }
+
 function renderPantry() {
   var att = document.getElementById('pantryAttention');
   var zones = document.getElementById('pantryZones');
 
-  var attention = pantry.filter(function(p) {
-    if (p.qty <= 0) return false;
-    var f = freshness(p);
-    return !f.known || f.left <= 3;
-  }).sort(function(a,b) {
-    var fa = freshness(a), fb = freshness(b);
-    if (!fa.known) return 1;
-    if (!fb.known) return -1;
-    return fa.left - fb.left;
-  });
+  if (!pantry.length) {
+    att.innerHTML = '<div class="empty-card"><strong>Nothing here yet</strong>' +
+      '<span>Add what\'s in your fridge, freezer and cupboard. A rough count is fine, and if you don\'t know when you bought something, say so; we\'ll never guess.</span>' +
+      '<button class="btn primary small" onclick="openAddItem()">Add food</button></div>';
+    zones.innerHTML = '';
+    return;
+  }
 
-  att.innerHTML = attention.map(function(p) {
-    var f = freshness(p);
-    return '<div class="pantry-item">' +
+  // Needs attention: anything near or past its window, plus fridge and freezer food whose
+  // freshness can't be estimated — it might be fine, but nobody can say.
+  var attention = pantry.filter(function(e) {
+    if (!inStock(e)) return false;
+    var f = freshness(e);
+    return f.known ? f.min <= 3 : e.zone !== 'cupboard';
+  }).sort(byUrgency);
+
+  att.innerHTML = attention.map(function(e) {
+    var f = freshness(e);
+    return '<div class="pantry-item" onclick="openEditItem(\'' + e.id + '\')">' +
       '<div>' +
-        '<div class="name">' + p.name + '</div>' +
-        '<div class="qty">' + fmtQty(p.qty, p.unit) + ' · ' + p.zone + '</div>' +
-        '<div class="basis">' + boughtLine(p) + '</div>' +
+        '<div class="name">' + esc(ingName(e.ing)) + '</div>' +
+        '<div class="qty">' + entryQty(e) + ' · ' + zoneLabel(e.zone).toLowerCase() + '</div>' +
+        '<div class="basis">' + esc(basisLine(e)) + '</div>' +
       '</div>' + chipHTML(f.cls, f.text) +
     '</div>';
   }).join('') || '<p class="pantry-note" style="margin-top:0;">Nothing needs urgent attention. Rare and beautiful.</p>';
 
-  var ZONES = [
-    { key:'fridge',   label:'Fridge' },
-    { key:'freezer',  label:'Freezer' },
-    { key:'cupboard', label:'Cupboard' }
-  ];
   zones.innerHTML = ZONES.map(function(z) {
-    var items = pantry.filter(function(p) { return p.zone === z.key; });
-    var inStock = items.filter(function(p) { return p.qty > 0; }).length;
+    var items = pantry.filter(function(e) { return e.zone === z.key; })
+      .sort(function(a, b) { return ingName(a.ing).localeCompare(ingName(b.ing)); });
+    var count = items.filter(inStock).length;
     var open = openZones[z.key];
-    var lines = items.map(function(p) {
-      var f = freshness(p);
-      return '<div class="zone-line' + (p.qty <= 0 ? ' out' : '') + '">' +
-        '<div><div class="zl-name">' + p.name + '</div>' +
-        '<div class="zl-sub">' + (f.known ? p.note : 'no date on record — freshness unknown') + '</div></div>' +
-        '<div class="zl-qty">' + (p.qty > 0 ? fmtQty(p.qty, p.unit) : 'out') + '</div>' +
+    var lines = items.map(function(e) {
+      var f = freshness(e);
+      return '<div class="zone-line' + (inStock(e) ? '' : ' out') + '" onclick="event.stopPropagation();openEditItem(\'' + e.id + '\')">' +
+        '<div><div class="zl-name">' + esc(ingName(e.ing)) + '</div>' +
+        '<div class="zl-sub">' + esc(basisLine(e)) + '</div></div>' +
+        '<div class="zl-right"><div class="zl-qty">' + entryQty(e) + '</div>' + (inStock(e) ? chipHTML(f.cls, f.text) : '') + '</div>' +
       '</div>';
-    }).join('');
+    }).join('') || '<div class="zone-line empty"><div class="zl-sub">Nothing in the ' + z.label.toLowerCase() + ' yet.</div></div>';
     return '<div class="zone-row' + (open ? ' open' : '') + '" onclick="toggleZone(\'' + z.key + '\')">' +
         '<span class="zone-name">' + z.label + '</span>' +
-        '<span class="zone-count">' + inStock + ' items <span class="caret">&rsaquo;</span></span>' +
+        '<span class="zone-count">' + count + ' item' + (count === 1 ? '' : 's') + ' <span class="caret">&rsaquo;</span></span>' +
       '</div>' +
       (open ? '<div class="zone-items">' + lines + '</div>' : '');
   }).join('');
@@ -676,28 +870,27 @@ function openDetail(idx) {
       '<div class="detail-fact">⏱ ' + r.time + '</div>' +
       '<div class="detail-fact">👤 Serves ' + settings.household + '</div>' +
     '</div>' +
-    '<div class="nutri">' +
-      '<div class="nutri-cell"><div class="n">' + r.nutri.kcal + '</div><div class="l">kcal</div></div>' +
-      '<div class="nutri-cell"><div class="n">' + r.nutri.p + 'g</div><div class="l">protein</div></div>' +
-      '<div class="nutri-cell"><div class="n">' + r.nutri.c + 'g</div><div class="l">carbs</div></div>' +
-      '<div class="nutri-cell"><div class="n">' + r.nutri.f + 'g</div><div class="l">fat</div></div>' +
-    '</div>' +
-    '<p class="nutri-note">Estimated per serving. Nutrition is not in the approved recipe files — treat as indicative.</p>' +
     '<div class="section-label" style="margin-top:0;">From your kitchen &middot; for ' + settings.household + '</div>' +
     '<div class="ingredient-card">';
 
-  r.ing.forEach(function(i) {
-    var p = pantryById(i.id);
-    var need = i.qty * settings.household;
-    var f = freshness(p);
-    var enough = p.qty >= need;
+  var missing = [], unmeasured = [];
+  visibleLines(r).forEach(function(line) {
+    var amount = amountFor(line);
+    var c = coverage(line, amount);
+    if (c.status === 'missing') { missing.push(line); return; }
+    var e = urgentEntryFor(line);
+    var f = freshness(e);
+    var chip = { ok:[f.cls, f.text], check:['soon', 'check amount'], short:['now', 'short'] }[c.status];
+    var note = '';
+    if (c.status === 'short') { note = ' · <b>only ' + fmtQty(c.stock.known, line.unit) + ' on hand</b>'; }
+    if (c.status === 'check') { note = ' · <b>how much you have isn\'t recorded, so check before cooking</b>'; }
+    if (amount !== null && c.stock.uncertain && c.status !== 'check') { unmeasured.push(ingName(c.id)); }
     html += '<div class="ingredient-row">' +
       '<div>' +
-        '<div class="ingredient-name">' + p.name + ' — ' + fmtQty(need, p.unit) + '</div>' +
-        '<div class="ingredient-basis">' + boughtLine(p) +
-          (enough ? '' : ' · <b>only ' + fmtQty(p.qty, p.unit) + ' on hand</b>') +
-        '</div>' +
-      '</div>' + chipHTML(enough ? f.cls : 'now', enough ? f.text : 'short') +
+        '<div class="ingredient-name">' + esc(ingName(c.id)) + (amount !== null ? ' — ' + fmtQty(amount, line.unit) : '') +
+          (line.optional ? ' <span class="opt">optional</span>' : '') + '</div>' +
+        '<div class="ingredient-basis">' + esc(basisLine(e)) + note + '</div>' +
+      '</div>' + chipHTML(chip[0], chip[1]) +
     '</div>';
   });
   html += '<div class="ingredient-row"><div>' +
@@ -705,9 +898,9 @@ function openDetail(idx) {
       '<div class="ingredient-basis">Assumed on hand — standard staples in the recipe file</div>' +
     '</div></div></div>';
 
-  visibleNeeds(r).forEach(function(n) {
-    html += '<div class="missing-callout"><b>Missing: ' + n.name + '</b><span>' +
-      (n.optional ? 'Not on your list — the dish works fine without it.' : 'Required for this recipe. Swap the meal or pick it up.') +
+  missing.forEach(function(line) {
+    html += '<div class="missing-callout"><b>Missing: ' + esc(lineName(line)) + '</b><span>' +
+      (line.optional ? 'Not in your pantry, but the dish works fine without it.' : 'Required for this recipe. Swap the meal or pick it up.') +
       '</span></div>';
   });
 
@@ -720,7 +913,10 @@ function openDetail(idx) {
     html += '<div class="actions">' +
         '<button class="btn ghost" onclick="undoAccept(' + idx + ')">Undo — put ingredients back</button>' +
       '</div>' +
-      '<p class="detail-note">Marked cooked. The ingredients above have been deducted from your pantry.</p>';
+      '<p class="detail-note">Marked cooked. The ingredients above have been deducted from your pantry.' +
+        (entry.unmeasured && entry.unmeasured.length
+          ? '<br><br><b>' + esc(entry.unmeasured.join(', ')) + '</b> had no amount on record, so nothing was taken off. If you used the last of it, update it in Pantry.'
+          : '') + '</p>';
   } else if (entry.status === 'skipped') {
     html += '<div class="actions">' +
         '<button class="btn primary" onclick="unskip(' + idx + ')">Put it back on the plan</button>' +
@@ -755,27 +951,41 @@ function acceptMeal(idx) {
   if (entry.status === 'accepted') return;
   var r = recipeById(entry.recipe);
 
-  r.ing.forEach(function(i) {
-    var p = pantryById(i.id);
-    if (!p) return;
-    p.qty = round2(Math.max(0, p.qty - i.qty * settings.household));
-  });
+  var used = deductRecipe(r);
+  entry.taken = used.taken;
+  entry.unmeasured = unmeasuredIn(r);
   entry.status = 'accepted';
+  entry.cookedOn = todayKey();
+  cookLog.push({ date:entry.cookedOn, recipe:r.id, rescued:used.rescued });
 
   closeDetail();
   renderAll();
-  showToast('✅ Cooked — ingredients deducted from your pantry.');
+  showToast(entry.unmeasured.length
+    ? '✅ Cooked. ' + entry.unmeasured.join(', ') + ' had no amount recorded, so check it in Pantry.'
+    : '✅ Cooked — ingredients deducted from your pantry.');
+}
+
+// Ingredients a meal used that couldn't be drawn down because no quantity is on record.
+function unmeasuredIn(r) {
+  var out = [];
+  visibleLines(r).forEach(function(line) {
+    var amount = amountFor(line);
+    if (amount === null) return;
+    var c = coverage(line, amount);
+    if (c.stock && c.stock.uncertain && out.indexOf(ingName(c.id)) === -1) out.push(ingName(c.id));
+  });
+  return out;
 }
 
 function undoAccept(idx) {
   var entry = plan[idx];
   if (entry.status !== 'accepted') return;
-  var r = recipeById(entry.recipe);
-  r.ing.forEach(function(i) {
-    var p = pantryById(i.id);
-    if (!p) return;
-    p.qty = round2(p.qty + i.qty * settings.household);
-  });
+  restoreTaken(entry.taken);
+  // Take the matching cook-log entry back out too, so the stats stay honest.
+  for (var i = cookLog.length - 1; i >= 0; i--) {
+    if (cookLog[i].recipe === entry.recipe && cookLog[i].date === entry.cookedOn) { cookLog.splice(i, 1); break; }
+  }
+  delete entry.taken; delete entry.unmeasured; delete entry.cookedOn;
   entry.status = 'pending';
   closeDetail();
   renderAll();
@@ -811,18 +1021,19 @@ function bestAlternative(idx, current, allowRepeat) {
   });
   if (!candidates.length) return null;
 
-  var curIds = current.ing.map(function(i){ return i.id; });
-  candidates.forEach(function(r) {
-    var shared = r.ing.filter(function(i){ return curIds.indexOf(i.id) > -1; }).length;
-    var covered = r.ing.filter(function(i) {
-      var p = pantryById(i.id);
-      return p && p.qty >= i.qty * settings.household;
-    }).length;
-    var gaps = (r.needs || []).filter(function(n){ return !n.optional; }).length;
-    r._score = shared * 3 + covered * 2 - gaps * 4 + (getPref(r.id).fav ? 5 : 0);
+  var curIds = sharedIds(current);
+  var scored = candidates.map(function(r) {
+    var shared = sharedIds(r).filter(function(id){ return curIds.indexOf(id) > -1; }).length;
+    var cov = recipeCover(r);
+    return { r:r, score: shared * 3 + cov.covered * 2 - cov.gaps * 4 + (getPref(r.id).fav ? 5 : 0) };
   });
-  candidates.sort(function(a,b){ return b._score - a._score; });
-  return candidates[0];
+  scored.sort(function(a,b){ return b.score - a.score; });
+  return scored[0].r;
+}
+function sharedIds(r) {
+  var ids = [];
+  r.ing.forEach(function(line) { lineIds(line).forEach(function(id) { if (ids.indexOf(id) === -1) ids.push(id); }); });
+  return ids;
 }
 
 function swapMeal(idx, silent) {
@@ -842,8 +1053,9 @@ function swapMeal(idx, silent) {
   closeDetail();
   renderAll();
 
-  var shared = pick.ing.filter(function(i){ return current.ing.some(function(c){ return c.id === i.id; }); })
-                       .map(function(i){ return pantryById(i.id).name.toLowerCase(); });
+  var curIds = sharedIds(current);
+  var shared = sharedIds(pick).filter(function(id){ return curIds.indexOf(id) > -1 && entriesFor(id).some(inStock); })
+                              .map(function(id){ return ingName(id).toLowerCase(); });
   showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name +
             (shared.length ? ' — still uses ' + shared.slice(0,2).join(' & ') : ''));
 }
@@ -935,6 +1147,7 @@ function openSub(which) {
       '<div class="note-card">Whether a reminder ships in version 1 is still an open question in the spec (blindspot #5). This screen is here to test whether Ren would want one at all.</div>';
   }
 
+  document.getElementById('subBackLabel').textContent = 'Profile';
   document.getElementById('subTitle').textContent = title;
   document.getElementById('subBody').innerHTML = body;
   document.getElementById('subScreen').classList.add('open');
@@ -943,6 +1156,7 @@ function openSub(which) {
 }
 function closeSub() {
   document.getElementById('subScreen').classList.remove('open');
+  if (currentTab !== 'profileTab') { document.getElementById('fab').style.display = 'flex'; }
 }
 function setHousehold(delta) {
   settings.household = Math.min(8, Math.max(1, settings.household + delta));
@@ -1003,9 +1217,9 @@ function toggleAlloc() {
 // inventory consequences, so the roll carries the question forward instead of
 // guessing. Nothing is deducted until Ren answers.
 // See knowledge/skills/day-roll-reconciliation/SKILL.md.
-function queueUnreconciled(entry, type, label) {
+function queueUnreconciled(entry, type, day) {
   if (!entry || entry.status !== 'pending' || entry.dietBlocked) { return; }
-  unreconciled.push({ recipe:entry.recipe, type:type, label:label });
+  unreconciled.push({ recipe:entry.recipe, type:type, label:fmtDate(day), date:todayKey(day) });
 }
 
 function renderReconcile() {
@@ -1037,11 +1251,8 @@ function reconcile(i, outcome) {
   if (outcome === 'cooked') {
     var r = recipeById(u.recipe);
     if (r) {
-      r.ing.forEach(function(ing) {
-        var p = pantryById(ing.id);
-        if (!p) { return; }
-        p.qty = round2(Math.max(0, p.qty - ing.qty * settings.household));
-      });
+      var used = deductRecipe(r);
+      cookLog.push({ date:u.date || todayKey(), recipe:r.id, rescued:used.rescued });
     }
   }
   unreconciled.splice(i, 1);
@@ -1060,7 +1271,7 @@ function rollDay(departingDate) {
   // ingredients in the pantry after they were eaten, drifting inventory in the
   // optimistic direction one day at a time.
   // departingDate is passed when catching up on days the app was closed.
-  var departing = fmtDate(departingDate || dateFor(0));
+  var departing = departingDate || dateFor(0);
   plan.slice(0, 3).forEach(function(entry, i) {
     queueUnreconciled(entry, MEAL_TYPES[i], departing);
   });
@@ -1074,9 +1285,7 @@ function rollDay(departingDate) {
     pool.sort(function(a,b) {
       var fa = getPref(a.id).fav ? 1 : 0, fb = getPref(b.id).fav ? 1 : 0;
       if (fa !== fb) return fb - fa;
-      var ca = a.ing.filter(function(i){ var p = pantryById(i.id); return p && p.qty >= i.qty * settings.household; }).length;
-      var cb = b.ing.filter(function(i){ var p = pantryById(i.id); return p && p.qty >= i.qty * settings.household; }).length;
-      return cb - ca;
+      return recipeCover(b).covered - recipeCover(a).covered;
     });
     // If nothing compliant is left, the slot is flagged rather than filled with
     // something that breaks a restriction.
@@ -1128,7 +1337,7 @@ function renderGreeting() {
   if (!el) return;
   var now = new Date(), h = now.getHours();
   var part = h < 12 ? 'morning' : (h < 17 ? 'afternoon' : 'evening');
-  el.textContent = now.toLocaleDateString(undefined, { weekday:'long' }) + ' ' + part + ', Ren';
+  el.textContent = now.toLocaleDateString(undefined, { weekday:'long' }) + ' ' + part + (settings.name ? ', ' + settings.name : '');
 }
 
 function renderAll() {
@@ -1140,6 +1349,7 @@ function renderAll() {
   renderMeals();
   renderAlloc();
   renderPantry();
+  renderProfile();
   var hh = document.getElementById('hhArrow');
   if (hh) { hh.innerHTML = settings.household + ' &rsaquo;'; }
   var da = document.getElementById('dietArrow');
@@ -1150,70 +1360,383 @@ function renderAll() {
   saveState();
 }
 
+// ═══════════════ PROFILE ═══════════════
+// Counted only from the user's own cook log, so nothing here is an estimate. There is no
+// money figure: the app has no prices to base one on.
+function cookStreak() {
+  var days = {};
+  cookLog.forEach(function(c) { days[c.date] = true; });
+  var d = new Date();
+  if (!days[todayKey(d)]) d = addDays(d, -1);      // today isn't over yet
+  var n = 0;
+  while (days[todayKey(d)]) { n++; d = addDays(d, -1); }
+  return n;
+}
+function ladderHTML(value, steps, fmt) {
+  var next = null;
+  var rungs = steps.map(function(s) {
+    var cls = value >= s ? 'done' : (next === null ? (next = s, 'next') : '');
+    return '<div class="rung ' + cls + '">' + fmt(s) + '</div>';
+  }).join('');
+  return { rungs:rungs, next:next };
+}
+function renderProfile() {
+  var head = document.getElementById('profileHead');
+  if (!head) return;
+  var since = settings.since ? parseKey(settings.since).toLocaleDateString(undefined, { month:'short', year:'numeric' }) : '';
+  head.innerHTML =
+    '<div class="profile-avatar">' + esc(settings.name ? settings.name.charAt(0).toUpperCase() : '🥕') + '</div>' +
+    '<div class="profile-name">' + esc(settings.name || 'Your kitchen') + '</div>' +
+    '<div class="profile-sub">Household of ' + settings.household + (since ? ' &middot; planning since ' + since : '') + '</div>';
+
+  var cooked = cookLog.length;
+  var streak = cookStreak();
+  var rescued = cookLog.reduce(function(s, c) { return s + (c.rescued || 0); }, 0);
+  document.getElementById('profileStats').innerHTML =
+    '<div class="profile-stat"><div class="num">' + cooked + '</div><div class="label">Meals<br>cooked</div></div>' +
+    '<div class="profile-stat"><div class="num">' + streak + '</div><div class="label">Day<br>streak</div></div>' +
+    '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Used before<br>they turned</div></div>';
+
+  var r = ladderHTML(rescued, [10, 25, 50, 100], function(s) { return s; });
+  var st = ladderHTML(streak, [7, 14, 30, 60, 180], function(s) { return s < 30 ? (s / 7) + ' wk' : (s / 30) + ' mo'; });
+  var rPrev = r.next === null ? 100 : [0, 10, 25, 50][[10, 25, 50, 100].indexOf(r.next)];
+  var sPrev = st.next === null ? 180 : [0, 7, 14, 30, 60][[7, 14, 30, 60, 180].indexOf(st.next)];
+  var rPct = r.next === null ? 100 : Math.round((rescued - rPrev) / (r.next - rPrev) * 100);
+  var sPct = st.next === null ? 100 : Math.round((streak - sPrev) / (st.next - sPrev) * 100);
+
+  var rWit = !cooked ? 'Cook something from the plan and this starts counting every ingredient you use before its window closes.'
+    : rescued < 10 ? rescued + ' ingredient' + (rescued === 1 ? '' : 's') + ' used while still in their prime. The crisper drawer thanks you.'
+    : 'That\'s ' + rescued + ' things that didn\'t end up as a science experiment at the back of the fridge.';
+  var sWit = !streak ? (cooked ? 'No meal logged today or yesterday. The streak is resting, not gone forever.' : 'Mark a meal cooked to start a streak.')
+    : streak < 7 ? streak + ' day' + (streak === 1 ? '' : 's') + ' in a row. Momentum smells like garlic.'
+    : streak + ' days straight. The takeout menus are starting to feel ignored.';
+
+  document.getElementById('profileRewards').innerHTML =
+    '<div class="section-label">Food rescued</div>' +
+    '<div class="reward-card"><div class="reward-head"><div class="reward-icon coin">🥬</div><div>' +
+      '<div class="t">' + (r.next === null ? 'Every milestone reached' : 'Next milestone: ' + r.next + ' ingredients') + '</div>' +
+      '<div class="s">' + rescued + ' so far' + (r.next === null ? '' : ' &middot; ' + (r.next - rescued) + ' to go') + '</div></div></div>' +
+      '<div class="progress-track"><div class="progress-fill leaf" style="width:' + rPct + '%;"></div></div>' +
+      '<div class="ladder">' + r.rungs + '</div><p class="witty">' + rWit + '</p></div>' +
+    '<div class="section-label">Cooking streak</div>' +
+    '<div class="reward-card"><div class="reward-head"><div class="reward-icon flame">🔥</div><div>' +
+      '<div class="t">' + (streak ? streak + '-day streak' : 'No streak yet') + '</div>' +
+      '<div class="s">' + (st.next === null ? 'Six months. Legendary.' : 'Next badge at ' + st.next + ' days') + '</div></div></div>' +
+      '<div class="progress-track"><div class="progress-fill amber" style="width:' + sPct + '%;"></div></div>' +
+      '<div class="ladder">' + st.rungs + '</div><p class="witty">' + sWit + '</p></div>';
+}
+
+// ═══════════════ ADD & EDIT FOOD ═══════════════
+// How often each ingredient appears in the approved recipes, and the unit they most often use,
+// so the add screen can suggest common foods and a sensible unit. Read from recipes.js.
+var ING_USE = {}, ING_UNIT = {};
+(window.WTF_RECIPES || []).forEach(function(r) {
+  r.ing.forEach(function(line) {
+    (line.items || []).forEach(function(id) {
+      ING_USE[id] = (ING_USE[id] || 0) + 1;
+      if (line.unit && line.items.length === 1) {
+        ING_UNIT[id] = ING_UNIT[id] || {};
+        ING_UNIT[id][line.unit] = (ING_UNIT[id][line.unit] || 0) + 1;
+      }
+    });
+  });
+});
+function defaultUnit(id) {
+  var u = ING_UNIT[id], best = 'ea', n = 0;
+  for (var k in u) { if (UNITS.indexOf(k) > -1 && u[k] > n) { best = k; n = u[k]; } }
+  return best;
+}
+var ING_RX = {};
+INGREDIENTS.forEach(function(i) {
+  try { ING_RX[i.id] = new RegExp(i.match, 'i'); } catch (e) { ING_RX[i.id] = null; } // older Safari can't read every pattern
+});
+
+function searchIngredients(q) {
+  q = q.trim().toLowerCase();
+  var pool = INGREDIENTS.filter(function(i) { return !i.staple; });
+  if (!q) {
+    return pool.slice().sort(function(a, b) { return (ING_USE[b.id] || 0) - (ING_USE[a.id] || 0); }).slice(0, 24);
+  }
+  return pool.filter(function(i) {
+    return i.name.toLowerCase().indexOf(q) > -1 || (ING_RX[i.id] && ING_RX[i.id].test(q));
+  }).sort(function(a, b) {
+    var sa = a.name.toLowerCase().indexOf(q) === 0 ? 1 : 0, sb = b.name.toLowerCase().indexOf(q) === 0 ? 1 : 0;
+    return (sb - sa) || ((ING_USE[b.id] || 0) - (ING_USE[a.id] || 0));
+  }).slice(0, 30);
+}
+function stapleMatch(q) {
+  q = q.trim().toLowerCase();
+  if (!q) return null;
+  var hit = null;
+  INGREDIENTS.forEach(function(i) {
+    if (!hit && i.staple && (i.name.toLowerCase().indexOf(q) > -1 || (ING_RX[i.id] && ING_RX[i.id].test(q)))) hit = i;
+  });
+  return hit;
+}
+
+var draft = null;       // the item being added or edited
+var justAdded = [];     // names added in this session of the add screen
+
+function openAddItem() {
+  draft = { id:null, ing:null, query:'' };
+  justAdded = [];
+  closeDetail();
+  openItemScreen();
+}
+function openEditItem(entryId) {
+  var e = entryById(entryId);
+  if (!e) return;
+  var y = todayKey(addDays(new Date(), -1));
+  draft = { id:e.id, ing:e.ing, zone:e.zone, qty:e.qty === null ? '' : String(e.qty), unit:e.unit || defaultUnit(e.ing),
+            when: !e.bought ? 'unknown' : (e.bought === todayKey() ? 'today' : (e.bought === y ? 'yesterday' : 'date')),
+            date:e.bought || '', expires:e.expires || '' };
+  justAdded = [];
+  openItemScreen();
+}
+function openItemScreen() {
+  document.getElementById('subBackLabel').textContent = 'Back';
+  document.getElementById('subScreen').dataset.which = 'item';
+  renderItemScreen();
+  document.getElementById('subScreen').classList.add('open');
+  document.getElementById('fab').style.display = 'none';
+}
+
+function renderItemScreen() {
+  var title = document.getElementById('subTitle'), body = document.getElementById('subBody');
+  if (!draft.ing) {
+    title.textContent = 'Add food';
+    body.innerHTML =
+      (justAdded.length ? '<div class="added-strip">✓ Added ' + esc(justAdded.join(', ')) + '. Add more, or tap Done.</div>' : '') +
+      '<input class="field search" id="itemSearch" type="search" placeholder="Search: chicken, spinach, feta…" ' +
+        'autocomplete="off" value="' + esc(draft.query) + '" oninput="draft.query=this.value;renderItemResults()">' +
+      '<div id="itemResults"></div>' +
+      '<p class="nutri-note">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them.</p>' +
+      (justAdded.length ? '<div class="actions"><button class="btn primary" onclick="closeSub()">Done</button></div>' : '');
+    renderItemResults();
+    var s = document.getElementById('itemSearch');
+    if (s && window.matchMedia('(hover: hover)').matches) s.focus();
+    return;
+  }
+  var ing = ingById(draft.ing);
+  title.textContent = draft.id ? 'Edit ' + ing.name.toLowerCase() : ing.name;
+  var whens = [['today','Today'], ['yesterday','Yesterday'], ['date','Pick a date'], ['unknown','Don\'t know']];
+  body.innerHTML =
+    (draft.id ? '' : '<p class="sub-intro">Adding to your kitchen. <a href="#" onclick="draft.ing=null;renderItemScreen();return false;">Pick something else</a></p>') +
+    '<div class="field-label">Where is it?</div>' +
+    '<div class="seg">' + ZONES.map(function(z) {
+      return '<button class="' + (draft.zone === z.key ? 'on' : '') + '" onclick="draft.zone=\'' + z.key + '\';renderItemScreen()">' + z.label + '</button>';
+    }).join('') + '</div>' +
+    '<div class="field-label">How much? <span>optional</span></div>' +
+    '<div class="qty-row"><input class="field" id="itemQty" type="number" inputmode="decimal" min="0" step="any" placeholder="Not sure" value="' + esc(draft.qty) + '" ' +
+      'oninput="draft.qty=this.value;updateItemPreview()">' +
+      '<select class="field" onchange="draft.unit=this.value;updateItemPreview()">' + UNITS.map(function(u) {
+        return '<option' + (draft.unit === u ? ' selected' : '') + '>' + u + '</option>';
+      }).join('') + '</select></div>' +
+    '<p class="field-hint">Leave it blank if you\'re not sure. The plan will ask you to check rather than guess.</p>' +
+    '<div class="field-label">When did you buy it?</div>' +
+    '<div class="seg wrap">' + whens.map(function(w) {
+      return '<button class="' + (draft.when === w[0] ? 'on' : '') + '" onclick="draft.when=\'' + w[0] + '\';renderItemScreen()">' + w[1] + '</button>';
+    }).join('') + '</div>' +
+    (draft.when === 'date' ? '<input class="field" type="date" max="' + todayKey() + '" value="' + esc(draft.date) + '" oninput="draft.date=this.value;updateItemPreview()">' : '') +
+    '<div class="field-label">Printed use-by date <span>optional</span></div>' +
+    '<input class="field" type="date" value="' + esc(draft.expires) + '" oninput="draft.expires=this.value;updateItemPreview()">' +
+    '<p class="field-hint">If the package has a date, it beats any estimate.</p>' +
+    '<div class="preview" id="itemPreview"></div>' +
+    '<div class="actions">' +
+      '<button class="btn primary" id="itemSave" onclick="saveItem()">' + (draft.id ? 'Save' : 'Add to ' + zoneLabel(draft.zone).toLowerCase()) + '</button>' +
+      (draft.id ? '<button class="btn quiet" onclick="removeItem()">Remove</button>' : '') +
+    '</div>';
+  updateItemPreview();
+}
+
+function renderItemResults() {
+  var box = document.getElementById('itemResults');
+  if (!box) return;
+  var list = searchIngredients(draft.query);
+  var staple = stapleMatch(draft.query);
+  box.innerHTML = (draft.query.trim() ? '' : '<div class="field-label">Common in the recipes</div>') +
+    (staple && list.length ? '<p class="field-hint" style="margin:0 0 8px;">' + esc(staple.name) + ' is a staple, so it\'s assumed on hand. Close matches:</p>' : '') +
+    (list.length ? '<div class="pick-list">' + list.map(function(i) {
+      var have = entriesFor(i.id).filter(inStock).length;
+      return '<button class="pick" onclick="pickIngredient(\'' + i.id + '\')"><span>' + esc(i.name) + '</span>' +
+        '<small>' + (have ? have + ' in your kitchen' : zoneLabel(i.zone).toLowerCase()) + '</small></button>';
+    }).join('') + '</div>'
+    : '<p class="field-hint">' + (staple ? esc(staple.name) + ' is a staple, so it\'s assumed on hand.'
+        : 'Nothing called that in the approved recipes. Only foods the recipes use can be planned around.') + '</p>');
+}
+
+function pickIngredient(id) {
+  var ing = ingById(id);
+  draft.ing = id; draft.zone = ing.zone; draft.qty = ''; draft.unit = defaultUnit(id);
+  draft.when = null; draft.date = ''; draft.expires = '';
+  renderItemScreen();
+}
+
+// The purchase date the draft describes. Never filled in on the user's behalf: until they pick
+// an answer (including "don't know") there is no date and the item can't be saved.
+function draftBought() {
+  if (draft.when === 'today') return todayKey();
+  if (draft.when === 'yesterday') return todayKey(addDays(new Date(), -1));
+  if (draft.when === 'date') return draft.date || null;
+  return null;
+}
+function draftEntry() {
+  var q = draft.qty === '' ? null : parseFloat(draft.qty);
+  if (q !== null && (isNaN(q) || q < 0)) q = null;
+  return { id:draft.id || newEntryId(), ing:draft.ing, zone:draft.zone, qty:q, unit:q === null ? null : draft.unit,
+           bought:draftBought(), expires:draft.expires || null };
+}
+function draftReady() {
+  return draft.when === 'today' || draft.when === 'yesterday' || draft.when === 'unknown' || (draft.when === 'date' && !!draft.date);
+}
+function updateItemPreview() {
+  var box = document.getElementById('itemPreview'), btn = document.getElementById('itemSave');
+  if (!box) return;
+  if (!draftReady()) {
+    box.innerHTML = '<span class="field-hint">Say when you bought it, even if the answer is "don\'t know", to see the freshness estimate.</span>';
+    if (btn) btn.disabled = true;
+    return;
+  }
+  if (btn) btn.disabled = false;
+  var e = draftEntry(), f = freshness(e);
+  box.innerHTML = '<div class="preview-head">' + chipHTML(f.cls, f.text) + '<b>Freshness estimate</b></div>' +
+    '<div class="ingredient-basis">' + esc(basisLine(e)) + '</div>';
+}
+
+function saveItem() {
+  if (!draftReady()) return;
+  var e = draftEntry(), name = ingName(e.ing);
+  if (draft.id) {
+    var old = entryById(draft.id);
+    for (var k in e) old[k] = e[k];
+    closeSub();
+    renderAll();
+    showToast('Saved ' + name.toLowerCase() + '.');
+    return;
+  }
+  pantry.push(e);
+  openZones[e.zone] = true;
+  justAdded.push(name.toLowerCase());
+  draft = { id:null, ing:null, query:'' };
+  renderAll();
+  renderItemScreen();
+}
+function removeItem() {
+  var e = entryById(draft.id);
+  if (!e) return;
+  if (!confirm('Remove ' + ingName(e.ing).toLowerCase() + ' from your kitchen?')) return;
+  pantry.splice(pantry.indexOf(e), 1);
+  closeSub();
+  renderAll();
+  showToast('Removed ' + ingName(e.ing).toLowerCase() + '.');
+}
+
+// ═══════════════ FIRST-TIME SETUP ═══════════════
+// Three short steps: a name, the household, and how to start. Nothing about the kitchen is
+// assumed: "Add my own food" starts with an empty pantry.
+var setupStep = 1;
+function showSetup() { setupStep = 1; renderSetup(); document.getElementById('setup').classList.add('open'); }
+function renderSetup() {
+  var el = document.getElementById('setupBody');
+  var dots = '<div class="setup-dots">' + [1,2,3].map(function(n) { return '<i class="' + (n === setupStep ? 'on' : '') + '"></i>'; }).join('') + '</div>';
+  if (setupStep === 1) {
+    el.innerHTML = dots +
+      '<div class="setup-mark">WTF</div>' +
+      '<h2>What the Fridge</h2>' +
+      '<p class="setup-lede">Three days of breakfast, lunch and dinner, planned around what\'s already in your kitchen. Less "what are we eating?", less forgotten spinach.</p>' +
+      '<div class="field-label">What should we call you? <span>optional</span></div>' +
+      '<input class="field" id="setupName" maxlength="30" placeholder="Your first name" value="' + esc(settings.name) + '" oninput="settings.name=this.value.trim()">' +
+      '<div class="actions"><button class="btn primary" onclick="setupStep=2;renderSetup()">Next</button></div>';
+    return;
+  }
+  if (setupStep === 2) {
+    var d = [['vegetarian','Vegetarian'], ['dairyFree','Dairy-free'], ['nutFree','Nut-free'], ['porkFree','No pork']];
+    el.innerHTML = dots +
+      '<h2>Who\'s eating?</h2>' +
+      '<p class="setup-lede">Recipes are scaled to this many people.</p>' +
+      '<div class="stepper">' +
+        '<button class="step-btn" onclick="settings.household=Math.max(1,settings.household-1);renderSetup()"' + (settings.household <= 1 ? ' disabled' : '') + '>&minus;</button>' +
+        '<div><div class="val">' + settings.household + '</div><div class="lbl">' + (settings.household === 1 ? 'person' : 'people') + '</div></div>' +
+        '<button class="step-btn" onclick="settings.household=Math.min(8,settings.household+1);renderSetup()"' + (settings.household >= 8 ? ' disabled' : '') + '>+</button>' +
+      '</div>' +
+      '<div class="field-label">Anything off the menu?</div>' +
+      '<div>' + d.map(function(x) {
+        return '<div class="toggle-row"><div class="tr-name">' + x[1] + '</div>' +
+          '<button class="switch' + (settings.dietary[x[0]] ? ' on' : '') + '" onclick="settings.dietary.' + x[0] + '=!settings.dietary.' + x[0] + ';renderSetup()"></button></div>';
+      }).join('') + '</div>' +
+      '<p class="field-hint">These filter recipes by the tags in the recipe file. They are <b>not</b> allergy-safe, since nothing checks individual ingredients or labels.</p>' +
+      '<div class="actions"><button class="btn primary" onclick="setupStep=3;renderSetup()">Next</button>' +
+        '<button class="btn quiet" onclick="setupStep=1;renderSetup()">Back</button></div>';
+    return;
+  }
+  el.innerHTML = dots +
+    '<h2>How do you want to start?</h2>' +
+    '<button class="start-card" onclick="finishSetup(\'own\')"><b>Add my own food</b>' +
+      '<span>Start with an empty kitchen and add what you have. A rough count is fine.</span></button>' +
+    '<button class="start-card" onclick="finishSetup(\'sample\')"><b>Look around with a sample kitchen</b>' +
+      '<span>About 30 everyday foods, so you can see how planning works. Start over any time from Profile.</span></button>' +
+    '<div class="actions"><button class="btn quiet" onclick="setupStep=2;renderSetup()">Back</button></div>';
+}
+function finishSetup(mode) {
+  settings.since = todayKey();
+  pantry = mode === 'sample' ? samplePantry() : [];
+  plan = JSON.parse(DEFAULT_PLAN);
+  unreconciled = []; cookLog = []; currentDay = 1;
+  enforceDiet();                                  // renders and saves
+  document.getElementById('setup').classList.remove('open');
+  if (mode === 'own') { switchTab('pantryTab'); openAddItem(); }
+  else { showToast('Welcome! This is a sample kitchen. Swap in your own food from the Pantry tab.'); }
+}
+
 // ═══════════════ SAVED STATE ═══════════════
-// Everything Ren changes is kept in this browser's localStorage so a refresh or a
-// closed tab loses nothing. It never leaves the device. The recipe catalog is not
-// saved — it always comes from the approved file built into this page.
-var STORE_KEY = 'wtf-state-v1';
-var SAMPLE = JSON.stringify({ settings:settings, pantry:pantry, plan:plan });
-var lastSeen = null;               // calendar day (YYYY-MM-DD) the saved state belongs to
-
-function todayKey(d) {
-  d = d || new Date();
-  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
-}
-function daysBetween(fromKey, toKey) {
-  var a = fromKey.split('-'), b = toKey.split('-');
-  return Math.round((new Date(b[0], b[1] - 1, b[2]) - new Date(a[0], a[1] - 1, a[2])) / 86400000);
-}
-
-// `ago` is counted from today, so it has to grow by one each real day for the
-// displayed purchase date to stay put. Undated items stay undated.
-function ageDays(n) {
-  pantry.forEach(function(p) { if (p.ago !== null) { p.ago += n; } });
-}
+// Everything the user changes is kept in this browser's localStorage, so a refresh or a closed
+// tab loses nothing. It never leaves the device. The recipe catalog is not saved; it always
+// comes from the approved file built into this page.
+var STORE_KEY = 'wtf-state-v2';       // v1 (prototype10's web build) had a different pantry shape
+var DEFAULT_PLAN = JSON.stringify(plan);
+var lastSeen = null;                  // calendar day (YYYY-MM-DD) the saved state belongs to
 
 function saveState() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       lastSeen:lastSeen || todayKey(), settings:settings, pantry:pantry, plan:plan,
-      prefs:prefs, unreconciled:unreconciled, dayOffset:dayOffset
+      prefs:prefs, unreconciled:unreconciled, cookLog:cookLog, dayOffset:dayOffset
     }));
   } catch (e) { /* private mode or storage full — the app still works, it just won't remember */ }
 }
 
+// Returns false when there is nothing usable saved, i.e. a first visit.
 function loadState() {
   var s = null;
   try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { s = null; }
-  if (!s || !s.plan || !s.pantry || !s.settings) { lastSeen = todayKey(); return; }
+  lastSeen = todayKey();
+  if (!s || !s.plan || !s.pantry || !s.settings || !s.settings.since) { return false; }
 
-  // A saved plan that names a recipe this build doesn't model is discarded rather
-  // than shown half-broken; Ren starts again from the sample.
+  // A saved plan that names a recipe this build doesn't model is replaced with the default
+  // plan rather than shown half-broken. The pantry and settings are kept.
   var valid = s.plan.length === 9 && s.plan.every(function(e) { return e && recipeById(e.recipe); });
-  if (!valid) { lastSeen = todayKey(); return; }
 
   settings = s.settings;
-  pantry = s.pantry;
-  plan = s.plan;
+  pantry = s.pantry.filter(function(e) { return ingById(e.ing); });
+  plan = valid ? s.plan : JSON.parse(DEFAULT_PLAN);
   prefs = s.prefs || {};
+  cookLog = s.cookLog || [];
   unreconciled = (s.unreconciled || []).filter(function(u) { return recipeById(u.recipe); });
   dayOffset = s.dayOffset || 0;
   lastSeen = s.lastSeen || todayKey();
   catchUp();
+  return true;
 }
 
-// Catch up on days that passed while the app was closed or asleep. Each missed day
-// rolls the horizon the same way midnight would, so unconfirmed meals are queued as
-// questions rather than lost. After three rolls the whole old plan has been queued;
-// rolling further would only queue meals Ren never saw. Returns the days missed.
+// Catch up on days that passed while the app was closed or asleep. Each missed day rolls the
+// horizon the same way midnight would, so unconfirmed meals are queued as questions rather than
+// lost. After three rolls the whole old plan has been queued; rolling further would only queue
+// meals nobody saw. Purchase dates are real calendar dates, so nothing else needs adjusting.
 function catchUp() {
   var missed = daysBetween(lastSeen, todayKey());
   if (missed > 0) {
-    var a = lastSeen.split('-');
-    for (var i = 0; i < Math.min(missed, 3); i++) {
-      rollDay(new Date(a[0], a[1] - 1, +a[2] + i));
-    }
-    ageDays(missed);
+    var start = parseKey(lastSeen);
+    for (var i = 0; i < Math.min(missed, 3); i++) { rollDay(addDays(start, i)); }
   }
   lastSeen = todayKey();
   return Math.max(missed, 0);
@@ -1227,20 +1750,27 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
-function resetState() {
-  if (!confirm('Reset to the sample pantry and plan? Your saved changes in this browser will be cleared.')) { return; }
-  try { localStorage.removeItem(STORE_KEY); } catch (e) {}
-  var s = JSON.parse(SAMPLE);
-  settings = s.settings; pantry = s.pantry; plan = s.plan;
-  prefs = {}; unreconciled = []; dayOffset = 0; currentDay = 1;
-  lastSeen = todayKey();
+function loadSampleKitchen() {
+  if (pantry.length && !confirm('Replace everything in your kitchen with the sample food?')) { return; }
+  pantry = samplePantry();
   closeDetail(); closeSub();
   renderAll();
-  showToast('Back to the sample pantry and plan.');
+  showToast('Sample kitchen loaded.');
+}
+function startOver() {
+  if (!confirm('Start over? This clears your kitchen, plan and history from this browser.')) { return; }
+  try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+  settings.name = ''; settings.since = null; settings.household = 2;
+  settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
+  pantry = []; plan = JSON.parse(DEFAULT_PLAN); prefs = {}; unreconciled = []; cookLog = []; dayOffset = 0; currentDay = 1;
+  closeDetail(); closeSub(); switchTab('planTab');
+  renderAll();
+  showSetup();
 }
 
-loadState();
+var returning = loadState();
 renderAll();
+if (!returning) { showSetup(); }
 scheduleMidnight();
 
 // Offline support and home-screen install. Only works when served over http(s),

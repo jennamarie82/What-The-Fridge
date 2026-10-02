@@ -8,18 +8,28 @@ BUS 860 *Managing Intelligence* · Group 3.
 
 ## What it does
 
-- Plans today plus the next two days (breakfast, lunch and dinner) from 300 approved recipes
-  (18 of them are modelled with pantry quantities in this build).
-- Shows a freshness estimate for every dated ingredient, along with the purchase date and shelf-life
-  basis it's based on. Undated items stay "unknown" and are never assumed fresh.
-- Checks across all nine meals so a scarce ingredient isn't promised to two of them.
-- Swap, skip or mark a meal cooked. Ingredients are deducted only when you confirm a meal was cooked.
-- Household size, dietary filters, and like / not-for-us / favourite ratings.
+- A short first-time setup (name, household size, dietary filters), then either an empty kitchen
+  to fill or a sample kitchen to look around.
+- Add, edit and remove food in the fridge, freezer and cupboard. You pick from the ingredients the
+  approved recipes use, so typing "scallions" finds Green onions. Quantity is optional, and the
+  purchase date is always your answer, including "don't know".
+- Estimates freshness from the purchase date (or a printed use-by date you enter) and the shelf-life
+  norms for where the food is kept, and always shows the basis. Food with no date, or no matching
+  norm, stays "unknown" and is never assumed fresh.
+- Plans today plus the next two days (breakfast, lunch and dinner). This build still plans from the
+  18 recipes modelled in the prototype; planning from all 300 is the next step.
+- Checks across all nine meals so a scarce ingredient isn't promised to two of them. Where an amount
+  isn't recorded it asks you to check, rather than guessing.
+- Swap, skip or mark a meal cooked. Ingredients are deducted only when you confirm a meal was cooked,
+  and Undo puts back exactly what was taken.
+- Profile counts real activity only: meals cooked, your cooking streak, and ingredients used before
+  their window closed.
 
 ## Your data
 
 Everything is saved in your own browser (`localStorage`). Nothing is sent to a server, and each
-person or device has its own copy. **Profile → Reset to sample data** starts over.
+person or device has its own copy. **Profile → Start over** clears it; **Load the sample kitchen**
+swaps in the demo food.
 
 Dietary filtering works on recipe-level tags. It is **not** allergy-safe.
 
