@@ -57,9 +57,10 @@ function samplePantry() {
 }
 
 // ═══════════════ DIETARY RULES ═══════════════
-// Each recipe carries tags for what it actually contains, from its REQUIRED
-// ingredients and staples only — an optional garnish never disqualifies a recipe,
-// it is simply dropped when a restriction is on.
+// Each recipe carries tags for what it actually contains, taken from the database's own Dietary
+// line (which lists what it SATISFIES; recipes.js inverts it). Those tags come from required
+// ingredients and staples only, so an optional garnish never disqualifies a recipe: it is
+// dropped when a restriction is on.
 var DIET_RULES = {
   vegetarian: { label:'Vegetarian', blocks:['meat','fish','pork'] },
   dairyFree:  { label:'Dairy-free', blocks:['dairy'] },
@@ -81,154 +82,85 @@ function activeDietLabels() {
   return out;
 }
 // A recipe is excluded outright if any of its tags is blocked. This is a hard
-// constraint, not a ranking preference — nut-free in particular is an allergy.
+// constraint, not a ranking preference.
 function violatesDiet(recipe) {
   var blocked = activeBlocks();
   return (recipe.tags || []).some(function(t) { return blocked.indexOf(t) > -1; });
 }
-// A recipe's ingredient lines, minus optional extras a restriction rules out —
-// those are dropped rather than blocking the recipe.
+
+// What each ingredient contains, for deciding which OPTIONAL lines a restriction drops.
+// (Required lines are already covered by the recipe's own tags from the database.)
+var CONTAINS = {
+  meat: ['chicken-breast','chicken-thighs','chicken-drumsticks','ground-chicken','chicken-wings','cooked-chicken','chicken',
+         'ground-turkey','turkey-sausage','deli-turkey','cooked-turkey','turkey-breast','canadian-bacon','bacon','pancetta','ham',
+         'pepperoni','salami','hot-dogs','sausage','smoked-sausage','ground-pork','pork-chops','pork','ribs','ground-beef',
+         'corned-beef','roast-beef','beef-roast','beef-steak','ground-lamb','lamb','veal','smoked-salmon','salmon','tuna-steak',
+         'canned-tuna','white-fish','shrimp','scallops','mussels','clams','crab','lobster','anchovies','fish-sauce','oyster-sauce',
+         'chicken-broth','beef-broth','seafood-stock','cream-of-chicken'],
+  dairy: ['butter','buttermilk','sour-cream','cream-cheese','heavy-cream','greek-yogurt','yogurt','milk','parmesan','feta',
+          'ricotta','cottage-cheese','goat-cheese','blue-cheese','queso-fresco','mozzarella','provolone','american-cheese',
+          'swiss','monterey-jack','cheddar','cheese','paneer','tortellini'],
+  nuts:  ['peanut-butter','peanuts','almonds','walnuts','pecans','cashews'],
+  pork:  ['canadian-bacon','bacon','pancetta','ham','pepperoni','salami','hot-dogs','sausage','ground-pork','pork-chops','pork','ribs']
+};
+function ingBlocked(id, blocked) {
+  return blocked.some(function(b) {
+    var list = CONTAINS[b === 'fish' ? 'meat' : b];
+    return list && list.indexOf(id) > -1;
+  });
+}
+// A recipe's ingredient lines as they apply to this household: an optional line whose every
+// choice is ruled out is dropped, and choices that are ruled out are taken off the line.
 function visibleLines(recipe) {
   var blocked = activeBlocks();
-  return recipe.ing.filter(function(i) { return !(i.optional && i.tag && blocked.indexOf(i.tag) > -1); });
+  if (!blocked.length) return recipe.ing;
+  var out = [];
+  recipe.ing.forEach(function(line) {
+    if (!line.optional) { out.push(line); return; }
+    var ok = lineIds(line).filter(function(id) { return !ingBlocked(id, blocked); });
+    if (!ok.length) return;
+    if (ok.length === lineIds(line).length) { out.push(line); return; }
+    var copy = {}; for (var k in line) copy[k] = line[k];
+    if (ok.length === 1) { delete copy.any; copy.id = ok[0]; } else { copy.any = ok; }
+    out.push(copy);
+  });
+  return out;
 }
 
 // ═══════════════ RECIPE CATALOG ═══════════════
-// Every recipe here comes from the approved source: knowledge/Combined_Recipe_Database.md
-// `id` is the slug of the recipe title and doubles as the image filename.
-// Dietary tags are derived from the database's own Dietary line, inverted:
-// the file lists what a recipe SATISFIES, these list what it CONTAINS.
-// `ing` lines name an ingredient from the shared list (`any` when the recipe offers a choice).
-// Quantities are PER SERVING in `unit`; the app multiplies by household size. qty:null means the
-// line is checked for presence only and never deducted. Optional lines never block a meal.
-// These 18 were modelled by hand in the prototype; step 5 of Phase A replaces them with all 300
-// recipes generated from the database, which this hand-written set does not always match.
-var recipes = [
-  // ── breakfast ──
-  { id:'spinach-egg-and-avocado-breakfast-wrap', name:'Spinach, Egg and Avocado Breakfast Wrap', type:'breakfast', time:'10 min',
-    tags:[],
-    ing:[{id:'eggs',qty:1,unit:'ea'},{id:'spinach',qty:30,unit:'g'},{id:'avocado',qty:0.5,unit:'ea'},{id:'flour-tortillas',qty:1,unit:'ea'}],
-    staples:'Olive oil, salt, pepper',
-    note:'Quick and protein-packed. Uses the avocado at peak ripeness.' },
-
-  { id:'high-protein-greek-yogurt-and-berry-parfait', name:'High-Protein Greek Yogurt and Berry Parfait', type:'breakfast', time:'5 min',
-    tags:['dairy','nuts'],
-    ing:[{id:'greek-yogurt',qty:150,unit:'g'},{id:'berries',qty:0.5,unit:'cup'},{any:['almonds','walnuts'],qty:null,optional:true,tag:'nuts'}],
-    staples:'Honey, cinnamon',
-    note:'No cooking at all. The frozen berries thaw into the yogurt overnight.' },
-
-  { id:'peanut-butter-banana-oatmeal', name:'Peanut Butter Banana Oatmeal', type:'breakfast', time:'10 min',
-    tags:['nuts'],
-    ing:[{id:'oats',qty:50,unit:'g'},{id:'bananas',qty:0.5,unit:'ea'},{id:'peanut-butter',qty:2,unit:'tbsp'},{id:'milk',qty:120,unit:'ml'}],
-    staples:'Cinnamon, maple syrup',
-    note:'Uses up a banana before it turns. Ready in one pot.' },
-
-  { id:'veggie-scramble-with-feta-and-herbs', name:'Veggie Scramble with Feta and Herbs', type:'breakfast', time:'10 min',
-    tags:['dairy'],
-    ing:[{id:'eggs',qty:2,unit:'ea'},{id:'cherry-tomatoes',qty:0.25,unit:'cup'},{id:'red-onion',qty:0.15,unit:'ea'},{id:'feta',qty:null,optional:true,tag:'dairy'}],
-    staples:'Olive oil, herbs, salt, pepper',
-    note:'A fast way to clear soft tomatoes and a bit of onion.' },
-
-  { id:'savory-oatmeal-with-soft-egg-and-scallions', name:'Savory Oatmeal with Soft Egg and Scallions', type:'breakfast', time:'15 min',
-    tags:[],
-    ing:[{id:'oats',qty:50,unit:'g'},{id:'eggs',qty:1,unit:'ea'},{id:'green-onion',qty:null,optional:true}],
-    staples:'Soy sauce, sesame oil',
-    note:'Savoury rather than sweet, if the household is tired of sweet breakfasts.' },
-
-  // ── lunch ──
-  { id:'mediterranean-chickpea-salad', name:'Mediterranean Chickpea Salad', type:'lunch', time:'10 min',
-    tags:['dairy'],
-    ing:[{id:'chickpeas',qty:0.5,unit:'can'},{id:'cucumber',qty:0.5,unit:'ea'},{id:'cherry-tomatoes',qty:0.5,unit:'cup'},{id:'red-onion',qty:0.25,unit:'ea'},{id:'feta',qty:null,optional:true,tag:'dairy'}],
-    staples:'Olive oil, lemon, oregano',
-    note:'A packable, no-cook lunch that uses the tomatoes before they go.' },
-
-  { id:'caprese-chicken-ciabatta-sandwich', name:'Caprese Chicken Ciabatta Sandwich', type:'lunch', time:'10 min',
-    tags:['meat','dairy'],
-    ing:[{id:'chicken-breast',qty:3,unit:'oz'},{id:'mozzarella',qty:2,unit:'oz'},{id:'cherry-tomatoes',qty:0.25,unit:'cup'},{id:'buns',qty:1,unit:'ea'}],
-    staples:'Basil, olive oil, balsamic',
-    note:'Uses the ciabatta while it is still good, and leftover cooked chicken.' },
-
-  { id:'quick-black-bean-and-rice-burrito-bowl', name:'Quick Black Bean and Rice Burrito Bowl', type:'lunch', time:'10 min',
-    tags:['dairy'],
-    ing:[{id:'black-beans',qty:0.5,unit:'can'},{id:'cooked-rice',qty:0.5,unit:'cup'},{id:'salsa',qty:0.25,unit:'cup'},{id:'cheese',qty:30,unit:'g'},{id:'avocado',qty:0.25,unit:'ea'}],
-    staples:'Lime, cumin, salt',
-    note:'Assembles cold or warm, and moves the cooked rice along.' },
-
-  { id:'southwestern-mason-jar-quinoa-salad', name:'Southwestern Mason Jar Quinoa Salad', type:'lunch', time:'15 min',
-    tags:[],
-    ing:[{id:'quinoa',qty:60,unit:'g'},{id:'black-beans',qty:0.25,unit:'can'},{id:'corn',qty:0.25,unit:'can'},{id:'bell-pepper',qty:0.5,unit:'ea'},{id:'cilantro',qty:null,optional:true}],
-    staples:'Lime, olive oil, cumin, salt',
-    note:'Layers in a jar and keeps for days. Entirely plant-based.' },
-
-  { id:'healthy-egg-salad-lettuce-boats', name:'Healthy Egg Salad Lettuce Boats', type:'lunch', time:'15 min',
-    tags:['dairy'],
-    ing:[{id:'eggs',qty:1.5,unit:'ea'},{id:'greek-yogurt',qty:30,unit:'g'},{id:'lettuce',qty:null}],
-    staples:'Dijon, green onion, salt, pepper',
-    note:'Greek yogurt instead of mayo. Pack the leaves separately.' },
-
-  { id:'sesame-peanut-noodle-bowl', name:'Sesame Peanut Noodle Bowl', type:'lunch', time:'15 min',
-    tags:['nuts'],
-    ing:[{id:'pasta',qty:2,unit:'oz'},{id:'peanut-butter',qty:2,unit:'tbsp'},{id:'cucumber',qty:0.25,unit:'ea'}],
-    staples:'Soy sauce, sesame oil, lime',
-    note:'Eaten cold, so it keeps well in a lunch container.' },
-
-  // ── dinner ──
-  { id:'sheet-pan-garlic-lemon-chicken-and-asparagus', name:'Sheet Pan Garlic Lemon Chicken and Asparagus', type:'dinner', time:'25 min',
-    tags:['meat'],
-    ing:[{id:'chicken-breast',qty:8,unit:'oz'},{id:'asparagus',qty:0.5,unit:'bunch'},{id:'lemon',qty:0.5,unit:'ea'}],
-    staples:'Garlic, olive oil, salt, pepper',
-    note:'The asparagus and chicken both need using. One pan, minimal cleanup.' },
-
-  { id:'garlic-butter-shrimp-and-spinach-pasta', name:'Garlic Butter Shrimp and Spinach Pasta', type:'dinner', time:'20 min',
-    tags:['fish','dairy'],
-    ing:[{id:'shrimp',qty:4,unit:'oz'},{id:'spinach',qty:60,unit:'g'},{id:'pasta',qty:3,unit:'oz'},{id:'parmesan',qty:null,optional:true,tag:'dairy'}],
-    staples:'Butter, garlic, olive oil',
-    note:'Thawed shrimp will not wait. This finishes the spinach too.' },
-
-  { id:'easy-egg-and-veggie-fried-rice', name:'Easy Egg and Veggie Fried Rice', type:'dinner', time:'15 min',
-    tags:[],
-    ing:[{id:'cooked-rice',qty:1,unit:'cup'},{id:'eggs',qty:1,unit:'ea'},{id:'frozen-veg',qty:100,unit:'g'}],
-    staples:'Soy sauce, sesame oil, garlic',
-    note:'Day-old rice fries better than fresh. Clears the freezer veg too.' },
-
-  { id:'skillet-caprese-chicken', name:'Skillet Caprese Chicken', type:'dinner', time:'25 min',
-    tags:['meat','dairy'],
-    ing:[{id:'chicken-breast',qty:6,unit:'oz'},{id:'mozzarella',qty:2,unit:'oz'},{id:'cherry-tomatoes',qty:0.5,unit:'cup'}],
-    staples:'Olive oil, basil, marinara',
-    note:'One skillet. Good when the mozzarella needs using.' },
-
-  { id:'honey-mustard-glazed-pork-chops', name:'Honey Mustard Glazed Pork Chops', type:'dinner', time:'20 min',
-    tags:['meat','pork'],
-    ing:[{id:'pork-chops',qty:1,unit:'ea'},{id:'bell-pepper',qty:0.5,unit:'ea'},{id:'green-beans',qty:null,optional:true}],
-    staples:'Dijon, honey, garlic powder, olive oil',
-    note:'Thin-cut chops sear fast. The glaze is three cupboard staples.' },
-
-  { id:'15-minute-tomato-spinach-tortellini', name:'15-Minute Tomato Spinach Tortellini', type:'dinner', time:'15 min',
-    tags:['dairy'],
-    ing:[{id:'spinach',qty:60,unit:'g'},{id:'cherry-tomatoes',qty:0.5,unit:'cup'},{id:'tortellini',qty:null,tag:'dairy'}],
-    staples:'Marinara, parmesan',
-    note:'Fastest dinner in the file, but the tortellini has to be on hand.' },
-
-  { id:'tuscan-white-bean-and-spinach-soup', name:'Tuscan White Bean and Spinach Soup', type:'dinner', time:'20 min',
-    tags:['dairy'],
-    ing:[{id:'spinach',qty:50,unit:'g'},{id:'cherry-tomatoes',qty:0.25,unit:'cup'},{id:'white-beans',qty:null},{id:'vegetable-broth',qty:null}],
-    staples:'Garlic, olive oil',
-    note:'Warming and cheap, but needs beans and broth from the cupboard.' }
-];
+// All 300 recipes from the approved source, knowledge/Combined_Recipe_Database.md, via recipes.js
+// (generated by tools/build-recipes.ps1). `id` is the slug of the title and doubles as the photo name.
+// Each ingredient line keeps the database's own wording (`text`) and names the food it uses from
+// the shared ingredient list (`id`, or `any` when the recipe offers a choice). Staple lines (salt,
+// oil, spices...) are kept for display but never planned around: they're assumed on hand.
+// Amounts are as written. The database doesn't say how many a recipe serves, so nothing is scaled.
+var recipes = (window.WTF_RECIPES || []).map(function(src) {
+  var lines = [];
+  src.ing.forEach(function(l) {
+    var ids = l.items || [];
+    if (!ids.length) return;
+    // A staple line, or a choice where one of the options is a staple ("vinegar or lemon juice"),
+    // is covered by the staples assumed on hand.
+    var isStaple = function(id) { var i = ingById(id); return !!(i && i.staple); };
+    var staple = ids.every(isStaple) || (l.alt && ids.some(isStaple));
+    var foods = ids.filter(function(id) { var i = ingById(id); return i && !i.staple; });
+    var line = { text:l.text, optional:!!l.optional, staple:staple };
+    if (!staple) {
+      if (foods.length === 1) line.id = foods[0]; else line.any = foods;
+      line.qty = (l.qty === undefined || l.qty === null || foods.length !== ids.length) ? null : l.qty;
+      line.unit = line.qty === null ? null : (l.unit || 'ea');
+    }
+    lines.push(line);
+  });
+  return { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
+           tags:src.tags || [], all:lines, ing:lines.filter(function(l) { return !l.staple; }), steps:src.steps || [] };
+});
 
 // ═══════════════ PLAN ═══════════════
-// Three days x breakfast / lunch / dinner. status: pending | accepted | skipped
-var plan = [
-  { recipe:'spinach-egg-and-avocado-breakfast-wrap',       status:'pending' },
-  { recipe:'mediterranean-chickpea-salad',             status:'pending' },
-  { recipe:'sheet-pan-garlic-lemon-chicken-and-asparagus', status:'pending' },
-  { recipe:'peanut-butter-banana-oatmeal',             status:'pending' },
-  { recipe:'caprese-chicken-ciabatta-sandwich',        status:'pending' },
-  { recipe:'garlic-butter-shrimp-and-spinach-pasta',       status:'pending' },
-  { recipe:'high-protein-greek-yogurt-and-berry-parfait',  status:'pending' },
-  { recipe:'quick-black-bean-and-rice-burrito-bowl',       status:'pending' },
-  { recipe:'easy-egg-and-veggie-fried-rice',               status:'pending' }
-];
+// Three days x breakfast / lunch / dinner, built from the kitchen by the planner below.
+// status: pending | accepted | skipped
+var plan = [];
+var planSig = null;               // the kitchen the plan was last built for; see kitchenSig()
 
 var MEAL_TYPES = ['breakfast','lunch','dinner'];
 var currentDay = 1;              // 1..3
