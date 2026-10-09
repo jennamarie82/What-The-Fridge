@@ -7,6 +7,10 @@
     recipes.js                       - loaded by the app
     tools/ingredient-review.csv      - every ingredient line and what it was linked to, for the team to check
     tools/unmatched.txt              - lines that matched nothing (should be empty)
+    tools/nutrition-review.csv       - every ingredient line's weight and calories, for the team to check
+
+  Nutrition per serving is estimated from tools/nutrition.csv (per-food values) and
+  tools/servings.csv (estimated servings per recipe).
 
   Run from the repository folder:
     powershell -ExecutionPolicy Bypass -File tools\build-recipes.ps1
@@ -210,6 +214,104 @@ foreach ($r in $recipes) {
   if (-not (Test-Path (Join-Path $root "recipe-images\$($r.id).webp"))) { $problems += "#$($r.n) has no photo at recipe-images\$($r.id).webp" }
 }
 
+# -- nutrition estimates (CLAUDE.md open assumption 17) --
+# Each ingredient line is turned into grams with tools/nutrition.csv, summed per recipe, and
+# divided by the estimated servings in tools/servings.csv. Optional lines and lines with no
+# amount ("salt and pepper to taste") are left out; `cover` says what share of lines counted.
+$nut = @{}
+foreach ($row in (Read-Table "$PSScriptRoot\nutrition.csv")) { $nut[$row.id] = $row }
+foreach ($i in $ingredients) { if (-not $nut.ContainsKey($i.id)) { throw "nutrition.csv has no row for '$($i.id)'" } }
+foreach ($row in $nut.Values) {
+  foreach ($pair in ($row.alias_by_word -split ';' | Where-Object { $_ })) {
+    if (-not $nut.ContainsKey(($pair -split '=')[1])) { throw "nutrition.csv: '$($row.id)' aliases to '$pair', which has no row" }
+  }
+}
+$serves = @{}
+foreach ($row in (Read-Table "$PSScriptRoot\servings.csv")) { $serves[[int]$row.n] = [int]$row.servings }
+
+function Num($v) { if ($v -ne $null -and $v -ne '') { return [double]$v } return $null }
+$toGrams = @{ lb = 453.6; oz = 28.35; g = 1; kg = 1000 }
+function Line-Grams([string]$text, $amt, $n) {
+  $q = $amt.qty; $u = $amt.unit
+  $yield = Num $n.yield; if ($yield -eq $null) { $yield = 1 }
+  # A size written in the line wins: "1 (15 oz) can", "2 cans (15 oz each)", "about 4 lbs".
+  $size = [regex]::Match($text, '(?:\(|\babout\s+)(?:about\s+)?(\d+(?:\.\d+)?)\s*(oz|ounces?|lbs?|pounds?|g|kg)\b', 'IgnoreCase')
+  if ($size.Success -and $u -notin 'cup','tbsp','tsp','lb','oz','g','kg','ml','l') {
+    $sizeUnit = $size.Groups[2].Value.ToLower() -replace 'ounces?', 'oz' -replace 'lbs|pounds?', 'lb'
+    $g = $q * [double]$size.Groups[1].Value * $toGrams[$sizeUnit]
+    if ($u -eq 'can') { $d = Num $n.drained; if ($d -ne $null) { $g *= $d } } else { $g *= $yield }
+    return $g
+  }
+  if ($toGrams.ContainsKey([string]$u)) { return $q * $toGrams[$u] * $yield }
+  $cup = Num $n.cup
+  switch ($u) {
+    'cup'  { if ($cup -ne $null) { return $q * $cup }; return $null }
+    'tbsp' { if ($cup -ne $null) { return $q * $cup / 16 }; return $null }
+    'tsp'  { if ($cup -ne $null) { return $q * $cup / 48 }; return $null }
+    'ml'   { if ($cup -ne $null) { return $q * $cup / 236.6 }; return $q }
+    'l'    { if ($cup -ne $null) { return $q * $cup * 1000 / 236.6 }; return $q * 1000 }
+  }
+  if ($u -in 'can','slice','clove','block','bunch','head','stalk') { $w = Num $n.$u; if ($w -ne $null) { return $q * $w }; return $null }
+  if ($u -and $u -ne 'fillet') { return $null }   # package, jar: no size given
+  # "4 thick slices bread": the unit sits after a describing word.
+  if ($text -match '\bslices?\b') { $w = Num $n.slice; if ($w -ne $null) { return $q * $w } }
+  if ($n.each_by_word) {
+    foreach ($pair in ($n.each_by_word -split ';')) {
+      $kv = $pair -split '='
+      if ($text -match "\b$($kv[0])") { return $q * [double]$kv[1] }
+    }
+  }
+  $w = Num $n.each; if ($w -ne $null) { return $q * $w }
+  return $null
+}
+
+$nutReview = New-Object System.Collections.Generic.List[object]
+$fields = 'kcal','protein','carbs','fat','fibre','sodium'
+foreach ($r in $recipes) {
+  $tot = @{}; foreach ($f in $fields) { $tot[$f] = 0.0 }
+  $counted = 0; $lines = 0
+  foreach ($l in $r.ing) {
+    if ($l.optional -or $l.items.Count -eq 0) { continue }
+    # Several foods on one line that aren't alternatives ("salt and pepper") have no single amount.
+    if ($l.items.Count -gt 1 -and -not $l.alt) { continue }
+    $id = $l.items[0]; $n = $nut[$id]
+    if ($n.alias_by_word) {
+      foreach ($pair in ($n.alias_by_word -split ';')) {
+        $kv = $pair -split '='
+        if ($l.text -match "\b$($kv[0])") { $id = $kv[1]; $n = $nut[$id]; break }
+      }
+    }
+    $amt = Parse-Amount ($l.text -replace '^[A-Za-z ]+:\s*', '')
+    $grams = $null
+    if ($amt) { $grams = Line-Grams $l.text $amt $n }
+    if ($grams -ne $null) {
+      if ($l.text -match '\bfor (deep[- ]|shallow[- ])?frying\b') { $grams *= 0.1 }   # absorbed, not poured away
+      if ($n.cooked -and $l.text -match '\b(pre-?cooked|cooked)\b' -and $l.text -notmatch '\bdried\b') { $grams *= [double]$n.cooked }
+    }
+    $minor = $id -in 'salt','black-pepper','water'
+    if (-not $minor -or $grams -ne $null) { $lines++ }
+    if ($grams -ne $null) {
+      $counted++
+      foreach ($f in $fields) { $tot[$f] += $grams * [double]$n.$f / 100 }
+    }
+    $nutReview.Add([pscustomobject]@{
+      recipe_no = $r.n; recipe = $r.name; ingredient_line = $l.text; counted_as = $id
+      grams = $(if ($grams -ne $null) { [math]::Round($grams) } else { 'not counted' })
+      kcal = $(if ($grams -ne $null) { [math]::Round($grams * [double]$n.kcal / 100) } else { '' })
+    })
+  }
+  $s = $serves[[int]$r.n]
+  if (-not $s) { $problems += "#$($r.n) has no row in servings.csv"; continue }
+  $r.nut = [ordered]@{
+    serves = $s
+    kcal = [int]([math]::Round($tot.kcal / $s / 10) * 10)
+    protein = [int][math]::Round($tot.protein / $s); carbs = [int][math]::Round($tot.carbs / $s)
+    fat = [int][math]::Round($tot.fat / $s); fibre = [int][math]::Round($tot.fibre / $s)
+    sodium = [int]([math]::Round($tot.sodium / $s / 10) * 10)
+    cover = $(if ($lines) { [int][math]::Round(100 * $counted / $lines) } else { 0 })
+  }
+}
+
 # -- write outputs --
 $ingOut = @($ingredients | ForEach-Object {
   # `match` goes along so the app's pantry search finds "scallions" under Green onions.
@@ -227,7 +329,8 @@ $recipes = @($recipes | ForEach-Object {
   $r = $_
   [pscustomobject]@{ n = $r.n; id = $r.id; name = $r.name; type = $r.type; time = $r.time; mins = $r.mins
                      tags = @($r.tags); satisfies = @($r.satisfies)
-                     ing = @($r.ing | ForEach-Object { [pscustomobject]$_ }); steps = @($r.steps) }
+                     ing = @($r.ing | ForEach-Object { [pscustomobject]$_ }); steps = @($r.steps)
+                     nut = $(if ($r.nut) { [pscustomobject]$r.nut } else { $null }) }
 })
 $norms2 = [pscustomobject]@{}
 foreach ($k in $norms.Keys) { $norms2 | Add-Member -NotePropertyName $k -NotePropertyValue ([pscustomobject]$norms[$k]) }
@@ -242,8 +345,14 @@ $js = $header +
   'window.WTF_RECIPES = ' + (ConvertTo-Json -InputObject @($recipes) -Depth 6 -Compress) + ";`n"
 [IO.File]::WriteAllText((Join-Path $root 'recipes.js'), $js, $utf8)
 $review | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $PSScriptRoot 'ingredient-review.csv')
+$nutReview | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $PSScriptRoot 'nutrition-review.csv')
 [IO.File]::WriteAllLines((Join-Path $PSScriptRoot 'unmatched.txt'), [string[]]$unmatched, $utf8)
 
 "recipes: $($recipes.Count)   ingredient lines: $($review.Count)   unmatched: $($unmatched.Count)"
 "by type: " + (($recipes | Group-Object { $_.type } | ForEach-Object { "$($_.Name) $($_.Count)" }) -join ', ')
+foreach ($g in ($recipes | Group-Object { $_.type })) {
+  $k = @($g.Group | ForEach-Object { $_.nut.kcal } | Sort-Object)
+  "kcal per serving, $($g.Name): lowest $($k[0]), median $($k[[int]($k.Count / 2)]), highest $($k[-1])"
+}
+"lines counted for nutrition: lowest share $(@($recipes | ForEach-Object { $_.nut.cover } | Sort-Object)[0])%"
 if ($problems.Count) { "PROBLEMS:"; $problems } else { "checks passed" }

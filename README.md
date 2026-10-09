@@ -28,7 +28,9 @@ BUS 860 *Managing Intelligence* · Group 3.
 - Amounts are used as the recipe file writes them. The file doesn't say how many each recipe serves,
   so nothing is scaled to household size yet.
 - Each meal shows its ingredients in the recipe's own words next to what you have, then the
-  numbered steps.
+  numbered steps, then estimated nutrition per serving (calories, protein, carbs, fat, fibre,
+  sodium). The recipe file states neither servings nor nutrition, so both are estimates and are
+  labelled as such (see Recipe data).
 - Swap, skip or mark a meal cooked. Ingredients are deducted only when you confirm a meal was cooked
   (converting grams, ounces, cups and spoons where that's plain arithmetic), and Undo puts back
   exactly what was taken.
@@ -68,6 +70,12 @@ powershell -ExecutionPolicy Bypass -File tools\build-recipes.ps1
 
 The build also writes `tools/ingredient-review.csv`, which lists every recipe ingredient line next to
 the food it was linked to, with blank `looks_right` and `comment` columns for checking.
+
+Nutrition is estimated in the same build. `tools/nutrition.csv` holds typical values per 100 g for
+each food and the weight of a cup, an item, a can and so on; `tools/servings.csv` holds an estimated
+serving count for each recipe. The build turns every ingredient line into grams, adds them up and
+divides by the servings, and writes `tools/nutrition-review.csv` with each line's grams and calories
+so the team can spot a line that was counted wrongly.
 
 ## Updating the site
 

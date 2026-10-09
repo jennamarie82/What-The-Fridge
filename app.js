@@ -155,7 +155,8 @@ var recipes = (window.WTF_RECIPES || []).map(function(src) {
     lines.push(line);
   });
   return { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
-           tags:src.tags || [], all:lines, ing:lines.filter(function(l) { return !l.staple; }), steps:src.steps || [] };
+           tags:src.tags || [], all:lines, ing:lines.filter(function(l) { return !l.staple; }), steps:src.steps || [],
+           nut:src.nut || null };
 });
 
 // ═══════════════ PLAN ═══════════════
@@ -946,6 +947,28 @@ function methodHTML(r) {
     }).join('') + '</ol>';
 }
 
+// Per-serving nutrition, estimated at build time from the ingredient amounts and an estimated
+// serving count (the approved database states neither), so it is always labelled an estimate.
+function nutritionHTML(r) {
+  var n = r.nut;
+  if (!n) return '';
+  function cell(label, value, unit) {
+    return '<div class="nut-cell"><div class="nut-val">' + value + '<span>' + unit + '</span></div><div class="nut-label">' + label + '</div></div>';
+  }
+  return '<div class="section-label">Nutrition &middot; per serving <span class="method-tip">estimated</span></div>' +
+    '<div class="nutrition-card">' +
+      '<div class="nut-kcal"><b>' + n.kcal + '</b> kcal</div>' +
+      '<div class="nut-grid">' +
+        cell('Protein', n.protein, 'g') + cell('Carbs', n.carbs, 'g') + cell('Fat', n.fat, 'g') +
+        cell('Fibre', n.fibre, 'g') + cell('Sodium', n.sodium, 'mg') +
+      '</div>' +
+    '</div>' +
+    '<p class="field-hint">Estimated for about ' + n.serves + ' serving' + (n.serves > 1 ? 's' : '') +
+      ', from the ingredient amounts and typical food-composition values. The recipe file doesn\'t state servings or nutrition. ' +
+      'Optional ingredients and anything without an amount aren\'t counted' +
+      (n.cover < 100 ? ' (' + n.cover + '% of this recipe\'s ingredient lines were)' : '') + '.</p>';
+}
+
 // One row per line of the recipe, in the recipe's own words, with what the kitchen has for it.
 // For a meal still to cook, what earlier meals in the plan set aside is taken off first.
 function ingredientRowsHTML(r, idx) {
@@ -1021,7 +1044,8 @@ function openDetail(idx) {
     '</div>' +
     '<div class="section-label" style="margin-top:0;">Ingredients &middot; from your kitchen</div>' +
     '<div class="ingredient-card">' + rows.html + '</div>' +
-    '<p class="field-hint">Amounts as the recipe file writes them. It doesn\'t say how many each recipe serves.</p>';
+    '<p class="field-hint">Amounts as the recipe file writes them. It doesn\'t say how many each recipe serves' +
+      (r.nut ? '; about ' + r.nut.serves + ' is our estimate' : '') + '.</p>';
 
   rows.missing.forEach(function(line) {
     html += '<div class="missing-callout"><b>Missing: ' + esc(lineName(line)) + '</b><span>Required for this recipe. Swap the meal or pick it up.</span></div>';
@@ -1059,6 +1083,7 @@ function openDetail(idx) {
         'Freshness windows are estimates from purchase dates and the norms in <i>shelf-life-norms.md</i>, not a check of the food itself.' +
       '</p>';
   }
+  html += nutritionHTML(r);
   document.getElementById('detailContent').innerHTML = html;
   overlay.classList.add('open');
   document.getElementById('fab').style.display = 'none';
