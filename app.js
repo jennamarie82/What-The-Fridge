@@ -477,10 +477,23 @@ function optionalMissing() {
 // ═══════════════ PLANNER ═══════════════
 // Fills the plan one slot at a time from all 300 approved recipes, setting food aside as it goes.
 // Hard rules (never broken): a dietary restriction, a "not for us", and no recipe twice in the plan.
+// Weekday time limits (below) come next: only if nothing quick enough fits is a slower meal used.
 // Then, in order of weight: no missing or short ingredients; food closest to the end of its
-// window used first (and earlier in the three days); breakfasts of 20 minutes or less, as the spec
-// asks; favourites and likes; using more of what's on hand. A small per-day shuffle keeps equally
+// window used first (and earlier in the three days); weekend breakfasts of 20 minutes or less;
+// favourites and likes; using more of what's on hand. A small per-day shuffle keeps equally
 // good plans from repeating every day.
+
+// Monday to Friday, breakfast takes 20 minutes or less and lunch 30 minutes or less.
+var WEEKDAY_MINUTES = { breakfast:20, lunch:30 };
+function timeLimit(type, dayIdx) {
+  var wd = dateFor(dayIdx).getDay();
+  return (wd === 0 || wd === 6) ? null : (WEEKDAY_MINUTES[type] || null);
+}
+function fitsTime(r, dayIdx) {
+  var lim = timeLimit(r.type, dayIdx);
+  return !lim || r.mins <= lim;
+}
+
 function scoreRecipe(r, dayIdx, reserved) {
   var missing = 0, short = 0, check = 0, ok = 0, urgency = 0, stale = 0;
   visibleLines(r).forEach(function(line) {
@@ -494,7 +507,10 @@ function scoreRecipe(r, dayIdx, reserved) {
   });
   var feasible = missing === 0 && short === 0 && stale === 0;
   var s = (feasible ? 1000 : 0) - missing * 60 - short * 40 - stale * 60 - check * 3 + ok * 6 + urgency * (3 - dayIdx) * 2;
-  if (r.type === 'breakfast' && r.mins > 20) s -= 50 + (r.mins - 20) * 3;   // mornings are short
+  // Mornings are short; on a weekday this only matters when nothing within the limit fits,
+  // and then the quickest of the rest wins.
+  var lim = timeLimit(r.type, dayIdx) || (r.type === 'breakfast' ? 20 : 0);
+  if (lim && r.mins > lim) s -= 50 + (r.mins - lim) * 3;
   if (dayIdx === 0 && /overnight/i.test(r.time)) s -= 200;          // can't be ready today
   var p = getPref(r.id);
   if (p.fav) s += 30; else if (p.vote === 'up') s += 10;
@@ -507,14 +523,17 @@ function eligible(r, type) {
   return r.type === type && getPref(r.id).vote !== 'down' && !violatesDiet(r);
 }
 // The best recipe for one slot, or null when nothing in the approved files fits the household.
-function pickRecipe(type, dayIdx, reserved, exclude) {
+// A weekday meal over its time limit is only picked when nothing within it fits at all.
+function pickRecipe(type, dayIdx, reserved, exclude, anyTime) {
   var best = null;
   recipes.forEach(function(r) {
     if (!eligible(r, type) || exclude.indexOf(r.id) > -1) return;
+    if (!anyTime && !fitsTime(r, dayIdx)) return;
     var s = scoreRecipe(r, dayIdx, reserved);
     if (!best || s.score > best.s.score) best = { r:r, s:s };
   });
-  if (!best && exclude.length) return pickRecipe(type, dayIdx, reserved, []);  // repeat rather than leave a hole
+  if (!best && exclude.length) return pickRecipe(type, dayIdx, reserved, [], anyTime);  // repeat rather than leave a hole
+  if (!best && !anyTime) return pickRecipe(type, dayIdx, reserved, exclude, true);
   return best ? best.r : null;
 }
 function fullyCovered(r, reserved, dayIdx) {
@@ -543,7 +562,7 @@ function planKitchen(keep) {
     plan.forEach(function(e, i) {
       if (!e || e.status !== 'pending' || e.dietBlocked) return;
       var r = recipeById(e.recipe);
-      if (r && eligible(r, r.type) && fullyCovered(r, res, Math.floor(i / 3))) { reserveRecipe(r, res); kept[i] = true; used.push(r.id); }
+      if (r && eligible(r, r.type) && fitsTime(r, Math.floor(i / 3)) && fullyCovered(r, res, Math.floor(i / 3))) { reserveRecipe(r, res); kept[i] = true; used.push(r.id); }
     });
   }
   for (var j = 0; j < 9; j++) {
@@ -1182,6 +1201,20 @@ function enforceDiet() {
   planSig = kitchenSig();
   renderAll();
   return { swapped:swapped, stuck:stuck };
+}
+
+// Replaces any pending weekday meal over its time limit (a plan saved before the limits, or a day
+// built while catching up) with the best one within it. Left alone when nothing quicker fits.
+function enforceTimes() {
+  var changed = 0;
+  plan.forEach(function(entry, idx) {
+    var day = Math.floor(idx / 3), r = recipeById(entry.recipe);
+    if (entry.status !== 'pending' || entry.dietBlocked || !r || fitsTime(r, day)) return;
+    var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
+    var pick = pickRecipe(r.type, day, reservationsExcept(idx), others);
+    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; changed++; }
+  });
+  return changed;
 }
 // ═══════════════ SETTINGS SUB-SCREENS ═══════════════
 function openSub(which) {
@@ -2167,6 +2200,7 @@ function catchUp() {
   if (missed > 0) {
     var start = parseKey(lastSeen);
     for (var i = 0; i < Math.min(missed, 3); i++) { rollDay(addDays(start, i)); }
+    enforceTimes();   // days rolled in during catch-up were planned against the wrong weekday
   }
   lastSeen = todayKey();
   return Math.max(missed, 0);
@@ -2212,6 +2246,7 @@ function startOver() {
 
 var returning = loadState();
 if (plan.length !== 9) { planKitchen(plan.length > 0); }
+else { enforceTimes(); }
 renderAll();
 if (!returning) { showSetup(); }
 scheduleMidnight();

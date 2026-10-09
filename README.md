@@ -18,9 +18,11 @@ BUS 860 *Managing Intelligence* · Group 3.
   norm, stays "unknown" and is never assumed fresh.
 - Plans today plus the next two days (breakfast, lunch and dinner) from all 300 approved recipes,
   around what's actually in your kitchen. It fills one meal at a time, setting aside what each uses,
-  so a scarce ingredient is never promised to two meals. It prefers meals with nothing missing, then
-  food closest to the end of its window, then breakfasts of 20 minutes or less, then your favourites.
-  Dietary restrictions and "not for us" are hard filters.
+  so a scarce ingredient is never promised to two meals. Monday to Friday, breakfast takes 20 minutes
+  or less and lunch 30 minutes or less; a slower one is used only when nothing quick enough fits. It
+  prefers meals with nothing missing, then food closest to the end of its window, then (on weekends)
+  breakfasts of 20 minutes or less, then your favourites. Dietary restrictions and "not for us" are
+  hard filters.
 - Says plainly when the kitchen can't cover the plan: what's missing, which meal runs short because
   an earlier one uses the same food, and what will have turned before its meal. Where an amount isn't
   recorded in a comparable unit, it asks you to check rather than guessing. **Re-plan** replaces only
