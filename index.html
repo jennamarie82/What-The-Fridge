@@ -73,7 +73,7 @@
       <div class="view-pad">
         <div class="top-row">
           <p class="greet" id="greet">Hello</p>
-          <img class="wtf-logo" src="logo-header.webp" alt="What the Fridge">
+          <img class="wtf-logo" src="logo-header-t.webp" alt="What the Fridge">
         </div>
         <h3 class="plan-title">Your next<br>three days</h3>
 
@@ -122,7 +122,7 @@
       <div class="view-pad">
         <div class="top-row">
           <h3 class="pantry-title">Pantry</h3>
-          <img class="wtf-logo" src="logo-header.webp" alt="What the Fridge">
+          <img class="wtf-logo" src="logo-header-t.webp" alt="What the Fridge">
         </div>
 
         <div class="section-label" style="margin-top:0;">Needs attention</div>
@@ -150,6 +150,7 @@
           <div class="profile-menu-item" onclick="openSub('notify')"><span>Notification reminders</span><span class="arrow" id="notifyArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('receipt')"><span>Upload receipt</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('about')"><span>About What the Fridge</span><span class="arrow">&rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="openSub('feedback')"><span>Send feedback</span><span class="arrow">&rsaquo;</span></div>
         </div>
 
         <div class="section-label">Demo controls</div>
@@ -171,16 +172,16 @@
 
   <!-- ══════ BOTTOM TABS ══════ -->
   <nav class="tabs">
-    <button class="tab active" data-tab="planTab" onclick="switchTab('planTab')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.6V19a1 1 0 0 0 1 1H10v-5.5h4V20h3.5a1 1 0 0 0 1-1V9.6"/></svg>
+    <button class="tab active" data-tab="planTab" onclick="switchTab('planTab')" aria-label="Plan tab — view your meal plan">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 9.6V19a1 1 0 0 0 1 1H10v-5.5h4V20h3.5a1 1 0 0 0 1-1V9.6"/></svg>
       Plan
     </button>
-    <button class="tab" data-tab="pantryTab" onclick="switchTab('pantryTab')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h16l-1.4 11A2 2 0 0 1 16.6 21H7.4a2 2 0 0 1-2-1.5l-1.4-11Z"/><path d="M8.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5"/></svg>
+    <button class="tab" data-tab="pantryTab" onclick="switchTab('pantryTab')" aria-label="Pantry tab — view your food inventory">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h16l-1.4 11A2 2 0 0 1 16.6 21H7.4a2 2 0 0 1-2-1.5l-1.4-11Z"/><path d="M8.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5"/></svg>
       Pantry
     </button>
-    <button class="tab" data-tab="profileTab" onclick="switchTab('profileTab')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.4"/><path d="M4.8 20c0-3.6 3.2-6.2 7.2-6.2s7.2 2.6 7.2 6.2"/></svg>
+    <button class="tab" data-tab="profileTab" onclick="switchTab('profileTab')" aria-label="Profile tab — settings and stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.2" r="3.4"/><path d="M4.8 20c0-3.6 3.2-6.2 7.2-6.2s7.2 2.6 7.2 6.2"/></svg>
       Profile
     </button>
   </nav>

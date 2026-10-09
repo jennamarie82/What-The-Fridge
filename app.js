@@ -478,10 +478,23 @@ function optionalMissing() {
 // ═══════════════ PLANNER ═══════════════
 // Fills the plan one slot at a time from all 300 approved recipes, setting food aside as it goes.
 // Hard rules (never broken): a dietary restriction, a "not for us", and no recipe twice in the plan.
+// Weekday time limits (below) come next: only if nothing quick enough fits is a slower meal used.
 // Then, in order of weight: no missing or short ingredients; food closest to the end of its
-// window used first (and earlier in the three days); breakfasts of 20 minutes or less, as the spec
-// asks; favourites and likes; using more of what's on hand. A small per-day shuffle keeps equally
+// window used first (and earlier in the three days); weekend breakfasts of 20 minutes or less;
+// favourites and likes; using more of what's on hand. A small per-day shuffle keeps equally
 // good plans from repeating every day.
+
+// Monday to Friday, breakfast takes 20 minutes or less and lunch 30 minutes or less.
+var WEEKDAY_MINUTES = { breakfast:20, lunch:30 };
+function timeLimit(type, dayIdx) {
+  var wd = dateFor(dayIdx).getDay();
+  return (wd === 0 || wd === 6) ? null : (WEEKDAY_MINUTES[type] || null);
+}
+function fitsTime(r, dayIdx) {
+  var lim = timeLimit(r.type, dayIdx);
+  return !lim || r.mins <= lim;
+}
+
 function scoreRecipe(r, dayIdx, reserved) {
   var missing = 0, short = 0, check = 0, ok = 0, urgency = 0, stale = 0;
   visibleLines(r).forEach(function(line) {
@@ -495,7 +508,10 @@ function scoreRecipe(r, dayIdx, reserved) {
   });
   var feasible = missing === 0 && short === 0 && stale === 0;
   var s = (feasible ? 1000 : 0) - missing * 60 - short * 40 - stale * 60 - check * 3 + ok * 6 + urgency * (3 - dayIdx) * 2;
-  if (r.type === 'breakfast' && r.mins > 20) s -= 50 + (r.mins - 20) * 3;   // mornings are short
+  // Mornings are short; on a weekday this only matters when nothing within the limit fits,
+  // and then the quickest of the rest wins.
+  var lim = timeLimit(r.type, dayIdx) || (r.type === 'breakfast' ? 20 : 0);
+  if (lim && r.mins > lim) s -= 50 + (r.mins - lim) * 3;
   if (dayIdx === 0 && /overnight/i.test(r.time)) s -= 200;          // can't be ready today
   var p = getPref(r.id);
   if (p.fav) s += 30; else if (p.vote === 'up') s += 10;
@@ -508,14 +524,17 @@ function eligible(r, type) {
   return r.type === type && getPref(r.id).vote !== 'down' && !violatesDiet(r);
 }
 // The best recipe for one slot, or null when nothing in the approved files fits the household.
-function pickRecipe(type, dayIdx, reserved, exclude) {
+// A weekday meal over its time limit is only picked when nothing within it fits at all.
+function pickRecipe(type, dayIdx, reserved, exclude, anyTime) {
   var best = null;
   recipes.forEach(function(r) {
     if (!eligible(r, type) || exclude.indexOf(r.id) > -1) return;
+    if (!anyTime && !fitsTime(r, dayIdx)) return;
     var s = scoreRecipe(r, dayIdx, reserved);
     if (!best || s.score > best.s.score) best = { r:r, s:s };
   });
-  if (!best && exclude.length) return pickRecipe(type, dayIdx, reserved, []);  // repeat rather than leave a hole
+  if (!best && exclude.length) return pickRecipe(type, dayIdx, reserved, [], anyTime);  // repeat rather than leave a hole
+  if (!best && !anyTime) return pickRecipe(type, dayIdx, reserved, exclude, true);
   return best ? best.r : null;
 }
 function fullyCovered(r, reserved, dayIdx) {
@@ -544,7 +563,7 @@ function planKitchen(keep) {
     plan.forEach(function(e, i) {
       if (!e || e.status !== 'pending' || e.dietBlocked) return;
       var r = recipeById(e.recipe);
-      if (r && eligible(r, r.type) && fullyCovered(r, res, Math.floor(i / 3))) { reserveRecipe(r, res); kept[i] = true; used.push(r.id); }
+      if (r && eligible(r, r.type) && fitsTime(r, Math.floor(i / 3)) && fullyCovered(r, res, Math.floor(i / 3))) { reserveRecipe(r, res); kept[i] = true; used.push(r.id); }
     });
   }
   for (var j = 0; j < 9; j++) {
@@ -736,7 +755,9 @@ function renderDaySelector() {
   var sel = document.getElementById('daySelector');
   var html = '';
   for (var i=0;i<3;i++) {
-    html += '<button class="day-btn' + (currentDay === i+1 ? ' active' : '') + '" data-day="' + (i+1) + '" onclick="selectDay(' + (i+1) + ')">' +
+    html += '<button class="day-btn' + (currentDay === i+1 ? ' active' : '') + '" data-day="' + (i+1) + '"' +
+      ' aria-label="Day ' + (i+1) + ', ' + fmtDate(dateFor(i)) + (currentDay === i+1 ? ', selected' : '') + '"' +
+      ' onclick="selectDay(' + (i+1) + ')">' +
       dayLabel(i) + '<br><small>' + fmtDate(dateFor(i)) + '</small></button>';
   }
   sel.innerHTML = html;
@@ -826,6 +847,9 @@ function renderMeals() {
     var pref = getPref(r.id);
     var card = document.createElement('div');
     card.className = 'meal-card' + (slot === spot ? ' spotlight' : '') + (entry.status !== 'pending' ? ' done' : '') + (entry.dietBlocked ? ' blocked' : '');
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', r.type.charAt(0).toUpperCase() + r.type.slice(1) + ': ' + r.name + ', ' + r.time + (entry.status === 'accepted' ? ', cooked' : entry.status === 'skipped' ? ', skipped' : ''));
+    card.setAttribute('tabindex', '0');
     card.onclick = function() { openDetail(idx); };
 
     var chips = mealChips(r).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
@@ -885,8 +909,11 @@ function renderPantry() {
 
   if (!pantry.length) {
     att.innerHTML = '<div class="empty-card"><strong>Nothing here yet</strong>' +
-      '<span>Add what\'s in your fridge, freezer and cupboard. A rough count is fine, and if you don\'t know when you bought something, say so; we\'ll never guess.</span>' +
-      '<button class="btn primary small" onclick="openAddItem()">Add food</button></div>';
+      '<span>Add your food items with the <b>+</b> button or scan a receipt.</span>' +
+      '<div style="display:flex;gap:8px;margin-top:var(--s4);flex-wrap:wrap;">' +
+        '<button class="btn primary small" onclick="openAddItem()" style="margin-top:0;">Add food</button>' +
+        '<button class="btn ghost small" onclick="switchTab(\'profileTab\');openSub(\'receipt\');" style="margin-top:0;">Scan receipt</button>' +
+      '</div></div>';
     zones.innerHTML = '';
     return;
   }
@@ -909,6 +936,13 @@ function renderPantry() {
       '</div>' + chipHTML(f.cls, f.text) +
     '</div>';
   }).join('') || '<p class="pantry-note" style="margin-top:0;">Nothing needs urgent attention. Rare and beautiful.</p>';
+
+  // Low-stock guidance when pantry is nearly empty
+  var inStockCount = pantry.filter(inStock).length;
+  if (inStockCount > 0 && inStockCount <= 5) {
+    att.innerHTML += '<div class="empty-card" style="margin-top:var(--s4);"><strong>Supplies running low</strong>' +
+      '<span>Only ' + inStockCount + ' item' + (inStockCount === 1 ? '' : 's') + ' left. Add your food items with the <b>+</b> button or scan a receipt.</span></div>';
+  }
 
   zones.innerHTML = ZONES.map(function(z) {
     var items = pantry.filter(function(e) { return e.zone === z.key; })
@@ -1110,9 +1144,13 @@ function acceptMeal(idx) {
 
   closeDetail();
   renderAll();
-  showToast(entry.unmeasured.length
-    ? '✅ Cooked. ' + entry.unmeasured.join(', ') + ' had no amount recorded, so check it in Pantry.'
-    : '✅ Cooked — ingredients deducted from your pantry.');
+  var undoIdx = idx;
+  showToast(
+    entry.unmeasured.length
+      ? '✅ Cooked. ' + entry.unmeasured.join(', ') + ' — check amount in Pantry.'
+      : '✅ Cooked — ingredients deducted.',
+    { label:'Undo', fn:function(){ undoAccept(undoIdx); } }
+  );
 }
 
 // Ingredients a meal used that couldn't be drawn down because no quantity is on record.
@@ -1208,6 +1246,20 @@ function enforceDiet() {
   renderAll();
   return { swapped:swapped, stuck:stuck };
 }
+
+// Replaces any pending weekday meal over its time limit (a plan saved before the limits, or a day
+// built while catching up) with the best one within it. Left alone when nothing quicker fits.
+function enforceTimes() {
+  var changed = 0;
+  plan.forEach(function(entry, idx) {
+    var day = Math.floor(idx / 3), r = recipeById(entry.recipe);
+    if (entry.status !== 'pending' || entry.dietBlocked || !r || fitsTime(r, day)) return;
+    var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
+    var pick = pickRecipe(r.type, day, reservationsExcept(idx), others);
+    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; changed++; }
+  });
+  return changed;
+}
 // ═══════════════ SETTINGS SUB-SCREENS ═══════════════
 function openSub(which) {
   var title = '', body = '';
@@ -1269,7 +1321,7 @@ function openSub(which) {
   if (which === 'about') {
     title = 'About What the Fridge';
     body =
-      '<div style="text-align:center;margin:var(--s8) 0;"><img src="logo-setup.webp" alt="What the Fridge" style="height:80px;width:auto;"></div>' +
+      '<div style="text-align:center;margin:var(--s8) 0;"><img src="logo-setup-t.webp" alt="What the Fridge" style="height:120px;width:auto;"></div>' +
       '<p class="sub-intro" style="font-size:15px;line-height:1.6;">What the Fridge plans three days of breakfast, lunch and dinner around the food already in your kitchen, ' +
       'so nothing expires forgotten and you always know what\'s for dinner.</p>' +
       '<div class="note-card" style="margin-top:var(--s6);">' +
@@ -1286,6 +1338,37 @@ function openSub(which) {
       '</div>';
   }
 
+  if (which === 'feedback') {
+    title = 'Send feedback';
+    body =
+      '<p class="sub-intro">Help us improve What the Fridge! Your feedback goes directly to the development team.</p>' +
+      '<div class="note-card" style="margin-bottom:var(--s6);">' +
+        '<strong>Quick feedback</strong><br>' +
+        'Tap the button below to open our short survey. It takes about 2 minutes and covers ease of use, meal planning, and feature requests.' +
+      '</div>' +
+      '<a class="btn primary" href="https://forms.gle/WTF_FEEDBACK_PLACEHOLDER" target="_blank" rel="noopener" ' +
+        'style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;justify-content:center;width:100%;">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;">' +
+          '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
+        '</svg>' +
+        'Open feedback survey' +
+      '</a>' +
+      '<div style="margin-top:var(--s8);padding-top:var(--s6);border-top:1px solid var(--border);">' +
+        '<p class="sub-intro" style="margin-bottom:var(--s4);">Or email us directly:</p>' +
+        '<a class="btn ghost" href="mailto:wtf.bus860.group3@gmail.com?subject=What%20the%20Fridge%20Feedback" ' +
+          'style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;justify-content:center;width:100%;">' +
+          'Send email feedback' +
+        '</a>' +
+      '</div>' +
+      '<div class="note-card" style="margin-top:var(--s6);">' +
+        '<strong>What we\'re looking for</strong><br>' +
+        '&bull; How easy is it to add food and plan meals?<br>' +
+        '&bull; Are the recipe suggestions useful?<br>' +
+        '&bull; What features would you add?<br>' +
+        '&bull; Any bugs or confusing screens?' +
+      '</div>';
+  }
+
   if (which === 'receipt') {
     title = 'Upload receipt';
     body =
@@ -1298,7 +1381,7 @@ function openSub(which) {
           '</svg>' +
           '<span>Tap to take a photo<br>or choose from camera roll</span>' +
         '</label>' +
-        '<input type="file" id="receiptFile" accept="image/*" capture="environment" style="display:none;" onchange="handleReceiptFile(this)">' +
+        '<input type="file" id="receiptFile" accept="image/*" style="display:none;" onchange="handleReceiptFile(this)">' +
       '</div>' +
       '<div id="receiptStatus" style="display:none;"></div>' +
       '<div id="receiptResults" style="display:none;"></div>';
@@ -1360,12 +1443,22 @@ function switchTab(tabId) {
   closeSub();
 }
 
-function showToast(msg) {
+function showToast(msg, action) {
   var toast = document.getElementById('toast');
-  toast.textContent = msg;
+  toast.innerHTML = '';
+  var span = document.createElement('span');
+  span.textContent = msg;
+  toast.appendChild(span);
+  if (action) {
+    var btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.onclick = function(e) { e.stopPropagation(); clearTimeout(toast._t); toast.classList.remove('show'); action.fn(); };
+    toast.appendChild(btn);
+  }
   toast.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(function() { toast.classList.remove('show'); }, 2600);
+  toast._t = setTimeout(function() { toast.classList.remove('show'); }, action ? 5000 : 2600);
 }
 
 function toggleAlloc() {
@@ -2093,7 +2186,7 @@ function renderSetup() {
   var dots = '<div class="setup-dots">' + [1,2,3].map(function(n) { return '<i class="' + (n === setupStep ? 'on' : '') + '"></i>'; }).join('') + '</div>';
   if (setupStep === 1) {
     el.innerHTML = dots +
-      '<div class="setup-mark"><img src="logo-setup.webp" alt="What the Fridge"></div>' +
+      '<div class="setup-mark"><img src="logo-setup-t.webp" alt="What the Fridge"></div>' +
       '<h2>What the Fridge</h2>' +
       '<p class="setup-lede">Three days of breakfast, lunch and dinner, planned around what\'s already in your kitchen. Less "what are we eating?", less forgotten spinach.</p>' +
       '<div class="field-label">What should we call you? <span>optional</span></div>' +
@@ -2192,6 +2285,7 @@ function catchUp() {
   if (missed > 0) {
     var start = parseKey(lastSeen);
     for (var i = 0; i < Math.min(missed, 3); i++) { rollDay(addDays(start, i)); }
+    enforceTimes();   // days rolled in during catch-up were planned against the wrong weekday
   }
   lastSeen = todayKey();
   return Math.max(missed, 0);
@@ -2237,6 +2331,7 @@ function startOver() {
 
 var returning = loadState();
 if (plan.length !== 9) { planKitchen(plan.length > 0); }
+else { enforceTimes(); }
 renderAll();
 if (!returning) { showSetup(); }
 scheduleMidnight();
