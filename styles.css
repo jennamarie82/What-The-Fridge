@@ -787,6 +787,17 @@ footer {
 .as-written .aw-line { font-size:13px; padding:6px 0; border-bottom:1px solid var(--border); line-height:1.4; }
 .as-written .aw-line:last-child { border-bottom:none; }
 .method-tip { font-weight:500; text-transform:none; letter-spacing:0; margin-left:4px; }
+.nutrition-card {
+  background:var(--white); border-radius:var(--r);
+  padding:var(--s6) var(--s8); box-shadow:0 1px 3px var(--shadow);
+}
+.nut-kcal { font-size:13px; color:var(--ink-soft); padding-bottom:var(--s6); border-bottom:1px solid var(--border); }
+.nut-kcal b { font-size:24px; font-weight:800; color:var(--ink); margin-right:2px; }
+.nut-grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:var(--s4); padding-top:var(--s6); }
+.nut-cell { text-align:center; min-width:0; }
+.nut-val { font-size:15px; font-weight:700; color:var(--ink); }
+.nut-val span { font-size:11px; font-weight:600; color:var(--ink-soft); margin-left:1px; }
+.nut-label { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-soft); margin-top:2px; }
 .method { list-style:none; display:flex; flex-direction:column; gap:var(--s4); margin-bottom:var(--s8); }
 .method li {
   display:flex; gap:var(--s6); align-items:flex-start;
