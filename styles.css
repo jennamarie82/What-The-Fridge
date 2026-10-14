@@ -892,3 +892,27 @@ footer {
   margin:var(--s6) 0; font-size:14px;
 }
 .receipt-img-preview { max-width:100%; border-radius:var(--r8); margin:var(--s4) 0; }
+
+/* Receipt correction UI */
+.receipt-item.unmatched { opacity:1; border-left:3px solid var(--amber); }
+.btn-pick {
+  font-size:12px; padding:3px 10px; border-radius:10px;
+  border:1px solid var(--amber); background:rgba(245,166,35,0.08); color:var(--ink);
+  cursor:pointer; margin-top:2px;
+}
+.btn-pick:active { background:rgba(245,166,35,0.2); }
+.ri-conf.manual { background:var(--leaf); color:#fff; }
+.ing-picker { margin-top:4px; }
+.ing-picker-list {
+  max-height:180px; overflow-y:auto; border:1px solid var(--border);
+  border-radius:var(--r8); background:var(--card);
+}
+.ing-picker-row {
+  padding:8px 10px; font-size:13px; cursor:pointer;
+  border-bottom:1px solid var(--border);
+}
+.ing-picker-row:last-child { border-bottom:none; }
+.ing-picker-row:active { background:rgba(76,175,80,0.12); }
+.ing-picker-more {
+  padding:6px 10px; font-size:11px; color:var(--ink-soft); text-align:center;
+}
