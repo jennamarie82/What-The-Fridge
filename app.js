@@ -38,19 +38,82 @@ function newEntryId() { return 'p' + Date.now().toString(36) + Math.random().toS
 // and no date on purpose, to show how the app treats what it doesn't know.
 function samplePantry() {
   // Units are the ones the recipes mostly use, so amounts can be compared.
+  // ~100 everyday items across all zones for a realistic demo kitchen.
+  // [ingredient-id, zone, quantity, unit, days-since-purchase]
   var rows = [
-    ['eggs','fridge',12,'ea',4],          ['spinach','fridge',6,'cup',3],        ['chicken-breast','fridge',1.5,'lb',1],
-    ['asparagus','fridge',1,'bunch',3],   ['shrimp','fridge',1,'lb',1],          ['lemon','fridge',2,'ea',4],
-    ['cucumber','fridge',1,'ea',2],       ['cherry-tomatoes','cupboard',2,'cup',3], ['cooked-rice','fridge',3,'cup',2],
-    ['greek-yogurt','fridge',2,'cup',2],  ['milk','fridge',4,'cup',3],           ['mozzarella','fridge',8,'oz',3],
-    ['salsa','fridge',2,'cup',6],         ['cheese','fridge',2,'cup',6],         ['feta','fridge',null,null,null],
-    ['parmesan','fridge',1,'cup',10],     ['carrot','fridge',1,'lb',5],          ['berries','freezer',2,'cup',8],
-    ['frozen-veg','freezer',4,'cup',20],  ['avocado','cupboard',2,'ea',4],       ['bananas','cupboard',3,'ea',2],
-    ['buns','cupboard',4,'ea',2],         ['red-onion','cupboard',1,'ea',4],     ['onion','cupboard',3,'ea',6],
-    ['tomatoes','cupboard',3,'ea',2],     ['flour-tortillas','cupboard',6,'ea',5], ['oats','cupboard',5,'cup',20],
-    ['peanut-butter','cupboard',32,'tbsp',30], ['chickpeas','cupboard',2,'can',40], ['black-beans','cupboard',2,'can',40],
-    ['pasta','cupboard',1,'lb',25],       ['pork-chops','fridge',4,'ea',1],      ['bell-pepper','fridge',2,'ea',3],
-    ['quinoa','cupboard',2,'cup',30],     ['corn','cupboard',3,'cup',40]
+    // ── Proteins ──
+    ['eggs','fridge',12,'ea',4],             ['chicken-breast','fridge',1.5,'lb',1],
+    ['chicken-thighs','fridge',1.5,'lb',1],  ['ground-beef','fridge',1,'lb',1],
+    ['ground-turkey','fridge',1,'lb',1],     ['pork-chops','fridge',4,'ea',1],
+    ['salmon','fridge',1,'lb',1],            ['shrimp','fridge',1,'lb',1],
+    ['bacon','fridge',8,'slice',5],          ['sausage','fridge',4,'ea',2],
+    ['ham','fridge',0.5,'lb',3],             ['deli-turkey','fridge',0.5,'lb',3],
+    ['tofu','fridge',1,'package',5],         ['canned-tuna','cupboard',2,'can',60],
+
+    // ── Dairy ──
+    ['milk','fridge',4,'cup',3],             ['greek-yogurt','fridge',2,'cup',2],
+    ['yogurt','fridge',2,'cup',4],           ['cheese','fridge',2,'cup',6],
+    ['cheddar','fridge',2,'cup',10],         ['mozzarella','fridge',8,'oz',3],
+    ['parmesan','fridge',1,'cup',10],        ['feta','fridge',null,null,null],
+    ['cream-cheese','fridge',8,'oz',7],      ['sour-cream','fridge',1,'cup',5],
+    ['heavy-cream','fridge',1,'cup',3],      ['buttermilk','fridge',2,'cup',6],
+
+    // ── Produce (fridge) ──
+    ['spinach','fridge',6,'cup',3],          ['kale','fridge',4,'cup',2],
+    ['lettuce','fridge',1,'head',2],         ['broccoli','fridge',1,'head',2],
+    ['cauliflower','fridge',1,'head',3],     ['asparagus','fridge',1,'bunch',3],
+    ['bell-pepper','fridge',2,'ea',3],       ['carrot','fridge',1,'lb',5],
+    ['celery','fridge',1,'bunch',4],         ['cucumber','fridge',1,'ea',2],
+    ['zucchini','fridge',2,'ea',2],          ['mushrooms','fridge',8,'oz',2],
+    ['green-beans','fridge',1,'lb',3],       ['green-onion','fridge',1,'bunch',3],
+    ['cabbage','fridge',1,'head',4],         ['corn-cob','fridge',4,'ea',1],
+    ['lemon','fridge',2,'ea',4],             ['lime','fridge',2,'ea',5],
+    ['apples','fridge',4,'ea',5],            ['strawberries','fridge',1,'cup',2],
+    ['grapes','fridge',2,'cup',4],           ['orange','fridge',3,'ea',6],
+    ['cooked-rice','fridge',3,'cup',2],
+
+    // ── Fresh herbs ──
+    ['cilantro','fridge',1,'bunch',2],       ['basil','fridge',1,'bunch',2],
+    ['parsley','fridge',1,'bunch',3],
+
+    // ── Produce (counter / cupboard) ──
+    ['avocado','cupboard',2,'ea',4],         ['bananas','cupboard',3,'ea',2],
+    ['tomatoes','cupboard',3,'ea',2],        ['cherry-tomatoes','cupboard',2,'cup',3],
+    ['onion','cupboard',3,'ea',6],           ['red-onion','cupboard',1,'ea',4],
+    ['potatoes','cupboard',5,'ea',6],        ['sweet-potato','cupboard',3,'ea',5],
+    ['pineapple','cupboard',1,'ea',2],       ['mango','cupboard',2,'ea',3],
+
+    // ── Bread & bakery ──
+    ['bread','cupboard',1,'package',3],      ['buns','cupboard',4,'ea',2],
+    ['flour-tortillas','cupboard',6,'ea',5], ['pita','cupboard',4,'ea',7],
+    ['bagels','cupboard',4,'ea',4],          ['english-muffins','cupboard',4,'ea',5],
+
+    // ── Canned & dry goods ──
+    ['pasta','cupboard',1,'lb',25],          ['rice','cupboard',4,'cup',30],
+    ['brown-rice','cupboard',2,'cup',25],    ['quinoa','cupboard',2,'cup',30],
+    ['oats','cupboard',5,'cup',20],          ['egg-noodles','cupboard',1,'package',35],
+    ['rice-noodles','cupboard',1,'package',45],
+    ['chickpeas','cupboard',2,'can',40],     ['black-beans','cupboard',2,'can',40],
+    ['kidney-beans','cupboard',2,'can',50],  ['lentils','cupboard',2,'cup',60],
+    ['canned-tomatoes','cupboard',2,'can',45],['tomato-paste','cupboard',1,'can',30],
+    ['marinara','cupboard',1,'jar',20],      ['coconut-milk','cupboard',1,'can',30],
+    ['corn','cupboard',3,'cup',40],          ['breadcrumbs','cupboard',2,'cup',40],
+    ['peanut-butter','cupboard',32,'tbsp',30],
+
+    // ── Frozen ──
+    ['frozen-veg','freezer',4,'cup',20],     ['berries','freezer',2,'cup',8],
+    ['peas','freezer',2,'cup',15],           ['edamame','freezer',2,'cup',12],
+    ['frozen-fries','freezer',1,'lb',20],
+
+    // ── Condiments & sauces ──
+    ['salsa','fridge',2,'cup',6],            ['ketchup','fridge',1,'cup',30],
+    ['mustard','fridge',0.5,'cup',30],       ['mayonnaise','fridge',1,'cup',20],
+    ['bbq-sauce','fridge',1,'cup',15],       ['hoisin','fridge',0.5,'cup',20],
+    ['hummus','fridge',1,'cup',5],           ['pickles','fridge',1,'jar',25],
+    ['olives','cupboard',1,'jar',30],
+
+    // ── Nuts & seeds ──
+    ['almonds','cupboard',1,'cup',20],       ['walnuts','cupboard',1,'cup',20]
   ];
   return rows.map(function(r) {
     return { id:newEntryId(), ing:r[0], zone:r[1], qty:r[2], unit:r[3],
@@ -1346,7 +1409,7 @@ function openSub(which) {
         '<strong>Quick feedback</strong><br>' +
         'Tap the button below to open our short survey. It takes about 2 minutes and covers ease of use, meal planning, and feature requests.' +
       '</div>' +
-      '<a class="btn primary" href="https://forms.gle/WTF_FEEDBACK_PLACEHOLDER" target="_blank" rel="noopener" ' +
+      '<a class="btn primary" href="https://forms.gle/qspYBKgNkMjJNLwv8" target="_blank" rel="noopener" ' +
         'style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;justify-content:center;width:100%;">' +
         '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;flex-shrink:0;">' +
           '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
@@ -2013,6 +2076,174 @@ function parseReceiptText(text) {
   });
 }
 
+// ── Receipt abbreviation dictionary ──
+// Maps common Canadian grocery receipt abbreviations to ingredient IDs.
+// Covers Superstore, Walmart, No Frills, Sobeys, Save-On, Independent, etc.
+var RECEIPT_ABBR = {
+  // Proteins
+  'bnls cken brst':'chicken-breast','bnls chkn brst':'chicken-breast','cken brst':'chicken-breast',
+  'chkn brst':'chicken-breast','chk brst':'chicken-breast','chicken br':'chicken-breast',
+  'cken thgh':'chicken-thighs','chkn thgh':'chicken-thighs','chicken th':'chicken-thighs',
+  'cken drm':'chicken-drumsticks','chkn drum':'chicken-drumsticks',
+  'cken wngs':'chicken-wings','chkn wings':'chicken-wings',
+  'gr bf':'ground-beef','grnd bf':'ground-beef','grnd beef':'ground-beef','ground bf':'ground-beef',
+  'gr bf ln':'ground-beef','lean gr bf':'ground-beef','x ln gr bf':'ground-beef',
+  'gr trky':'ground-turkey','grnd turk':'ground-turkey','grnd turkey':'ground-turkey',
+  'gr pork':'ground-pork','grnd pork':'ground-pork',
+  'pork chp':'pork-chops','prk chp':'pork-chops','pork loin chp':'pork-chops',
+  'pork loin':'pork','prk loin':'pork',
+  'bf steak':'beef-steak','bf strp':'beef-steak','bf sirloin':'beef-steak','bf ribeye':'beef-steak',
+  'bf roast':'beef-roast','bf stew':'beef-roast',
+  'bf saus':'sausage','pork saus':'sausage','ital saus':'sausage',
+  'smk saus':'smoked-sausage','smoked saus':'smoked-sausage',
+  'trky saus':'turkey-sausage',
+  'deli trky':'deli-turkey','deli turk':'deli-turkey','slcd turkey':'deli-turkey',
+  'cdn bacon':'canadian-bacon','can bacon':'canadian-bacon','back bacon':'canadian-bacon',
+  'shlls shrimp':'shrimp','shrimp rw':'shrimp','frz shrimp':'shrimp','shrimp raw':'shrimp',
+  'salmn flt':'salmon','salmn filt':'salmon','atlntc salmn':'salmon','atlantic sal':'salmon',
+  'wht fish':'white-fish','cod filt':'white-fish','tilapia':'white-fish','haddock':'white-fish',
+  'cnd tuna':'canned-tuna','tuna chnk':'canned-tuna','tuna lt':'canned-tuna',
+
+  // Dairy
+  'mlk 2%':'milk','mlk 1%':'milk','milk 2%':'milk','homo mlk':'milk','skim mlk':'milk',
+  'whl mlk':'milk','milk homo':'milk','2% milk':'milk','1% milk':'milk',
+  'grk yog':'greek-yogurt','grk yogurt':'greek-yogurt','greek yog':'greek-yogurt',
+  'yogrt':'yogurt','yog':'yogurt','yogurt':'yogurt',
+  'chs shred':'cheese','shrd chs':'cheese','shredded ch':'cheese',
+  'cheddr':'cheddar','ched chs':'cheddar','cheddar ch':'cheddar',
+  'mozza':'mozzarella','mozz':'mozzarella','mozzarella':'mozzarella',
+  'parm':'parmesan','parmesan':'parmesan','parm reg':'parmesan',
+  'cream chs':'cream-cheese','crm chs':'cream-cheese','philly':'cream-cheese',
+  'sr cream':'sour-cream','sour crm':'sour-cream',
+  'hvy cream':'heavy-cream','whp cream':'heavy-cream','heavy crm':'heavy-cream',
+  'bttr':'butter','butter':'butter','marg':'butter',
+  'eggs dz':'eggs','eggs lrg':'eggs','eggs xl':'eggs','lrg eggs':'eggs','free rng eggs':'eggs',
+
+  // Produce
+  'banan':'bananas','bananas org':'bananas','bnna':'bananas',
+  'avocdo':'avocado','avocados':'avocado','hass avo':'avocado',
+  'broccli':'broccoli','brcli':'broccoli','broc crwn':'broccoli',
+  'crrts':'carrot','carrots':'carrot','crrt':'carrot','baby crrt':'carrot',
+  'potatos':'potatoes','russet pot':'potatoes','yel pot':'potatoes','pot 5lb':'potatoes',
+  'swt pot':'sweet-potato','swt potato':'sweet-potato','sweet pot':'sweet-potato',
+  'bll ppr':'bell-pepper','grn ppr':'bell-pepper','red ppr':'bell-pepper','bell pep':'bell-pepper',
+  'tomato':'tomatoes','tomatoe':'tomatoes','roma tom':'tomatoes','vine tom':'tomatoes',
+  'chry tom':'cherry-tomatoes','grape tom':'cherry-tomatoes','cherry tom':'cherry-tomatoes',
+  'cucumbr':'cucumber','cuke':'cucumber','eng cuke':'cucumber',
+  'spnch':'spinach','baby spnch':'spinach','spinach org':'spinach',
+  'lettce':'lettuce','romaine':'lettuce','iceberg':'lettuce','rom hearts':'lettuce',
+  'celry':'celery','clry':'celery',
+  'mushrooms':'mushrooms','mushrm':'mushrooms','wht mushrm':'mushrooms','button mush':'mushrooms',
+  'onion ylw':'onion','onions':'onion','ylw onion':'onion','cooking onion':'onion',
+  'red onion':'red-onion','rd onion':'red-onion',
+  'grn onion':'green-onion','green onion':'green-onion','scallion':'green-onion',
+  'grlc':'garlic','garlic':'garlic',
+  'gngr':'ginger','ginger rt':'ginger','fresh ginger':'ginger',
+  'lemon':'lemon','lemons':'lemon',
+  'lime':'lime','limes':'lime',
+  'apple':'apples','apples':'apples','gala apple':'apples','fuji apple':'apples',
+  'orange':'orange','oranges':'orange','navel org':'orange',
+  'strawb':'strawberries','strawberry':'strawberries','straw org':'strawberries',
+  'bluebrry':'blueberries','blueberry':'blueberries','blubry':'blueberries',
+  'grapes':'grapes','grape grn':'grapes','grape rd':'grapes',
+  'corn cob':'corn-cob','corn ears':'corn-cob',
+  'zucchni':'zucchini','zucch':'zucchini',
+  'cabbage':'cabbage','cbbg':'cabbage','grn cabbage':'cabbage',
+  'kale':'kale','kale org':'kale',
+  'grn beans':'green-beans','green bean':'green-beans',
+  'asparagus':'asparagus','asprgus':'asparagus',
+
+  // Bakery & bread
+  'bread wht':'bread','bread ww':'bread','slcd bread':'bread',
+  'buns hmbgr':'buns','hmbrg buns':'buns','hotdog buns':'buns','buns hd':'buns',
+  'eng muffn':'english-muffins','eng muffins':'english-muffins',
+  'bagels':'bagels','bgls':'bagels',
+  'tortilla flr':'flour-tortillas','flr tortilla':'flour-tortillas','wraps':'flour-tortillas',
+  'tortilla crn':'corn-tortillas','crn tortilla':'corn-tortillas',
+  'pita':'pita','pita brd':'pita','naan':'pita',
+
+  // Canned & dry goods
+  'chkpeas':'chickpeas','chickpeas':'chickpeas','garbanzo':'chickpeas',
+  'blk beans':'black-beans','black bean':'black-beans',
+  'kdny beans':'kidney-beans','kidney bean':'kidney-beans',
+  'wht beans':'white-beans','cannellini':'white-beans',
+  'ref beans':'refried-beans','refried bn':'refried-beans',
+  'lentils':'lentils','lntls':'lentils',
+  'dcd tomato':'canned-tomatoes','cnd tomato':'canned-tomatoes','tomato dcd':'canned-tomatoes',
+  'tom paste':'tomato-paste','tomato pst':'tomato-paste',
+  'marinara':'marinara','pasta sce':'marinara','pizza sce':'marinara',
+  'pasta spag':'pasta','spaghetti':'pasta','penne':'pasta','macaroni':'pasta','rigatoni':'pasta',
+  'rice wht':'rice','rice lng':'rice','basmati':'rice','jasmine rice':'rice',
+  'brn rice':'brown-rice','brown rice':'brown-rice',
+  'quinoa':'quinoa',
+  'oats':'oats','rolled oats':'oats','qk oats':'oats','instant oat':'oats',
+  'pb':'peanut-butter','pnt bttr':'peanut-butter','peanut btr':'peanut-butter',
+  'crnmeal':'cornmeal','grits':'cornmeal',
+
+  // Frozen
+  'frz veg':'frozen-veg','frozen veg':'frozen-veg','frz mix veg':'frozen-veg',
+  'frz berries':'berries','frz berry':'berries','frz fruit':'fresh-fruit',
+  'frz fries':'frozen-fries','french fry':'frozen-fries','frz fry':'frozen-fries',
+
+  // Condiments & sauces
+  'ketchup':'ketchup','ktchp':'ketchup',
+  'mayo':'mayonnaise','mayonnaise':'mayonnaise',
+  'mustard':'mustard','mustrd':'mustard','yellow mstrd':'mustard',
+  'soy sauce':'soy-sauce','soy sce':'soy-sauce',
+  'hot sauce':'hot-sauce','hot sce':'hot-sauce','sriracha':'hot-sauce',
+  'bbq sauce':'bbq-sauce','bbq sce':'bbq-sauce',
+  'salsa':'salsa','salsa med':'salsa','salsa mld':'salsa',
+  'hoisin':'hoisin','hoisin sce':'hoisin',
+  'teriyaki':'teriyaki','teriyaki sce':'teriyaki',
+  'enchilada':'enchilada-sauce','ench sce':'enchilada-sauce',
+  'hummus':'hummus','hmms':'hummus',
+
+  // Baking & staples
+  'flour ap':'flour','all purp fl':'flour','flour':'flour',
+  'sugar wht':'sugar','sugar':'sugar','granulated':'sugar',
+  'brn sugar':'brown-sugar','brown sug':'brown-sugar',
+  'bkng pwdr':'baking-powder','baking pwd':'baking-powder',
+  'bkng soda':'baking-soda','baking sda':'baking-soda',
+  'veg oil':'vegetable-oil','canola oil':'vegetable-oil','cooking oil':'vegetable-oil',
+  'olive oil':'olive-oil','olv oil':'olive-oil','evoo':'olive-oil',
+  'coconut ml':'coconut-milk','coco milk':'coconut-milk',
+  'maple syr':'maple-syrup','maple syrup':'maple-syrup',
+  'honey':'honey','liquid hny':'honey',
+  'vanilla':'vanilla','vanilla ext':'vanilla',
+  'cornstrch':'cornstarch','corn strch':'cornstarch',
+  'chkn brth':'chicken-broth','chicken br':'chicken-broth','chk broth':'chicken-broth',
+  'bf broth':'beef-broth','beef brth':'beef-broth',
+  'veg broth':'vegetable-broth','veg brth':'vegetable-broth',
+
+  // Snacks & misc
+  'tort chips':'tortilla-chips','tortilla ch':'tortilla-chips','nachos':'tortilla-chips',
+  'granola':'granola','granola bar':'granola',
+  'chips':'tortilla-chips',
+  'pickles':'pickles','dill pckl':'pickles',
+  'olives':'olives','blk olives':'olives','grn olives':'olives',
+  'tofu':'tofu','firm tofu':'tofu','extra firm':'tofu',
+  'edamame':'edamame'
+};
+
+// ── Levenshtein distance (edit distance) ──
+function levenshtein(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  var prev = [], curr = [], i, j;
+  for (j = 0; j <= b.length; j++) prev[j] = j;
+  for (i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (j = 1; j <= b.length; j++) {
+      curr[j] = a[i-1] === b[j-1]
+        ? prev[j-1]
+        : 1 + Math.min(prev[j-1], prev[j], curr[j-1]);
+    }
+    var tmp = prev; prev = curr; curr = tmp;
+  }
+  return prev[b.length];
+}
+
 function matchReceiptLine(line) {
   // Strip prices, weights, quantities to isolate the product name
   var cleaned = line
@@ -2023,10 +2254,35 @@ function matchReceiptLine(line) {
 
   if (!cleaned || cleaned.length < 2) return null;
 
+  // ── PASS 1: abbreviation dictionary lookup ──
+  // Try exact match first, then every 2- and 3-word window in the cleaned text
+  if (RECEIPT_ABBR[cleaned]) {
+    var abbrIng = ingById(RECEIPT_ABBR[cleaned]);
+    if (abbrIng) return { id:abbrIng.id, name:abbrIng.name, exact:true };
+  }
+  var cWords = cleaned.split(' ');
+  for (var w = 3; w >= 2; w--) {
+    for (var s = 0; s <= cWords.length - w; s++) {
+      var phrase = cWords.slice(s, s + w).join(' ');
+      if (RECEIPT_ABBR[phrase]) {
+        var phIng = ingById(RECEIPT_ABBR[phrase]);
+        if (phIng) return { id:phIng.id, name:phIng.name, exact:true };
+      }
+    }
+  }
+  // Also try each single word (for items like "bananas", "tofu")
+  for (var sw = 0; sw < cWords.length; sw++) {
+    if (cWords[sw].length >= 4 && RECEIPT_ABBR[cWords[sw]]) {
+      var swIng = ingById(RECEIPT_ABBR[cWords[sw]]);
+      if (swIng) return { id:swIng.id, name:swIng.name, exact:true };
+    }
+  }
+
+  // ── PASS 2: direct matching (existing logic, improved) ──
   var best = null, bestScore = 0;
 
   INGREDIENTS.forEach(function(ing) {
-    if (ing.staple) return;  // staples are assumed on-hand
+    if (ing.staple) return;
     var name = ing.name.toLowerCase();
     var score = 0;
 
@@ -2038,17 +2294,36 @@ function matchReceiptLine(line) {
     else if (name.indexOf(cleaned) > -1 && cleaned.length >= 3) { score = 60; }
     // Regex alias match from the recipe file
     else if (ING_RX[ing.id] && ING_RX[ing.id].test(cleaned)) { score = 70; }
-    // Word-overlap fallback
+    // Word-overlap with partial-word fuzzy matching
     else {
       var words = cleaned.split(' ').filter(function(w) { return w.length > 2; });
       if (words.length) {
         var nameWords = name.split(/[\s,]+/);
         var hits = words.filter(function(w) {
-          return nameWords.some(function(nw) { return nw.indexOf(w) > -1 || w.indexOf(nw) > -1; });
+          return nameWords.some(function(nw) {
+            if (nw.indexOf(w) > -1 || w.indexOf(nw) > -1) return true;
+            // Fuzzy: allow 1-2 edit distance for words >= 4 chars
+            if (w.length >= 4 && nw.length >= 4) {
+              var dist = levenshtein(w, nw);
+              return dist <= (w.length >= 6 ? 2 : 1);
+            }
+            return false;
+          });
         });
         if (hits.length > 0 && hits.length >= Math.ceil(Math.min(words.length, nameWords.length) * 0.5)) {
           score = 30 + Math.round(hits.length / Math.max(words.length, nameWords.length) * 30);
         }
+      }
+    }
+
+    // ── PASS 3: whole-string fuzzy match (Levenshtein) ──
+    if (score < 50 && cleaned.length >= 4 && name.length >= 4) {
+      var dist = levenshtein(cleaned, name);
+      var maxLen = Math.max(cleaned.length, name.length);
+      var similarity = 1 - dist / maxLen;
+      if (similarity >= 0.65) {
+        var fuzzyScore = Math.round(40 + similarity * 30);
+        if (fuzzyScore > score) { score = fuzzyScore; }
       }
     }
 
@@ -2078,8 +2353,8 @@ function renderReceiptReview() {
     html += '<div class="section-label" style="margin-top:0;">Matched items — review before adding</div>';
     matched.forEach(function(item, i) {
       var idx = receiptItems.indexOf(item);
-      var confClass = item.confidence === 'exact_match' ? 'exact' : 'probable';
-      var confLabel = item.confidence === 'exact_match' ? 'exact' : 'probable';
+      var confClass = item.confidence === 'exact_match' ? 'exact' : item.confidence === 'manual_match' ? 'manual' : 'probable';
+      var confLabel = item.confidence === 'exact_match' ? 'exact' : item.confidence === 'manual_match' ? 'you picked' : 'probable';
       html +=
         '<div class="receipt-item">' +
           '<div class="ri-check"><input type="checkbox"' + (item.include ? ' checked' : '') + ' onchange="toggleReceiptItem(' + idx + ',this.checked)"></div>' +
@@ -2096,17 +2371,33 @@ function renderReceiptReview() {
     });
   }
 
-  // Show non-food / unrecognized lines greyed out (visible but not checkable)
+  // Show non-food / unrecognized lines — unmatched ones get a correction picker
   var others = receiptItems.filter(function(r) { return !r.ing; });
   if (others.length) {
     html += '<div class="section-label">Other lines on the receipt</div>';
     others.forEach(function(item) {
-      var tag = item.confidence === 'non_food' ? 'non-food' : 'not matched';
-      html +=
-        '<div class="receipt-item greyed">' +
-          '<div class="ri-body"><div class="ri-raw">' + esc(item.raw) + '</div>' +
-          '<div style="font-size:11px;color:var(--ink-soft);">' + tag + '</div></div>' +
-        '</div>';
+      var idx = receiptItems.indexOf(item);
+      if (item.confidence === 'non_food') {
+        html +=
+          '<div class="receipt-item greyed">' +
+            '<div class="ri-body"><div class="ri-raw">' + esc(item.raw) + '</div>' +
+            '<div style="font-size:11px;color:var(--ink-soft);">non-food</div></div>' +
+          '</div>';
+      } else {
+        // Unmatched food line — let user pick the right ingredient
+        html +=
+          '<div class="receipt-item unmatched">' +
+            '<div class="ri-body">' +
+              '<div class="ri-raw">' + esc(item.raw) + '</div>' +
+              '<div style="font-size:11px;color:var(--amber);margin-bottom:4px;">not matched</div>' +
+              '<button class="btn-pick" onclick="openIngPicker(' + idx + ')">Pick ingredient &rarr;</button>' +
+              '<div class="ing-picker" id="ingPicker' + idx + '" style="display:none;">' +
+                '<input class="field" placeholder="Search ingredients…" oninput="filterIngPicker(' + idx + ',this.value)" style="margin:4px 0;">' +
+                '<div class="ing-picker-list" id="ingPickerList' + idx + '"></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      }
     });
   }
 
@@ -2174,6 +2465,49 @@ function confirmReceipt() {
 function resetReceipt() {
   receiptItems = [];
   openSub('receipt');
+}
+
+// ── Receipt correction: ingredient picker for unmatched lines ──
+function openIngPicker(idx) {
+  var el = document.getElementById('ingPicker' + idx);
+  if (!el) return;
+  var showing = el.style.display !== 'none';
+  // Close any other open pickers first
+  document.querySelectorAll('.ing-picker').forEach(function(p) { p.style.display = 'none'; });
+  if (showing) return;
+  el.style.display = 'block';
+  filterIngPicker(idx, '');
+  var inp = el.querySelector('input');
+  if (inp) inp.focus();
+}
+
+function filterIngPicker(idx, query) {
+  var listEl = document.getElementById('ingPickerList' + idx);
+  if (!listEl) return;
+  var q = (query || '').toLowerCase().trim();
+  var results = INGREDIENTS.filter(function(ing) {
+    if (ing.staple) return false;
+    if (!q) return true;
+    return ing.name.toLowerCase().indexOf(q) > -1 || ing.id.indexOf(q) > -1;
+  });
+  // Show at most 30 results to keep the list manageable
+  var shown = results.slice(0, 30);
+  listEl.innerHTML = shown.map(function(ing) {
+    return '<div class="ing-picker-row" onclick="assignReceiptIng(' + idx + ',\'' + ing.id + '\')">' + esc(ing.name) + '</div>';
+  }).join('') +
+  (results.length > 30 ? '<div class="ing-picker-more">' + (results.length - 30) + ' more — keep typing to narrow</div>' : '') +
+  (results.length === 0 ? '<div class="ing-picker-more">No matching ingredients</div>' : '');
+}
+
+function assignReceiptIng(idx, ingId) {
+  var ing = ingById(ingId);
+  if (!ing) return;
+  receiptItems[idx].ing = ingId;
+  receiptItems[idx].ingName = ing.name;
+  receiptItems[idx].confidence = 'manual_match';
+  receiptItems[idx].include = true;
+  receiptItems[idx].zone = ing.zone || 'fridge';
+  renderReceiptReview();
 }
 
 // ═══════════════ FIRST-TIME SETUP ═══════════════
