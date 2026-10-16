@@ -1822,15 +1822,6 @@ function renderItemScreen() {
     title.textContent = 'Add food';
     body.innerHTML =
       (justAdded.length ? '<div class="added-strip">✓ Added ' + esc(justAdded.join(', ')) + '. Add more, or tap Done.</div>' : '') +
-      '<label class="receipt-shortcut" for="pantryReceiptFile">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke="var(--leaf)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-          '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' +
-        '</svg>' +
-        '<span><b>Scan a receipt</b><small>Add several items at once from a photo. You check each one before it\'s added.</small></span>' +
-        '<span class="arrow">&rsaquo;</span>' +
-      '</label>' +
-      '<input type="file" id="pantryReceiptFile" accept="image/*" style="display:none;" onchange="receiptFromPantry(this)">' +
-      '<div class="or-divider"><span>or add one item</span></div>' +
       '<input class="field search" id="itemSearch" type="search" placeholder="Search: chicken, spinach, feta…" ' +
         'autocomplete="off" value="' + esc(draft.query) + '" oninput="draft.query=this.value;renderItemResults()">' +
       '<div id="itemResults"></div>' +
@@ -1989,7 +1980,15 @@ function openReceipt(from) {
   if (receiptBack === 'Pantry' && currentTab !== 'pantryTab') { switchTab('pantryTab'); }
   openSub('receipt');
 }
-// "Scan a receipt" on Add food goes straight to the camera, then reads the photo on the
+// The + button offers two ways in: scan a receipt (straight to the camera) or add manually.
+function openAddSheet() {
+  closeDetail();
+  document.getElementById('addSheet').classList.add('open');
+}
+function closeAddSheet() {
+  document.getElementById('addSheet').classList.remove('open');
+}
+// "Scan a receipt" from the + button goes straight to the camera, then reads the photo on the
 // receipt screen, so the review step is the same wherever the receipt came from.
 function receiptFromPantry(input) {
   if (!input.files || !input.files[0]) return;
