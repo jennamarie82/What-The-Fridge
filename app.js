@@ -975,7 +975,7 @@ function renderPantry() {
       '<span>Add your food items with the <b>+</b> button or scan a receipt.</span>' +
       '<div style="display:flex;gap:8px;margin-top:var(--s4);flex-wrap:wrap;">' +
         '<button class="btn primary small" onclick="openAddItem()" style="margin-top:0;">Add food</button>' +
-        '<button class="btn ghost small" onclick="switchTab(\'profileTab\');openSub(\'receipt\');" style="margin-top:0;">Scan receipt</button>' +
+        '<button class="btn ghost small" onclick="openReceipt(\'Pantry\')" style="margin-top:0;">Scan receipt</button>' +
       '</div></div>';
     zones.innerHTML = '';
     return;
@@ -1450,7 +1450,7 @@ function openSub(which) {
       '<div id="receiptResults" style="display:none;"></div>';
   }
 
-  document.getElementById('subBackLabel').textContent = 'Profile';
+  document.getElementById('subBackLabel').textContent = which === 'receipt' ? receiptBack : 'Profile';
   document.getElementById('subTitle').textContent = title;
   document.getElementById('subBody').innerHTML = body;
   document.getElementById('subScreen').classList.add('open');
@@ -1971,6 +1971,30 @@ function removeItem() {
 // Nothing enters the pantry without the user reviewing every line first.
 
 var receiptItems = [];   // extracted lines awaiting review
+var receiptBack = 'Profile';   // where the receipt screen's Back goes: Profile or Pantry
+
+// Opens the receipt screen from Profile or from the Pantry's Add food screen.
+function openReceipt(from) {
+  receiptBack = from || 'Profile';
+  receiptItems = [];
+  if (receiptBack === 'Pantry' && currentTab !== 'pantryTab') { switchTab('pantryTab'); }
+  openSub('receipt');
+}
+// The + button offers two ways in: scan a receipt (straight to the camera) or add manually.
+function openAddSheet() {
+  closeDetail();
+  document.getElementById('addSheet').classList.add('open');
+}
+function closeAddSheet() {
+  document.getElementById('addSheet').classList.remove('open');
+}
+// "Scan a receipt" from the + button goes straight to the camera, then reads the photo on the
+// receipt screen, so the review step is the same wherever the receipt came from.
+function receiptFromPantry(input) {
+  if (!input.files || !input.files[0]) return;
+  openReceipt('Pantry');
+  handleReceiptFile(input);
+}
 
 function handleReceiptFile(input) {
   if (!input.files || !input.files[0]) return;
@@ -2463,8 +2487,7 @@ function confirmReceipt() {
 }
 
 function resetReceipt() {
-  receiptItems = [];
-  openSub('receipt');
+  openReceipt(receiptBack);
 }
 
 // ── Receipt correction: ingredient picker for unmatched lines ──

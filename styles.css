@@ -849,6 +849,37 @@ footer {
   transition:border-color .2s, background .2s;
 }
 .receipt-label:active { border-color:var(--leaf); background:rgba(47,143,107,.06); }
+/* The + button's choice: scan a receipt or add manually */
+.add-sheet-backdrop {
+  position:absolute; top:0; left:0; right:0; bottom:0; z-index:57;
+  background:rgba(23,59,66,.35);
+  display:flex; align-items:flex-end;
+  opacity:0; pointer-events:none; transition:opacity .25s var(--ease);
+}
+.add-sheet-backdrop.open { opacity:1; pointer-events:auto; }
+.add-sheet {
+  width:100%; background:var(--cream);
+  border-radius:20px 20px 0 0; padding:var(--s8) var(--s8) calc(var(--s12) + env(safe-area-inset-bottom));
+  display:flex; flex-direction:column; gap:var(--s4);
+  transform:translateY(100%); transition:transform .3s var(--ease);
+}
+.add-sheet-backdrop.open .add-sheet { transform:translateY(0); }
+.add-sheet-title { font-size:17px; font-weight:700; color:var(--ink); margin-bottom:var(--s2); }
+.add-option {
+  display:flex; align-items:center; gap:var(--s6); width:100%;
+  padding:var(--s6) var(--s8); background:var(--white);
+  border:1px solid var(--border); border-radius:var(--r);
+  font-family:inherit; text-align:left; color:var(--ink); cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.add-option:active { background:var(--mint); border-color:var(--leaf-light); }
+.add-option svg { width:26px; height:26px; flex-shrink:0; stroke:var(--leaf); }
+.add-option b { display:block; font-size:15px; }
+.add-option small { display:block; font-size:12px; color:var(--ink-soft); line-height:1.4; margin-top:2px; }
+.add-sheet-cancel {
+  margin-top:var(--s2); padding:var(--s6); border:none; background:none;
+  font-family:inherit; font-size:14px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+}
 .receipt-progress {
   display:flex; align-items:center; gap:var(--s6);
   padding:var(--s8); font-size:14px;
