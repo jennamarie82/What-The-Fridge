@@ -975,7 +975,7 @@ function renderPantry() {
       '<span>Add your food items with the <b>+</b> button or scan a receipt.</span>' +
       '<div style="display:flex;gap:8px;margin-top:var(--s4);flex-wrap:wrap;">' +
         '<button class="btn primary small" onclick="openAddItem()" style="margin-top:0;">Add food</button>' +
-        '<button class="btn ghost small" onclick="switchTab(\'profileTab\');openSub(\'receipt\');" style="margin-top:0;">Scan receipt</button>' +
+        '<button class="btn ghost small" onclick="openReceipt(\'Pantry\')" style="margin-top:0;">Scan receipt</button>' +
       '</div></div>';
     zones.innerHTML = '';
     return;
@@ -1450,7 +1450,7 @@ function openSub(which) {
       '<div id="receiptResults" style="display:none;"></div>';
   }
 
-  document.getElementById('subBackLabel').textContent = 'Profile';
+  document.getElementById('subBackLabel').textContent = which === 'receipt' ? receiptBack : 'Profile';
   document.getElementById('subTitle').textContent = title;
   document.getElementById('subBody').innerHTML = body;
   document.getElementById('subScreen').classList.add('open');
@@ -1822,6 +1822,15 @@ function renderItemScreen() {
     title.textContent = 'Add food';
     body.innerHTML =
       (justAdded.length ? '<div class="added-strip">✓ Added ' + esc(justAdded.join(', ')) + '. Add more, or tap Done.</div>' : '') +
+      '<label class="receipt-shortcut" for="pantryReceiptFile">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="var(--leaf)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' +
+        '</svg>' +
+        '<span><b>Scan a receipt</b><small>Add several items at once from a photo. You check each one before it\'s added.</small></span>' +
+        '<span class="arrow">&rsaquo;</span>' +
+      '</label>' +
+      '<input type="file" id="pantryReceiptFile" accept="image/*" style="display:none;" onchange="receiptFromPantry(this)">' +
+      '<div class="or-divider"><span>or add one item</span></div>' +
       '<input class="field search" id="itemSearch" type="search" placeholder="Search: chicken, spinach, feta…" ' +
         'autocomplete="off" value="' + esc(draft.query) + '" oninput="draft.query=this.value;renderItemResults()">' +
       '<div id="itemResults"></div>' +
@@ -1971,6 +1980,22 @@ function removeItem() {
 // Nothing enters the pantry without the user reviewing every line first.
 
 var receiptItems = [];   // extracted lines awaiting review
+var receiptBack = 'Profile';   // where the receipt screen's Back goes: Profile or Pantry
+
+// Opens the receipt screen from Profile or from the Pantry's Add food screen.
+function openReceipt(from) {
+  receiptBack = from || 'Profile';
+  receiptItems = [];
+  if (receiptBack === 'Pantry' && currentTab !== 'pantryTab') { switchTab('pantryTab'); }
+  openSub('receipt');
+}
+// "Scan a receipt" on Add food goes straight to the camera, then reads the photo on the
+// receipt screen, so the review step is the same wherever the receipt came from.
+function receiptFromPantry(input) {
+  if (!input.files || !input.files[0]) return;
+  openReceipt('Pantry');
+  handleReceiptFile(input);
+}
 
 function handleReceiptFile(input) {
   if (!input.files || !input.files[0]) return;
@@ -2463,8 +2488,7 @@ function confirmReceipt() {
 }
 
 function resetReceipt() {
-  receiptItems = [];
-  openSub('receipt');
+  openReceipt(receiptBack);
 }
 
 // ── Receipt correction: ingredient picker for unmatched lines ──
