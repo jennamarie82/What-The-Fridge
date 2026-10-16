@@ -84,3 +84,7 @@ so the team can spot a line that was counted wrongly.
 Make changes on a branch, open a pull request, and merge once a teammate approves. GitHub Pages
 republishes about a minute after the merge. Code and data are fetched fresh on each open, so installed
 copies pick up changes on their own.
+
+For a release people need to see, change `APP_VERSION` at the top of `app.js` and the `?v=` number on
+the three files in `index.html`. The version shows under **Profile → About** and in the page footer,
+so anyone can check which build their phone is running.

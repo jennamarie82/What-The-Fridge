@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261016">
 </head>
 <body>
 
@@ -193,6 +193,7 @@
   What the Fridge &middot; BUS 860 Group 3 &middot; Phase A build &middot; plan around your own food, or look around with a sample kitchen.<br>
   Recipes from <i>Combined_Recipe_Database.md</i> (all 300 approved recipes, amounts as written).<br>
   Your plan, pantry and settings are saved in this browser only &mdash; nothing is sent anywhere.<br>
+  <span id="appVersion"></span><br>
   <span style="display:inline-block;margin-top:10px;">
     Demo controls (not part of the app):
     <button class="demo-btn" onclick="simulateMidnight()">Simulate midnight →</button>
@@ -201,7 +202,8 @@
   </span>
 </footer>
 
-<script src="recipes.js"></script>
-<script src="app.js"></script>
+<!-- ?v= makes every phone fetch the new files after a release; change it with APP_VERSION in app.js. -->
+<script src="recipes.js?v=20261016"></script>
+<script src="app.js?v=20261016"></script>
 </body>
 </html>

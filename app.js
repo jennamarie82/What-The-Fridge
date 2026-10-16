@@ -1,3 +1,7 @@
+// Shown in About and the page footer so anyone can tell which build their phone is running.
+// Change it with each release, together with ?v= on the files in index.html.
+var APP_VERSION = '2026-10-16 (nutrition per serving)';
+
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
   name: '',                       // what the app calls the user; blank is fine
@@ -1335,6 +1339,7 @@ function openSub(which) {
       '</div>' +
       '<div style="margin-top:var(--s8);color:var(--ink-soft);font-size:13px;line-height:1.5;text-align:center;">' +
         'BUS 860 · Group 3<br>University of Alberta' +
+        '<br><br>Version ' + APP_VERSION +
       '</div>';
   }
 
@@ -2329,6 +2334,8 @@ function startOver() {
   });
 })();
 
+var versionEl = document.getElementById('appVersion');
+if (versionEl) { versionEl.textContent = 'Version ' + APP_VERSION; }
 var returning = loadState();
 if (plan.length !== 9) { planKitchen(plan.length > 0); }
 else { enforceTimes(); }
