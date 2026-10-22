@@ -45,6 +45,13 @@ Everything is saved in your own browser (`localStorage`). Nothing is sent to a s
 person or device has its own copy. **Profile → Start over** clears it; **Load the sample kitchen**
 swaps in the demo food.
 
+The one exception is a receipt photo someone chooses to scan. It goes to the team's Cloudflare
+Worker (`worker/receipt-reader.js`), which asks Claude to read it and returns the items for review;
+nothing is stored. The Anthropic API key is a Cloudflare secret, never in this repository. The
+Worker only answers this site, and the Claude Console workspace's monthly spend limit caps the
+cost. If the Worker can't be reached, the app reads the receipt on the phone instead (Tesseract.js).
+To update the Worker, paste the file into the Worker's code editor in Cloudflare and click Deploy.
+
 Dietary filtering works on recipe-level tags. It is **not** allergy-safe.
 
 ## Files

@@ -1403,7 +1403,8 @@ function openSub(which) {
       '</div>' +
       '<div class="note-card" style="margin-top:var(--s4);">' +
         '<strong>Privacy</strong><br>' +
-        'Everything is saved in this browser only. Your food, plan and settings never leave your device.' +
+        'Your food, plan and settings are saved in this browser only and never leave your device. ' +
+        'The one exception: when you scan a receipt, the photo is sent to Claude (by Anthropic) to read it, and isn\'t stored by the app.' +
       '</div>' +
       '<div style="margin-top:var(--s8);color:var(--ink-soft);font-size:13px;line-height:1.5;text-align:center;">' +
         'BUS 860 · Group 3<br>University of Alberta' +
@@ -1445,7 +1446,8 @@ function openSub(which) {
     title = 'Upload receipt';
     body =
       '<p class="sub-intro">Take a photo of your grocery receipt or choose one from your camera roll. ' +
-        'The app reads the text and suggests items to add to your pantry.</p>' +
+        'Claude reads it and suggests items to add to your pantry; you check each one first. ' +
+        'Only the photo is sent, to read it.</p>' +
       '<div class="receipt-upload-area" id="receiptUploadArea">' +
         '<label class="receipt-label" for="receiptFile">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="var(--leaf)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:48px;height:48px;margin-bottom:8px;">' +
@@ -2009,11 +2011,15 @@ function receiptFromPantry(input) {
   handleReceiptFile(input);
 }
 
+// The receipt photo goes to the team's Cloudflare Worker (worker/receipt-reader.js), which asks
+// Claude to read it. If that fails (offline, the monthly spend limit reached, an expired key), the
+// on-phone reader below takes over, so scanning never just stops working.
+var RECEIPT_API = 'https://wtf-receipt-reader.jennamar.workers.dev/';
+
 function handleReceiptFile(input) {
   if (!input.files || !input.files[0]) return;
   var file = input.files[0];
   var statusEl = document.getElementById('receiptStatus');
-  var resultsEl = document.getElementById('receiptResults');
   var uploadArea = document.getElementById('receiptUploadArea');
 
   uploadArea.style.display = 'none';
@@ -2022,13 +2028,108 @@ function handleReceiptFile(input) {
     '<div class="receipt-progress">' +
       '<div class="spinner"></div>' +
       '<div><strong>Reading your receipt…</strong>' +
-        '<p class="receipt-step" id="receiptStep">Loading text-recognition engine</p>' +
+        '<p class="receipt-step" id="receiptStep">Sending the photo to Claude</p>' +
       '</div>' +
     '</div>';
 
+  readWithClaude(file).then(function(result) {
+    parseClaudeReceipt(result);
+    renderReceiptReview();
+  }).catch(function() {
+    readOnPhone(file, 'Claude couldn’t be reached, so the phone is reading it instead');
+  });
+}
+
+// Shrinks the photo (long side 2000 px, JPEG) before sending: plenty for receipt text, and a
+// fraction of a phone camera's file size.
+function receiptImage(file) {
+  return new Promise(function(resolve, reject) {
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function() {
+      var scale = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+      var c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.onerror = function() { URL.revokeObjectURL(url); reject(new Error('unreadable image')); };
+    img.src = url;
+  });
+}
+
+function readWithClaude(file) {
+  return receiptImage(file).then(function(data) {
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function() { if (ctrl) ctrl.abort(); }, 60000);
+    var step = document.getElementById('receiptStep');
+    if (step) step.textContent = 'Claude is reading the receipt…';
+    return fetch(RECEIPT_API, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: data, mediaType: 'image/jpeg' }),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function(res) {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('reader ' + res.status);
+      return res.json();
+    });
+  });
+}
+
+// Claude's answer gives each line a plain grocery name ("GRN ONION" -> "green onions"); the
+// app's own matcher then finds that name in the food list, as it does for typed searches.
+function parseClaudeReceipt(result) {
+  receiptItems = [];
+  var date = result.purchase_date && /^\d{4}-\d{2}-\d{2}$/.test(result.purchase_date) && result.purchase_date <= todayKey()
+    ? result.purchase_date : todayKey();
+  (result.items || []).forEach(function(it) {
+    var printed = String(it.printed || it.name || '').trim();
+    if (!printed) return;
+    var name = String(it.name || '').trim();
+    var label = name && name.toLowerCase() !== printed.toLowerCase() ? printed + ' (' + name + ')' : printed;
+    if (!it.is_food) {
+      receiptItems.push({ raw:label, ing:null, ingName:null, confidence:'non_food', zone:'fridge', include:false, date:date });
+      return;
+    }
+    var match = (name && matchFoodName(name)) || matchReceiptLine(printed);
+    var unit = UNITS.indexOf(it.unit) > -1 ? it.unit : null;
+    var qty = unit && typeof it.quantity === 'number' && it.quantity > 0 ? it.quantity : null;
+    receiptItems.push({
+      raw: label,
+      ing: match ? match.id : null,
+      ingName: match ? match.name : null,
+      confidence: match ? (match.exact ? 'exact_match' : 'probable') : 'unrecognized',
+      zone: match ? (ingById(match.id) || {}).zone || 'fridge' : 'fridge',
+      include: !!match,
+      qty: qty, unit: qty === null ? null : unit,
+      date: date
+    });
+  });
+}
+
+// A clean food name ("green onions", "frozen strawberries") matched the way recipe lines are:
+// exact name first, then specific pantry foods, then the shared list top to bottom, where
+// specific wordings sit above general ones ("green onions" above "onion").
+function matchFoodName(name) {
+  var q = name.toLowerCase().trim(), hit = null;
+  INGREDIENTS.forEach(function(i) {
+    var n = i.name.toLowerCase();
+    if (!hit && (n === q || n === q.replace(/s$/, '') || n + 's' === q)) hit = i;
+  });
+  if (!hit) INGREDIENTS.forEach(function(i) { if (!hit && i.extra && ING_RX[i.id] && ING_RX[i.id].test(q)) hit = i; });
+  if (!hit) INGREDIENTS.forEach(function(i) { if (!hit && !i.extra && ING_RX[i.id] && ING_RX[i.id].test(q)) hit = i; });
+  // Staples (oil, salt, water...) are assumed on hand and never tracked, as everywhere else.
+  return hit && !hit.staple ? { id:hit.id, name:hit.name, exact:true } : null;
+}
+
+// The original reader, run on the phone with Tesseract.js: the backup when Claude can't be used.
+function readOnPhone(file, why) {
+  var statusEl = document.getElementById('receiptStatus');
+  var step = document.getElementById('receiptStep');
+  if (step) step.textContent = why || 'Loading text-recognition engine';
   loadTesseract(function() {
     var step = document.getElementById('receiptStep');
-    if (step) step.textContent = 'Scanning text…';
+    if (step) step.textContent = 'Scanning text on your phone…';
 
     Tesseract.recognize(file, 'eng', {
       logger: function(m) {
@@ -2490,8 +2591,8 @@ function confirmReceipt() {
       id: newEntryId(),
       ing: item.ing,
       zone: item.zone,
-      qty: null,
-      unit: null,
+      qty: item.qty || null,
+      unit: item.qty ? item.unit : null,
       bought: item.date,
       expires: null
     });
