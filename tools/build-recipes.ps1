@@ -29,7 +29,14 @@ function Read-Table($path) {
 }
 
 # -- shared ingredient list and shelf-life norms --
-$ingredients = @(Read-Table "$PSScriptRoot\ingredients.csv")
+$allIngredients = @(Read-Table "$PSScriptRoot\ingredients.csv")
+# Pantry-only foods (penne, frozen strawberries...) are never matched against recipe lines, so
+# adding one can't change how a recipe is read; counts_as says which recipe food it stands in for.
+$ingredients = @($allIngredients | Where-Object { $_.pantry_only -ne '1' })
+$byId = @{}; foreach ($i in $ingredients) { $byId[$i.id] = $i }
+foreach ($i in $allIngredients) {
+  if ($i.counts_as -and -not $byId.ContainsKey($i.counts_as)) { throw "ingredients.csv: '$($i.id)' counts as '$($i.counts_as)', which isn't a recipe ingredient" }
+}
 $rx = @{}
 foreach ($i in $ingredients) { $rx[$i] = New-Object Text.RegularExpressions.Regex($i.match, 'IgnoreCase') }
 $norms = [ordered]@{}
@@ -42,7 +49,7 @@ foreach ($n in (Read-Table "$PSScriptRoot\shelf-life.csv")) {
   $o['basis'] = $n.basis
   $norms[$n.key] = $o
 }
-foreach ($i in $ingredients) {
+foreach ($i in $allIngredients) {
   if ($i.norm -and -not $norms.Contains($i.norm)) { throw "ingredients.csv: '$($i.id)' names norm '$($i.norm)', which is not in shelf-life.csv" }
 }
 
@@ -313,11 +320,13 @@ foreach ($r in $recipes) {
 }
 
 # -- write outputs --
-$ingOut = @($ingredients | ForEach-Object {
+$ingOut = @($allIngredients | ForEach-Object {
   # `match` goes along so the app's pantry search finds "scallions" under Green onions.
   $o = [ordered]@{ id = $_.id; name = $_.name; zone = $_.zone; match = $_.match }
   if ($_.norm) { $o['norm'] = $_.norm }
   if ($_.staple -eq '1') { $o['staple'] = $true }
+  if ($_.pantry_only -eq '1') { $o['extra'] = $true }
+  if ($_.counts_as) { $o['counts'] = $_.counts_as }
   $o
 })
 # The same id can appear on more than one row (a staple phrase listed near the top); keep the first.

@@ -361,7 +361,15 @@ function byUrgency(a, b) {
 
 // ═══════════════ STOCK ═══════════════
 // What the kitchen holds of one ingredient, across every pantry entry for it.
-function entriesFor(ingId) { return pantry.filter(function(p) { return p.ing === ingId; }); }
+// A variety counts toward the recipe food it stands in for: penne is Dry pasta to a recipe,
+// frozen strawberries are Strawberries (`counts` in the ingredient list).
+function entriesFor(ingId) {
+  return pantry.filter(function(p) {
+    if (p.ing === ingId) return true;
+    var i = ingIndex[p.ing];
+    return !!(i && i.counts === ingId);
+  });
+}
 function inStock(e) { return e.qty === null || e.qty > 0; }
 
 // Units convert only within weight or within volume, where it's plain arithmetic. Cups of
@@ -1105,7 +1113,8 @@ function ingredientRowsHTML(r, idx) {
     if (c.status === 'check') { note = ' · <b>how much you have isn\'t recorded in a comparable unit, so check before cooking</b>'; }
     html += '<div class="ingredient-row"><div>' +
         '<div class="ingredient-name">' + esc(line.text) + opt + '</div>' +
-        '<div class="ingredient-basis">' + esc(ingName(c.id)) + ': ' + esc(basisLine(e)) + note + '</div>' +
+        '<div class="ingredient-basis">' + esc(e && e.ing !== c.id ? ingName(e.ing) + ' (counts as ' + ingName(c.id).toLowerCase() + ')' : ingName(c.id)) +
+          ': ' + esc(basisLine(e)) + note + '</div>' +
       '</div>' + chipHTML(chip[0], chip[1]) + '</div>';
   });
   return { html:html, missing:missing };
@@ -1757,7 +1766,8 @@ var ING_USE = {}, ING_UNIT = {};
   });
 });
 function defaultUnit(id) {
-  var u = ING_UNIT[id], best = 'ea', n = 0;
+  var ing = ingById(id);
+  var u = ING_UNIT[id] || (ing && ing.counts ? ING_UNIT[ing.counts] : null), best = 'ea', n = 0;
   for (var k in u) { if (UNITS.indexOf(k) > -1 && u[k] > n) { best = k; n = u[k]; } }
   return best;
 }
@@ -1882,9 +1892,12 @@ function renderItemResults() {
   box.innerHTML = (draft.query.trim() ? '' : '<div class="field-label">Common in the recipes</div>') +
     (staple && list.length ? '<p class="field-hint" style="margin:0 0 8px;">' + esc(staple.name) + ' is a staple, so it\'s assumed on hand. Close matches:</p>' : '') +
     (list.length ? '<div class="pick-list">' + list.map(function(i) {
-      var have = entriesFor(i.id).filter(inStock).length;
+      // This exact food only: acorn squash isn't "1 butternut squash in your kitchen" here.
+      var have = pantry.filter(function(p) { return p.ing === i.id && inStock(p); }).length;
+      // Foods no recipe uses yet can be tracked, but the planner won't use them; say so.
+      var note = i.extra && !i.counts ? ' · not in recipes yet' : '';
       return '<button class="pick" onclick="pickIngredient(\'' + i.id + '\')"><span>' + esc(i.name) + '</span>' +
-        '<small>' + (have ? have + ' in your kitchen' : zoneLabel(i.zone).toLowerCase()) + '</small></button>';
+        '<small>' + (have ? have + ' in your kitchen' : zoneLabel(i.zone).toLowerCase()) + note + '</small></button>';
     }).join('') + '</div>'
     : '<p class="field-hint">' + (staple ? esc(staple.name) + ' is a staple, so it\'s assumed on hand.'
         : 'Nothing called that in the approved recipes. Only foods the recipes use can be planned around.') + '</p>');
@@ -2141,6 +2154,7 @@ var RECEIPT_ABBR = {
   'sr cream':'sour-cream','sour crm':'sour-cream',
   'hvy cream':'heavy-cream','whp cream':'heavy-cream','heavy crm':'heavy-cream',
   'bttr':'butter','butter':'butter','marg':'butter',
+  'peanut butter':'peanut-butter','pnut butter':'peanut-butter','pb':'peanut-butter',
   'eggs dz':'eggs','eggs lrg':'eggs','eggs xl':'eggs','lrg eggs':'eggs','free rng eggs':'eggs',
 
   // Produce
@@ -2277,6 +2291,15 @@ function matchReceiptLine(line) {
     .replace(/\s+/g, ' ').trim().toLowerCase();
 
   if (!cleaned || cleaned.length < 2) return null;
+
+  // ── PASS 0: specific pantry foods first ──
+  // A named variety ("spaghetti squash", "cauliflower rice", "FZ blueberries") beats the general
+  // food a later pass would find in one of its words.
+  var specific = cleaned.replace(/\b(fz|frz|frzn)\b/g, 'frozen');
+  for (var x = 0; x < INGREDIENTS.length; x++) {
+    var xi = INGREDIENTS[x];
+    if (xi.extra && ING_RX[xi.id] && ING_RX[xi.id].test(specific)) return { id:xi.id, name:xi.name, exact:true };
+  }
 
   // ── PASS 1: abbreviation dictionary lookup ──
   // Try exact match first, then every 2- and 3-word window in the cleaned text
