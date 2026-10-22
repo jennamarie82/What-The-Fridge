@@ -70,6 +70,12 @@ edit `tools/ingredients.csv` (or `tools/shelf-life.csv` for freshness windows), 
 powershell -ExecutionPolicy Bypass -File tools\build-recipes.ps1
 ```
 
+Rows at the end of `tools/ingredients.csv` marked `pantry_only` (frozen fruit and vegetables, pasta
+shapes, squash varieties and other everyday foods) can be added to the pantry and recognised on
+receipts, but are never matched against recipe lines, so adding one can't change a recipe. Their
+`counts_as` column names the recipe food a variety stands in for: penne counts as Dry pasta, frozen
+strawberries as Strawberries. A pantry-only food with no `counts_as` is shown as "not in recipes yet".
+
 The build also writes `tools/ingredient-review.csv`, which lists every recipe ingredient line next to
 the food it was linked to, with blank `looks_right` and `comment` columns for checking.
 

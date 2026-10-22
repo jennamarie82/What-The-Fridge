@@ -1,10 +1,11 @@
-id,name,zone,norm,staple,match
+id,name,zone,norm,staple,match,counts_as,pantry_only
 # The shared ingredient list. Each recipe ingredient line is matched against `match`
 # (a regular expression, case-insensitive) from TOP to BOTTOM — the first row that matches
 # wins, so specific wordings must sit above general ones ("chicken broth" above "chicken").
 # zone   = where a user would usually keep it: fridge, freezer or cupboard
 # norm   = row key in shelf-life.csv, blank when knowledge/shelf-life-norms.md has no row for it
 # staple = 1 for the database's "Standard Pantry Staples Assumed On Hand" — never tracked or "missing"
+# counts_as, pantry_only: see PANTRY-ONLY FOODS at the end
 #
 # ── compound wordings that would otherwise be caught by a staple ──
 peanut-butter,Peanut butter,cupboard,,0,peanut butter
@@ -328,3 +329,160 @@ sugar,Sugar,cupboard,,1,\bsugar\b
 vanilla,Vanilla extract,cupboard,,1,vanilla
 flour,All-purpose flour,cupboard,,1,\bflour\b
 water,Water,cupboard,,1,\bwater\b|\bice\b
+#
+# ── PANTRY-ONLY FOODS (pantry_only = 1), added 2026-10-21 ──
+# Never matched against recipe lines, so the 300 recipes are unchanged. People can add them to the
+# pantry and receipts can recognise them. counts_as = the recipe ingredient a variety stands in for
+# (penne counts as Dry pasta, frozen strawberries as Strawberries). Blank counts_as: no recipe uses it yet.
+#
+# ── frozen fruit ──
+frozen-strawberries,Frozen strawberries,freezer,strawberries,0,frozen strawberr,strawberries,1
+frozen-blueberries,Frozen blueberries,freezer,berries,0,frozen blueberr|wild blueberr,blueberries,1
+frozen-raspberries,Frozen raspberries,freezer,berries,0,frozen raspberr,berries,1
+frozen-blackberries,Frozen blackberries,freezer,berries,0,frozen blackberr,berries,1
+frozen-mixed-berries,Frozen mixed berries,freezer,berries,0,frozen (mixed )?berr|berry blend|triple berr|mixed berr,berries,1
+frozen-mango,Frozen mango,freezer,mango,0,frozen mango,mango,1
+frozen-pineapple,Frozen pineapple,freezer,pineapple,0,frozen pineapple,pineapple,1
+frozen-bananas,Frozen bananas,freezer,bananas,0,frozen banana,bananas,1
+frozen-avocado,Frozen avocado,freezer,avocado,0,frozen avocado|frozen guac,avocado,1
+frozen-cherries,Frozen cherries,freezer,,0,frozen cherr,,1
+frozen-peaches,Frozen peaches,freezer,,0,frozen peach,,1
+frozen-cranberries,Frozen cranberries,freezer,,0,frozen cranberr,,1
+frozen-tropical-fruit,Frozen tropical fruit blend,freezer,,0,tropical,,1
+frozen-acai,Frozen acai (smoothie packs),freezer,,0,acai|açaí,,1
+frozen-dragon-fruit,Frozen dragon fruit (pitaya),freezer,,0,dragon ?fruit|pitaya,,1
+frozen-rhubarb,Frozen rhubarb,freezer,,0,rhubarb,,1
+frozen-smoothie-blend,Frozen smoothie blend,freezer,,0,smoothie,,1
+#
+# ── frozen vegetables ──
+frozen-peas,Frozen peas,freezer,,0,frozen peas|green peas,peas,1
+frozen-corn,Frozen corn,freezer,,0,frozen corn,corn,1
+frozen-broccoli,Frozen broccoli,freezer,broccoli,0,frozen broccoli,broccoli,1
+frozen-cauliflower,Frozen cauliflower,freezer,broccoli,0,frozen cauliflower,cauliflower,1
+cauliflower-rice,Cauliflower rice (riced cauliflower),freezer,broccoli,0,cauliflower rice|riced cauliflower|cauli rice,,1
+riced-broccoli,Riced broccoli,freezer,broccoli,0,riced broccoli|broccoli rice,,1
+frozen-spinach,Frozen spinach,freezer,leafy-greens,0,frozen spinach,spinach,1
+frozen-kale,Frozen kale,freezer,leafy-greens,0,frozen kale,kale,1
+frozen-green-beans,Frozen green beans,freezer,green-beans,0,frozen green beans|frozen beans|french cut,green-beans,1
+frozen-edamame,Frozen edamame,freezer,,0,frozen edamame|frozen soybeans,edamame,1
+frozen-stir-fry-veg,Frozen stir-fry vegetables,freezer,,0,stir[- ]?fry (veg|blend|mix),frozen-veg,1
+frozen-california-blend,Frozen California blend (broccoli/cauliflower/carrots),freezer,,0,california blend|california mix,frozen-veg,1
+frozen-peas-carrots,Frozen peas and carrots,freezer,,0,peas (and|&) carrots,frozen-veg,1
+frozen-peppers-onions,Frozen peppers and onions (fajita mix),freezer,bell-peppers,0,fajita (mix|blend|veg)|peppers (and|&) onions|pepper strips,bell-pepper,1
+frozen-carrots,Frozen carrots,freezer,carrots,0,frozen carrot,carrot,1
+frozen-onions,Frozen diced onions,freezer,onions,0,frozen onion|frozen diced onion,onion,1
+frozen-mushrooms,Frozen mushrooms,freezer,mushrooms,0,frozen mushroom,mushrooms,1
+frozen-asparagus,Frozen asparagus,freezer,asparagus,0,frozen asparagus,asparagus,1
+frozen-okra,Frozen okra,freezer,,0,frozen okra,okra,1
+frozen-butternut-squash,Frozen butternut squash,freezer,,0,frozen butternut|frozen squash,butternut-squash,1
+frozen-sweet-potato,Frozen sweet potato,freezer,,0,frozen sweet potato|frozen yam,sweet-potato,1
+frozen-zucchini-noodles,Frozen zucchini noodles,freezer,zucchini,0,zoodle|zucchini noodle|zucchini spiral,,1
+frozen-brussels-sprouts,Frozen Brussels sprouts,freezer,,0,frozen brussels,,1
+frozen-hash-browns,Frozen hash browns,freezer,,0,hash ?brown,,1
+frozen-artichoke-hearts,Frozen artichoke hearts,freezer,,0,frozen artichoke,,1
+frozen-lima-beans,Frozen lima beans,freezer,,0,lima,,1
+#
+# ── frozen meat and fish ──
+frozen-chicken-breast,Frozen chicken breasts,freezer,poultry,0,frozen chicken breast|frozen chicken,chicken-breast,1
+frozen-shrimp,Frozen shrimp,freezer,shellfish,0,frozen shrimp|frozen prawn,shrimp,1
+frozen-fish-fillets,Frozen white fish fillets,freezer,fish,0,frozen (cod|tilapia|haddock|pollock|fish)|frozen fillet,white-fish,1
+frozen-salmon,Frozen salmon fillets,freezer,fish,0,frozen salmon,salmon,1
+#
+# ── dried pasta (all count as Dry pasta) ──
+spaghetti,Spaghetti,cupboard,dry-pasta,0,spaghetti(?! squash)|spaghettini,pasta,1
+angel-hair,Angel hair (capellini),cupboard,dry-pasta,0,angel hair|capellini,pasta,1
+linguine,Linguine,cupboard,dry-pasta,0,linguin,pasta,1
+fettuccine,Fettuccine,cupboard,dry-pasta,0,fettuc,pasta,1
+bucatini,Bucatini,cupboard,dry-pasta,0,bucatini,pasta,1
+pappardelle,Pappardelle,cupboard,dry-pasta,0,pappardelle,pasta,1
+tagliatelle,Tagliatelle,cupboard,dry-pasta,0,tagliatelle,pasta,1
+penne,Penne,cupboard,dry-pasta,0,penne,pasta,1
+rigatoni,Rigatoni,cupboard,dry-pasta,0,rigatoni,pasta,1
+ziti,Ziti,cupboard,dry-pasta,0,\bziti\b,pasta,1
+fusilli,Fusilli,cupboard,dry-pasta,0,fusilli,pasta,1
+rotini,Rotini,cupboard,dry-pasta,0,rotini,pasta,1
+farfalle,Farfalle (bow ties),cupboard,dry-pasta,0,farfalle|bow ?tie,pasta,1
+elbow-macaroni,Elbow macaroni,cupboard,dry-pasta,0,macaroni|elbow,pasta,1
+cavatappi,Cavatappi,cupboard,dry-pasta,0,cavatappi,pasta,1
+gemelli,Gemelli,cupboard,dry-pasta,0,gemelli,pasta,1
+orecchiette,Orecchiette,cupboard,dry-pasta,0,orecchiette,pasta,1
+orzo,Orzo,cupboard,dry-pasta,0,orzo,pasta,1
+ditalini,Ditalini,cupboard,dry-pasta,0,ditalini,pasta,1
+small-shells,Small pasta shells,cupboard,dry-pasta,0,small shells|medium shells|pasta shells|conchiglie,pasta,1
+jumbo-shells,Jumbo pasta shells,cupboard,dry-pasta,0,jumbo shells|conchiglioni,pasta,1
+lasagna-noodles,Lasagna noodles,cupboard,dry-pasta,0,lasagn,pasta,1
+manicotti,Manicotti / cannelloni,cupboard,dry-pasta,0,manicotti|cannelloni,pasta,1
+whole-wheat-pasta,Whole wheat pasta,cupboard,dry-pasta,0,whole (wheat|grain) pasta,pasta,1
+gluten-free-pasta,Gluten-free pasta,cupboard,dry-pasta,0,gluten[- ]?free pasta|rice pasta|corn pasta,pasta,1
+legume-pasta,Chickpea or lentil pasta,cupboard,dry-pasta,0,chickpea pasta|lentil pasta|bean pasta|legume pasta,pasta,1
+couscous,Couscous,cupboard,dry-pasta,0,couscous,,1
+soba-noodles,Soba noodles,cupboard,,0,soba,asian-noodles,1
+udon-noodles,Udon noodles,cupboard,,0,udon,asian-noodles,1
+ramen-noodles,Ramen noodles,cupboard,,0,ramen|instant noodles,asian-noodles,1
+glass-noodles,Glass noodles,cupboard,,0,glass noodles|cellophane|mung bean noodles,asian-noodles,1
+rice-vermicelli,Rice vermicelli,cupboard,,0,vermicelli,rice-noodles,1
+#
+# ── squash ──
+acorn-squash,Acorn squash,cupboard,,0,acorn,butternut-squash,1
+kabocha-squash,Kabocha squash,cupboard,,0,kabocha,butternut-squash,1
+delicata-squash,Delicata squash,cupboard,,0,delicata,butternut-squash,1
+buttercup-squash,Buttercup squash,cupboard,,0,buttercup,butternut-squash,1
+hubbard-squash,Hubbard squash,cupboard,,0,hubbard,butternut-squash,1
+red-kuri-squash,Red kuri squash,cupboard,,0,kuri,butternut-squash,1
+sugar-pumpkin,Pie pumpkin (sugar pumpkin),cupboard,,0,pie pumpkin|sugar pumpkin|pumpkin(?! pur| seed),butternut-squash,1
+spaghetti-squash,Spaghetti squash,cupboard,,0,spaghetti squash,,1
+yellow-squash,Yellow summer squash,fridge,zucchini,0,yellow squash|crookneck|straightneck,zucchini,1
+pattypan-squash,Pattypan squash,fridge,zucchini,0,patty ?pan,zucchini,1
+pumpkin-puree,Pumpkin purée (canned),cupboard,,0,pumpkin pur|canned pumpkin,,1
+#
+# ── fresh produce ──
+raspberries,Raspberries,fridge,berries,0,raspberr,berries,1
+blackberries,Blackberries,fridge,berries,0,blackberr,berries,1
+clementines,Clementines / mandarins,cupboard,citrus,0,clementine|mandarin|tangerine|satsuma,orange,1
+grapefruit,Grapefruit,fridge,citrus,0,grapefruit,,1
+peaches,Peaches / nectarines,cupboard,,0,\bpeach(es)?\b(?! yog)|nectarine,,1
+plums,Plums,cupboard,,0,\bplums?\b,,1
+cherries,Cherries,fridge,,0,cherries|\bcherry\b(?! tomato),,1
+kiwi,Kiwi,fridge,,0,kiwi,,1
+watermelon,Watermelon,fridge,,0,watermelon,,1
+cantaloupe,Cantaloupe / honeydew,fridge,,0,cantaloupe|honeydew|\bmelon\b,,1
+brussels-sprouts,Brussels sprouts,fridge,,0,brussels,,1
+beets,Beets,fridge,,0,\bbeets?\b|beetroot,,1
+parsnips,Parsnips,fridge,,0,parsnip,,1
+turnips,Turnips / rutabaga,fridge,,0,turnip|rutabaga,,1
+fennel,Fennel,fridge,,0,fennel,,1
+snap-peas,Snap peas / snow peas,fridge,,0,snap peas|snow peas|sugar snap,,1
+#
+# ── dairy, alternatives and protein ──
+almond-milk,Almond milk,fridge,milk,0,almond milk|almond beverage,milk,1
+oat-milk,Oat milk,fridge,milk,0,oat milk|oat beverage,milk,1
+soy-milk,Soy milk,fridge,milk,0,soy milk|soy beverage,milk,1
+half-and-half,Half-and-half (cereal cream),fridge,,0,half[- ]and[- ]half|cereal cream|table cream,,1
+tempeh,Tempeh,fridge,,0,tempeh,,1
+chicken-sausage,Chicken sausage,fridge,sausage-raw,0,chicken sausage,sausage,1
+pork-tenderloin,Pork tenderloin,fridge,steak-chop,0,pork tenderloin,pork,1
+trout,Trout,fridge,fish,0,trout,,1
+canned-salmon,Canned salmon,cupboard,,0,canned salmon|tinned salmon,,1
+sardines,Sardines,cupboard,,0,sardine,,1
+#
+# ── cupboard ──
+basmati-rice,Basmati rice,cupboard,white-rice,0,basmati,rice,1
+jasmine-rice,Jasmine rice,cupboard,white-rice,0,jasmine rice,rice,1
+arborio-rice,Arborio rice,cupboard,white-rice,0,arborio|risotto rice,rice,1
+pinto-beans,Pinto beans,cupboard,,0,pinto,,1
+canned-corn,Canned corn,cupboard,,0,canned corn|corn niblets|creamed corn,corn,1
+naan,Naan,cupboard,bread,0,\bnaan\b,pita,1
+sun-dried-tomatoes,Sun-dried tomatoes,cupboard,,0,sun[- ]?dried,,1
+roasted-red-peppers,Roasted red peppers (jar),cupboard,,0,roasted red pepper,,1
+artichoke-hearts,Artichoke hearts (jar or can),cupboard,,0,artichoke,,1
+coconut-cream,Coconut cream,cupboard,,0,coconut cream,,1
+evaporated-milk,Evaporated milk,cupboard,,0,evaporated milk|condensed milk,,1
+pesto,Pesto (jar),fridge,,0,pesto,,1
+almond-butter,Almond butter,cupboard,,0,almond butter|cashew butter,,1
+jam,Jam / jelly,fridge,,0,\bjam\b|jelly|preserves|marmalade,,1
+dates,Dates,cupboard,,0,\bdates?\b|medjool,dried-fruit,1
+pumpkin-seeds,Pumpkin seeds (pepitas),cupboard,,0,pumpkin seed|pepita,,1
+sunflower-seeds,Sunflower seeds,cupboard,,0,sunflower seed,,1
+pine-nuts,Pine nuts,cupboard,,0,pine ?nut,,1
+cereal,Breakfast cereal,cupboard,,0,cereal|cheerios|bran flakes|corn flakes,,1
+crackers,Crackers,cupboard,,0,cracker|triscuit|saltine,,1
