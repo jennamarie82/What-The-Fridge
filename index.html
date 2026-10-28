@@ -148,7 +148,7 @@
           <div class="profile-menu-item" onclick="openSub('household')"><span>Household size</span><span class="arrow" id="hhArrow">2 &rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('dietary')"><span>Dietary preferences</span><span class="arrow" id="dietArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('notify')"><span>Notification reminders</span><span class="arrow" id="notifyArrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openReceipt('Profile')"><span>Upload receipt</span><span class="arrow">&rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="openSub('receipt')"><span>Upload receipt</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('about')"><span>About What the Fridge</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('feedback')"><span>Send feedback</span><span class="arrow">&rsaquo;</span></div>
         </div>
@@ -159,38 +159,16 @@
           <div class="profile-menu-item" onclick="loadSampleKitchen()"><span>Load the sample kitchen</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="startOver()"><span>Start over</span><span class="arrow">&rsaquo;</span></div>
         </div>
-        <p class="pantry-note">Saved in this browser only &mdash; nothing leaves your phone except a receipt photo you choose to scan.</p>
+        <p class="pantry-note">Saved in this browser only &mdash; nothing leaves your phone.</p>
       </div>
     </div>
 
   </div>
 
   <!-- ══════ FAB ══════ -->
-  <button class="fab" id="fab" onclick="openAddSheet()" aria-label="Add food">
+  <button class="fab" id="fab" onclick="openAddItem()" aria-label="Add food">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
   </button>
-
-  <!-- ══════ ADD CHOICE: scan a receipt or add manually ══════ -->
-  <div class="add-sheet-backdrop" id="addSheet" onclick="if (event.target === this) closeAddSheet()">
-    <div class="add-sheet" role="dialog" aria-label="Add food">
-      <div class="add-sheet-title">Add food</div>
-      <label class="add-option" for="fabReceiptFile">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        <span><b>Scan a receipt</b><small>Opens the camera. You check each item before it's added.</small></span>
-      </label>
-      <input type="file" id="fabReceiptFile" accept="image/*" capture="environment" style="display:none;" onchange="closeAddSheet(); receiptFromPantry(this); this.value = '';">
-      <label class="add-option" for="fabReceiptPhoto">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
-        <span><b>Upload a receipt photo</b><small>Choose a photo of a receipt from your camera roll.</small></span>
-      </label>
-      <input type="file" id="fabReceiptPhoto" accept="image/*" style="display:none;" onchange="closeAddSheet(); receiptFromPantry(this); this.value = '';">
-      <button class="add-option" onclick="closeAddSheet(); openAddItem();">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <span><b>Add manually</b><small>Search for an item and add it, one at a time.</small></span>
-      </button>
-      <button class="add-sheet-cancel" onclick="closeAddSheet()">Cancel</button>
-    </div>
-  </div>
 
   <!-- ══════ BOTTOM TABS ══════ -->
   <nav class="tabs">
@@ -214,7 +192,7 @@
 <footer>
   What the Fridge &middot; BUS 860 Group 3 &middot; Phase A build &middot; plan around your own food, or look around with a sample kitchen.<br>
   Recipes from <i>Combined_Recipe_Database.md</i> (all 300 approved recipes, amounts as written).<br>
-  Your plan, pantry and settings are saved in this browser only &mdash; only a receipt photo you scan is sent out, to Claude, to read it.<br>
+  Your plan, pantry and settings are saved in this browser only &mdash; nothing is sent anywhere.<br>
   <span style="display:inline-block;margin-top:10px;">
     Demo controls (not part of the app):
     <button class="demo-btn" onclick="simulateMidnight()">Simulate midnight →</button>

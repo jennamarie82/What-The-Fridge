@@ -1039,6 +1039,83 @@ function renderPantry() {
 var openZones = { fridge:false, freezer:false, cupboard:false };
 function toggleZone(key) { openZones[key] = !openZones[key]; renderPantry(); }
 
+// ─── pantry search ───
+function openPantrySearch() {
+  document.getElementById('pantrySearchBar').style.display = 'flex';
+  document.getElementById('pantrySearchBtn').style.display = 'none';
+  document.getElementById('pantryTitleText').style.display = 'none';
+  var inp = document.getElementById('pantrySearchInput');
+  inp.value = '';
+  inp.focus();
+  document.getElementById('pantrySearchResults').style.display = 'none';
+  document.getElementById('pantryNormalView').style.display = '';
+}
+
+function closePantrySearch() {
+  document.getElementById('pantrySearchBar').style.display = 'none';
+  document.getElementById('pantrySearchBtn').style.display = '';
+  document.getElementById('pantryTitleText').style.display = '';
+  document.getElementById('pantrySearchInput').value = '';
+  document.getElementById('pantrySearchResults').style.display = 'none';
+  document.getElementById('pantryNormalView').style.display = '';
+}
+
+function filterPantrySearch() {
+  var q = document.getElementById('pantrySearchInput').value.trim().toLowerCase();
+  var resultsEl = document.getElementById('pantrySearchResults');
+  var normalEl = document.getElementById('pantryNormalView');
+
+  if (!q) {
+    resultsEl.style.display = 'none';
+    normalEl.style.display = '';
+    return;
+  }
+
+  resultsEl.style.display = '';
+  normalEl.style.display = 'none';
+
+  // filter in-stock pantry items whose name contains the query
+  var matches = pantry.filter(function(e) {
+    return inStock(e) && ingName(e.ing).toLowerCase().indexOf(q) !== -1;
+  });
+
+  if (!matches.length) {
+    resultsEl.innerHTML = '<div class="pantry-search-empty">No items match “' + esc(q) + '”</div>';
+    return;
+  }
+
+  // group by zone
+  var grouped = {};
+  ZONES.forEach(function(z) { grouped[z.key] = []; });
+  matches.forEach(function(e) {
+    if (grouped[e.zone]) grouped[e.zone].push(e);
+  });
+
+  var html = '';
+  ZONES.forEach(function(z) {
+    var items = grouped[z.key];
+    if (!items.length) return;
+    items.sort(function(a, b) { return ingName(a.ing).localeCompare(ingName(b.ing)); });
+    html += '<div class="pantry-search-zone-label">' + z.label + '</div>';
+    html += items.map(function(e) {
+      var f = freshness(e);
+      var name = ingName(e.ing);
+      // highlight the matching substring
+      var idx = name.toLowerCase().indexOf(q);
+      var highlighted = esc(name.slice(0, idx)) + '<mark>' + esc(name.slice(idx, idx + q.length)) + '</mark>' + esc(name.slice(idx + q.length));
+      return '<div class="pantry-search-item" onclick="closePantrySearch();openEditItem(\'' + e.id + '\')">' +
+        '<div class="psi-left">' +
+          '<div class="psi-name">' + highlighted + '</div>' +
+          '<div class="psi-sub">' + entryQty(e) + ' · ' + esc(basisLine(e)) + '</div>' +
+        '</div>' +
+        '<div class="psi-right">' + chipHTML(f.cls, f.text) + '</div>' +
+      '</div>';
+    }).join('');
+  });
+
+  resultsEl.innerHTML = html;
+}
+
 // ═══════════════ DETAIL VIEW ═══════════════
 var detailIndex = null;
 
@@ -1515,6 +1592,7 @@ function switchTab(tabId) {
   document.getElementById('mainView').scrollTop = 0;
   closeDetail();
   closeSub();
+  closePantrySearch();
 }
 
 function showToast(msg, action) {

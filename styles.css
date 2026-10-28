@@ -367,6 +367,70 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
   text-align:center;
 }
 
+/* ─── pantry search ─── */
+.pantry-top-actions {
+  display:flex; align-items:center; gap:var(--s4);
+}
+.pantry-search-btn {
+  width:36px; height:36px; border:none; background:none;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; border-radius:50%;
+  transition:background .2s var(--ease);
+}
+.pantry-search-btn:hover { background:var(--mint); }
+.pantry-search-btn svg {
+  width:20px; height:20px; stroke:var(--ink-soft);
+}
+
+.pantry-search-bar {
+  display:flex; align-items:center; gap:var(--s4);
+  background:var(--white); border-radius:var(--r);
+  padding:var(--s4) var(--s6);
+  margin-bottom:var(--s6);
+  box-shadow:0 1px 3px var(--shadow);
+}
+.pantry-search-icon {
+  width:18px; height:18px; stroke:var(--ink-soft); flex-shrink:0;
+}
+.pantry-search-bar input {
+  flex:1; border:none; outline:none; background:none;
+  font-family:inherit; font-size:15px; color:var(--ink);
+  min-width:0;
+}
+.pantry-search-bar input::placeholder { color:var(--ink-soft); opacity:.7; }
+.pantry-search-clear {
+  width:28px; height:28px; border:none; background:none;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; border-radius:50%; flex-shrink:0;
+}
+.pantry-search-clear svg { width:16px; height:16px; stroke:var(--ink-soft); }
+.pantry-search-clear:hover { background:var(--cream-deep); }
+
+.pantry-search-zone-label {
+  font-size:11px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.5px; color:var(--ink-soft);
+  padding:var(--s6) var(--s8) var(--s2);
+}
+.pantry-search-item {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:var(--s6) var(--s8);
+  background:var(--white); border-bottom:1px solid var(--border);
+  cursor:pointer;
+}
+.pantry-search-item:last-child { border-bottom:none; }
+.pantry-search-item .psi-left { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.pantry-search-item .psi-name { font-size:14px; font-weight:600; }
+.pantry-search-item .psi-name mark {
+  background:var(--amber-soft); color:var(--ink);
+  border-radius:2px; padding:0 1px;
+}
+.pantry-search-item .psi-sub { font-size:12px; color:var(--ink-soft); }
+.pantry-search-item .psi-right { flex-shrink:0; margin-left:var(--s4); }
+.pantry-search-empty {
+  text-align:center; padding:var(--s16) var(--s8);
+  color:var(--ink-soft); font-size:14px;
+}
+
 /* ═══════════════ PROFILE TAB ═══════════════ */
 .profile-avatar {
   width:72px; height:72px; border-radius:50%;
