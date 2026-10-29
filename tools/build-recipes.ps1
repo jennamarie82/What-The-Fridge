@@ -1,9 +1,9 @@
 <#
   Builds recipes.js from the approved recipe database.
 
-  The database stays on the team's Shared Drive (it is the approved source, CLAUDE.md
-  "Input 2"); this script reads it, links every ingredient line to the shared ingredient
-  list in tools/ingredients.csv, and writes:
+  The database lives in this repository at knowledge/Combined_Recipe_Database.md (it is the
+  approved source, CLAUDE.md "Input 2"); this script reads it, links every ingredient line to
+  the shared ingredient list in tools/ingredients.csv, and writes:
     recipes.js                       - loaded by the app
     tools/ingredient-review.csv      - every ingredient line and what it was linked to, for the team to check
     tools/unmatched.txt              - lines that matched nothing (should be empty)
@@ -14,10 +14,10 @@
 
   Run from the repository folder:
     powershell -ExecutionPolicy Bypass -File tools\build-recipes.ps1
-  or pass -Database <path> if the Shared Drive is mounted somewhere else.
+  or pass -Database <path> to build from a copy held somewhere else.
 #>
 param(
-  [string]$Database = 'G:\Shared drives\2026 Fall EMBA Group 3 - REN\BUS 860 Managing Intelligence\What-the-fridge\knowledge\Combined_Recipe_Database.md'
+  [string]$Database = (Join-Path (Split-Path -Parent $PSScriptRoot) 'knowledge\Combined_Recipe_Database.md')
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -212,7 +212,9 @@ foreach ($l in $lines) {
 
 # -- checks --
 $problems = @()
-if ($recipes.Count -ne 300) { $problems += "expected 300 recipes, found $($recipes.Count)" }
+# The master directory is the roll call: every row in it must come back as a parsed recipe,
+# so a body that fails to parse is caught rather than silently dropped.
+if ($recipes.Count -ne $category.Count) { $problems += "master directory lists $($category.Count) recipes, parsed $($recipes.Count)" }
 foreach ($r in $recipes) {
   if (-not $r.type) { $problems += "#$($r.n) has no category in the master directory" }
   if (-not $r.time) { $problems += "#$($r.n) has no total time" }

@@ -16,7 +16,7 @@ BUS 860 *Managing Intelligence* · Group 3.
 - Estimates freshness from the purchase date (or a printed use-by date you enter) and the shelf-life
   norms for where the food is kept, and always shows the basis. Food with no date, or no matching
   norm, stays "unknown" and is never assumed fresh.
-- Plans today plus the next two days (breakfast, lunch and dinner) from all 300 approved recipes,
+- Plans today plus the next two days (breakfast, lunch and dinner) from all 579 approved recipes,
   around what's actually in your kitchen. It fills one meal at a time, setting aside what each uses,
   so a scarce ingredient is never promised to two meals. Monday to Friday, breakfast takes 20 minutes
   or less and lunch 30 minutes or less; a slower one is used only when nothing quick enough fits. It
@@ -54,7 +54,8 @@ Dietary filtering works on recipe-level tags. It is **not** allergy-safe.
 | `index.html` | The page structure: screens, tabs and buttons |
 | `styles.css` | The look: colours, spacing, cards |
 | `app.js` | The behaviour: planning, pantry, freshness, saving |
-| `recipes.js` | **Generated** recipe data for all 300 recipes, so don't edit it by hand (see below) |
+| `knowledge/Combined_Recipe_Database.md` | The approved recipe source: all 579 recipes. Edit here, then rebuild |
+| `recipes.js` | **Generated** recipe data for all 579 recipes, so don't edit it by hand (see below) |
 | `recipe-images/` | One photo per approved recipe |
 | `manifest.webmanifest`, `icons/` | Home-screen install |
 | `sw.js` | Offline support: caches the app and any photos already viewed |
@@ -62,9 +63,10 @@ Dietary filtering works on recipe-level tags. It is **not** allergy-safe.
 
 ## Recipe data
 
-`recipes.js` is built from the team's approved recipe database (`knowledge/Combined_Recipe_Database.md`
-on the Shared Drive), which isn't stored in this repository. To change how an ingredient is recognised,
-edit `tools/ingredients.csv` (or `tools/shelf-life.csv` for freshness windows), then rebuild:
+`recipes.js` is built from the team's approved recipe database, `knowledge/Combined_Recipe_Database.md`,
+which now lives in this repository so anyone can rebuild without Shared Drive access. To change how an
+ingredient is recognised, edit `tools/ingredients.csv` (or `tools/shelf-life.csv` for freshness windows),
+then rebuild:
 
 ```
 powershell -ExecutionPolicy Bypass -File tools\build-recipes.ps1
@@ -78,6 +80,11 @@ strawberries as Strawberries. A pantry-only food with no `counts_as` is shown as
 
 The build also writes `tools/ingredient-review.csv`, which lists every recipe ingredient line next to
 the food it was linked to, with blank `looks_right` and `comment` columns for checking.
+
+**Recipes 301–579 have no nutrition yet.** They were added on 2026-10-29 and still need a row each in
+`tools/servings.csv`, plus `tools/ingredients.csv` and `tools/nutrition.csv` entries for the foods listed
+in `tools/unmatched.txt`. Until then the app shows no nutrition card for them, rather than a wrong one.
+They are otherwise complete: planned, cooked and deducted like any other recipe.
 
 Nutrition is estimated in the same build. `tools/nutrition.csv` holds typical values per 100 g for
 each food and the weight of a cup, an item, a can and so on; `tools/servings.csv` holds an estimated
