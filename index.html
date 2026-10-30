@@ -121,18 +121,35 @@
     <div class="tab-content" id="pantryTab">
       <div class="view-pad">
         <div class="top-row">
-          <h3 class="pantry-title">Pantry</h3>
-          <img class="wtf-logo" src="logo-header-t.webp" alt="What the Fridge">
+          <h3 class="pantry-title" id="pantryTitleText">Pantry</h3>
+          <div class="pantry-top-actions">
+            <button class="pantry-search-btn" id="pantrySearchBtn" onclick="openPantrySearch()" aria-label="Search your pantry">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            </button>
+            <img class="wtf-logo" src="logo-header-t.webp" alt="What the Fridge">
+          </div>
         </div>
 
-        <div class="section-label" style="margin-top:0;">Needs attention</div>
-        <div id="pantryAttention"></div>
+        <!-- Pantry search (shown by the search button; app.js openPantrySearch / filterPantrySearch) -->
+        <div class="pantry-search-bar" id="pantrySearchBar" style="display:none;">
+          <svg class="pantry-search-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="pantrySearchInput" type="search" placeholder="Search your kitchen" autocomplete="off" oninput="filterPantrySearch()" aria-label="Search your kitchen">
+          <button class="pantry-search-clear" onclick="closePantrySearch()" aria-label="Close search">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div id="pantrySearchResults" style="display:none;"></div>
 
-        <div class="section-label">Everything else</div>
-        <div id="pantryZones"></div>
+        <div id="pantryNormalView">
+          <div class="section-label" style="margin-top:0;">Needs attention</div>
+          <div id="pantryAttention"></div>
 
-        <p class="pantry-note">Tap anything to change it. Food is deducted only after you mark a meal cooked &mdash; never on a schedule.
-          Freshness is an estimate from the purchase date and USDA-based shelf-life norms, not a check of the food itself.</p>
+          <div class="section-label">Everything else</div>
+          <div id="pantryZones"></div>
+
+          <p class="pantry-note">Tap anything to change it. Food is deducted only after you mark a meal cooked &mdash; never on a schedule.
+            Freshness is an estimate from the purchase date and USDA-based shelf-life norms, not a check of the food itself.</p>
+        </div>
       </div>
     </div>
 

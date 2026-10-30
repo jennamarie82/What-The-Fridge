@@ -1134,6 +1134,8 @@ function openPantrySearch() {
 }
 
 function closePantrySearch() {
+  // Called on every tab switch: if the search bar isn't on the page, there's nothing to close.
+  if (!document.getElementById('pantrySearchBar')) return;
   document.getElementById('pantrySearchBar').style.display = 'none';
   document.getElementById('pantrySearchBtn').style.display = '';
   document.getElementById('pantryTitleText').style.display = '';
