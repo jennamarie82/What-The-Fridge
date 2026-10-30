@@ -1,0 +1,125 @@
+# DRAFT FOR TEAM REVIEW — not wired into the app, not approved.
+#
+# Ingredient stand-ins, so a meal that is one or two items short can still be offered with the
+# swap stated out loud. The agent never invents a substitution: it reports a row from this file.
+# That is the whole point of the file — it keeps "use a banana instead" traceable to something a
+# reviewer approved, the same way every recipe traces to Combined_Recipe_Database.md.
+#
+# for      = the ingredient id the recipe asks for (must exist in ingredients.csv)
+# use      = the ingredient id to offer instead (must exist in ingredients.csv)
+# contexts = pipe-separated contexts where the swap holds. NEVER blank, never "*": a swap that is
+#            right on toast can be wrong in a vinaigrette, and the context is what stops that.
+# diet     = effect on the recipe's dietary tags. "+DF" means the swap makes an otherwise
+#            dairy-containing dish dairy-free; "-NF" means it STOPS being nut-free. Blank = no
+#            change. See RULE 3.
+# note     = what Ren needs to know to actually do it — amount, timing, taste. Plain language.
+#
+# ── RULES THE BUILD SHOULD ENFORCE ──
+# 1. `for` and `use` must both be recipe-matchable ids (pantry_only != 1), like counts_as.
+# 2. `contexts` must be non-empty and drawn from the vocabulary below.
+# 3. A swap whose `diet` REMOVES a tag (-V, -DF, -NF, -PF) must never be offered to a household
+#    that has set that restriction. These rows exist so the app can recognise and suppress them,
+#    not so it can propose them. Getting this wrong is the one failure that could actually hurt
+#    someone — see substitutions-review-notes.md, "The nut-free trap".
+# 4. A swap is offered only when `use` is actually in the pantry and `for` is not.
+# 5. One swap per meal by default. Two stand-ins in one dish stops being the recipe.
+#
+# ── CONTEXT VOCABULARY ──
+# sweet-toast  oatmeal  yogurt-bowl  smoothie  baking-sweet  salad-raw  dressing  marinade
+# stir-fry  soup-stew  braise  curry  pasta-sauce  roast-bake-savoury  taco-wrap  rice-bowl  eggs
+#
+# OPEN DEPENDENCY: nothing yet maps each of the 579 recipes to its contexts. Until that exists
+# this table cannot be applied. See the review notes — it is decision 1 for the team.
+
+for,use,contexts,diet,note
+# ── fruit, sweet dishes ──
+berries,bananas,sweet-toast|oatmeal|yogurt-bowl|smoothie,,"Slice thin. Sweeter than berries, so go easy on any honey or syrup."
+berries,peaches,sweet-toast|oatmeal|yogurt-bowl|smoothie,,"Works fresh or frozen. Dice small for toast."
+berries,pear,sweet-toast|oatmeal|yogurt-bowl,,"Ripe pear only — a firm one stays crunchy and tastes of nothing."
+berries,apples,oatmeal|baking-sweet,,"Grate or dice finely so it softens in the time the recipe gives."
+blueberries,blackberries,sweet-toast|oatmeal|yogurt-bowl|baking-sweet,,"Halve them if they're large."
+blueberries,strawberries,sweet-toast|oatmeal|yogurt-bowl|smoothie,,"Hull and slice."
+strawberries,blackberries,sweet-toast|oatmeal|yogurt-bowl|smoothie,,
+strawberries,blueberries,sweet-toast|oatmeal|yogurt-bowl|smoothie,,
+bananas,peaches,oatmeal|yogurt-bowl|smoothie,,"Not for anything that needs the banana to bind, like banana bread."
+mango,pineapple,smoothie|salad-raw|rice-bowl|taco-wrap,,"Sharper and wetter — drain it if the dish is meant to stay dry."
+peaches,mango,smoothie|yogurt-bowl|salad-raw,,
+dried-fruit,dates,oatmeal|baking-sweet,,"Chop small; dates are stickier and much sweeter."
+# ── dairy ──
+greek-yogurt,yogurt,sweet-toast|oatmeal|yogurt-bowl|smoothie|dressing,,"Thinner, so a dressing made with it will run more."
+greek-yogurt,sour-cream,dressing|taco-wrap|soup-stew,,"As a topping, not baked into anything."
+sour-cream,greek-yogurt,dressing|taco-wrap|soup-stew|rice-bowl,,"Stir it in off the heat or it can split."
+ricotta,cottage-cheese,sweet-toast|pasta-sauce,,"Blend or mash first if you want it smooth rather than lumpy."
+cottage-cheese,ricotta,sweet-toast,,"Richer and less salty."
+mozzarella,provolone,pasta-sauce|taco-wrap|roast-bake-savoury,,"Sharper. Use a little less."
+cheddar,monterey-jack,taco-wrap|eggs|roast-bake-savoury,,"Milder; melts a bit softer."
+monterey-jack,cheddar,taco-wrap|eggs|roast-bake-savoury,,
+feta,goat-cheese,salad-raw|roast-bake-savoury,,"Creamier and less salty — season the dish a touch more."
+goat-cheese,feta,salad-raw|roast-bake-savoury,,"Saltier. Hold back on added salt."
+heavy-cream,coconut-milk,soup-stew|curry,+DF,"Full-fat tinned, not the carton drink. Adds a clear coconut note."
+milk,coconut-milk,soup-stew|curry,+DF,"Full-fat tinned. Savoury dishes only."
+buttermilk,yogurt,baking-sweet,,"Thin with a splash of milk or water until it pours like cream."
+# ── aromatics and herbs ──
+onion,onion-powder,soup-stew|marinade,,"About 1 tsp per small onion. You lose the bulk, so add a little more of another vegetable."
+shallot,red-onion,salad-raw|dressing|roast-bake-savoury|stir-fry,,"Stronger — use about half as much."
+red-onion,onion,salad-raw|taco-wrap|roast-bake-savoury|soup-stew,,"Harsher raw. Rinse the slices in cold water if the dish is uncooked."
+green-onion,shallot,eggs|stir-fry|rice-bowl,,"Use sparingly, and add it earlier so it softens."
+fresh-thyme,thyme,soup-stew|braise|roast-bake-savoury,,"Dried is stronger — use about a third as much."
+basil,dried-basil,pasta-sauce|soup-stew,,"Cooked dishes only. Dried basil is no good as a fresh garnish."
+fresh-oregano,oregano,pasta-sauce|soup-stew|roast-bake-savoury|marinade,,"About a third as much."
+cilantro,parsley,taco-wrap|rice-bowl|salad-raw,,"Tastes different, not weaker. Fine when the cilantro is a garnish rather than the flavour."
+lemon,lime,dressing|marinade|taco-wrap|rice-bowl,,"Swap one for one."
+lime,lemon,dressing|marinade|salad-raw,,"Swap one for one."
+# ── proteins ──
+chicken-breast,chicken-thighs,stir-fry|curry|soup-stew|roast-bake-savoury|taco-wrap,,"Allow a few more minutes; thighs are more forgiving if you overshoot."
+chicken-thighs,chicken-breast,stir-fry|curry|soup-stew|roast-bake-savoury|taco-wrap,,"Cooks faster and dries out — take it off the heat sooner."
+ground-beef,ground-turkey,taco-wrap|pasta-sauce|soup-stew,,"Much leaner, so add a spoon of oil to the pan."
+ground-turkey,ground-chicken,taco-wrap|pasta-sauce|soup-stew,,
+ground-chicken,ground-turkey,taco-wrap|pasta-sauce|soup-stew,,
+salmon,white-fish,roast-bake-savoury,,"Leaner and thinner — check it several minutes early."
+shrimp,white-fish,curry|rice-bowl|soup-stew,,"Cut into chunks and add it late so it doesn't fall apart."
+canned-tuna,cooked-chicken,salad-raw|taco-wrap,,"Shred it finely so it binds with the dressing."
+tofu,paneer,curry|stir-fry,-DF,"Not dairy-free any more. Paneer holds its shape and browns faster."
+# ── beans and grains ──
+black-beans,pinto-beans,taco-wrap|rice-bowl|soup-stew,,
+pinto-beans,black-beans,taco-wrap|rice-bowl|soup-stew,,
+kidney-beans,pinto-beans,soup-stew|salad-raw,,
+chickpeas,white-beans,salad-raw|soup-stew|curry,,"Softer — they'll break down more in a stew."
+white-beans,chickpeas,salad-raw|soup-stew|curry,,"Firmer, holds its shape."
+rice,quinoa,rice-bowl|salad-raw,,"Cooks in about half the time. Rinse it first."
+quinoa,bulgur,salad-raw|rice-bowl,,
+couscous,quinoa,salad-raw|rice-bowl,,"Takes longer — start it before the rest."
+# ── nuts: see RULE 3 and the review notes ──
+walnuts,pecans,baking-sweet|salad-raw|oatmeal,,"Sweeter and softer. Still not nut-free either way."
+almonds,cashews,stir-fry|salad-raw|rice-bowl,,"Softer. Still not nut-free either way."
+pecans,walnuts,baking-sweet|salad-raw|oatmeal,,"More bitter. Still not nut-free either way."
+tahini,peanut-butter,dressing,-NF,"A sesame dressing is often nut-free; this one would NOT be. Never offer to a nut-free household."
+# ── vegetables ──
+broccoli,cauliflower,stir-fry|roast-bake-savoury|soup-stew,,"Give it a few more minutes to colour."
+cauliflower,broccoli,stir-fry|roast-bake-savoury|soup-stew,,"Cooks faster."
+spinach,kale,soup-stew|stir-fry|pasta-sauce,,"Strip the stems and give it longer — kale won't wilt in a minute the way spinach does."
+kale,spinach,soup-stew|stir-fry|pasta-sauce,,"Add it right at the end; it collapses almost immediately."
+green-beans,asparagus,roast-bake-savoury|stir-fry,,"Thinner spears cook much faster."
+cherry-tomatoes,tomatoes,salad-raw|roast-bake-savoury|pasta-sauce,,"Cut into wedges. Wetter, so drain if the dish should stay dry."
+sweet-potato,potatoes,roast-bake-savoury|soup-stew,,"Less sweet; takes a little longer to soften."
+zucchini,eggplant,roast-bake-savoury|pasta-sauce,,"Salt it and leave it 10 minutes if you have time, or it can be spongy."
+#
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# STAPLES — these nine rows CANNOT FIRE as a rescue today.
+#
+# Their `for` ingredient is marked staple=1 in ingredients.csv, which means the database assumes
+# it is always on hand and the app never reports it missing. They are kept separate rather than
+# deleted because two of them do something else useful: the +DF rows let a dairy-free household
+# cook a dish that would otherwise be out, which is a different job from filling a gap.
+#
+# Decision 3 in the review notes: drop these, or keep them for the dietary use.
+# ══════════════════════════════════════════════════════════════════════════════════════════
+butter,olive-oil,stir-fry|roast-bake-savoury|eggs,+DF,"For cooking only — not for baking, where butter is doing structural work."
+butter,vegetable-oil,stir-fry|roast-bake-savoury,+DF,"For cooking only. Neutral, so you lose the buttery taste."
+olive-oil,vegetable-oil,stir-fry|roast-bake-savoury|marinade,,
+garlic,garlic-powder,soup-stew|roast-bake-savoury|marinade,,"About 1/8 tsp per clove. Not for a dish where raw garlic is the point."
+dijon,mustard,dressing|marinade,,"Plain yellow is sharper and less complex. Use slightly less."
+rice-vinegar,apple-cider-vinegar,dressing|stir-fry,,"Sharper — cut it with a pinch of sugar."
+red-wine-vinegar,balsamic-vinegar,dressing,,"Sweeter and much darker; it will colour a pale dressing."
+maple-syrup,honey,sweet-toast|oatmeal|baking-sweet,,"Thicker. Warm it slightly if it needs to pour."
+honey,maple-syrup,sweet-toast|oatmeal,,"Thinner, so it soaks in rather than sitting on top."
