@@ -17,6 +17,8 @@ whichever of them a household wants planned. BUS 860 *Managing Intelligence* · 
   before anything is added; non-food lines come unticked. Manual entry searches about 440 foods, so
   "scallions" finds Green onions and "penne" finds Penne. Quantity is optional, and the purchase date
   is always your answer, including "don't know".
+- The Pantry's search button finds what you have by name, grouped by fridge, freezer and cupboard,
+  with each item's freshness; tap one to edit it.
 - Estimates freshness from the purchase date (or a printed use-by date you enter) and the shelf-life
   norms for where the food is kept, and always shows the basis. Food with no date, or no matching
   norm, stays "unknown" and is never assumed fresh.
