@@ -281,8 +281,33 @@ foreach ($r in $recipes) {
   $counted = 0; $lines = 0
   foreach ($l in $r.ing) {
     if ($l.optional -or $l.items.Count -eq 0) { continue }
-    # Several foods on one line that aren't alternatives ("salt and pepper") have no single amount.
-    if ($l.items.Count -gt 1 -and -not $l.alt) { continue }
+    # Several foods on one line that aren't alternatives. With a count, each food is counted:
+    # "4 chicken thighs and 4 drumsticks" part by part, "8 chicken drumsticks and thighs" split
+    # evenly. Without one ("salt and pepper to taste", a "Dressing:" list) there's no amount.
+    if ($l.items.Count -gt 1 -and -not $l.alt) {
+      $parts = @($l.text -split '\band\b')
+      $first = Parse-Amount $parts[0]
+      $shares = @()
+      if ($parts.Count -eq $l.items.Count -and @($parts | Select-Object -Skip 1 | Where-Object { $_.Trim() -notmatch '^\d' }).Count -eq 0) {
+        for ($k = 0; $k -lt $parts.Count; $k++) { $shares += ,@($l.items[$k], (Parse-Amount $parts[$k].Trim()), $parts[$k]) }
+      } elseif ($first -and -not $first.unit -and $l.text -notmatch '^[A-Za-z ]+:') {
+        foreach ($it in $l.items) { $shares += ,@($it, @{ qty = $first.qty / $l.items.Count; unit = $null }, $l.text) }
+      }
+      if (-not $shares.Count) { continue }
+      $lines++
+      foreach ($sh in $shares) {
+        $n = $nut[$sh[0]]; $g = $null
+        if ($sh[1]) { $g = Line-Grams $sh[2] $sh[1] $n }
+        if ($g -ne $null) { foreach ($f in $fields) { $tot[$f] += $g * [double]$n.$f / 100 } }
+        $nutReview.Add([pscustomobject]@{
+          recipe_no = $r.n; recipe = $r.name; ingredient_line = $l.text; counted_as = $sh[0]
+          grams = $(if ($g -ne $null) { [math]::Round($g) } else { 'not counted' })
+          kcal = $(if ($g -ne $null) { [math]::Round($g * [double]$n.kcal / 100) } else { '' })
+        })
+      }
+      $counted++
+      continue
+    }
     $id = $l.items[0]; $n = $nut[$id]
     if ($n.alias_by_word) {
       foreach ($pair in ($n.alias_by_word -split ';')) {
