@@ -14,6 +14,8 @@
 # of dry ("1 cup cooked quinoa"). alias_by_word: word=row;... counts the line as another row
 # ("basil pesto" -> pesto). Rows below ingredients.csv's foods (pesto) exist only for aliases.
 # Oil "for frying" counts one tenth of what is listed, roughly what the food absorbs.
+# Lentils are measured dry here, so a can (already cooked, then drained) counts as about a fifth of its
+# printed weight in dry lentils: drained 0.2, and a can with no size given as 88 g dry. Added 2026-10-29.
 # Milk is 2%. Checked 2026-10-08 against USDA SR Legacy: olive and vegetable oil, flour, sugar,
 # white rice, dry pasta, eggs, chicken breast, butter and chicken thighs matched within 15%.
 # Lemon, lime and orange measured in cups or spoons mean juice; butter sodium is the midpoint of
@@ -240,7 +242,7 @@ black-beans,91,6,16.5,0.3,6.9,240,172,,250,,,,,,,,0.6,,,
 kidney-beans,84,5.2,15,0.4,5.4,250,180,,250,,,,,,,,0.6,,,
 white-beans,100,7,17,0.3,4.5,230,180,,250,,,,,,,,0.6,,,
 refried-beans,90,5.5,15,1.2,5,380,240,,450,,,,,,,,1,,,
-lentils,352,24.6,63,1.1,10.7,6,192,,,,,,,,,,,,0.34,
+lentils,352,24.6,63,1.1,10.7,6,192,,88,,,,,,,,0.2,,0.34,
 split-peas,348,23.8,62,1.2,22,15,196,,,,,,,,,,,,,
 hummus,166,7.9,14.3,9.6,6,379,246,,,,,,,,,,,,,
 falafel,333,13.3,31.8,17.8,4,294,,17,,,,,,,,,,,,
