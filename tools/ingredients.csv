@@ -415,7 +415,7 @@ manicotti,Manicotti / cannelloni,cupboard,dry-pasta,0,manicotti|cannelloni,pasta
 whole-wheat-pasta,Whole wheat pasta,cupboard,dry-pasta,0,whole (wheat|grain) pasta,pasta,1
 gluten-free-pasta,Gluten-free pasta,cupboard,dry-pasta,0,gluten[- ]?free pasta|rice pasta|corn pasta,pasta,1
 legume-pasta,Chickpea or lentil pasta,cupboard,dry-pasta,0,chickpea pasta|lentil pasta|bean pasta|legume pasta,pasta,1
-couscous,Couscous,cupboard,dry-pasta,0,couscous,,1
+couscous,Couscous,cupboard,dry-pasta,0,couscous,,
 soba-noodles,Soba noodles,cupboard,,0,soba,asian-noodles,1
 udon-noodles,Udon noodles,cupboard,,0,udon,asian-noodles,1
 ramen-noodles,Ramen noodles,cupboard,,0,ramen|instant noodles,asian-noodles,1
@@ -433,21 +433,21 @@ sugar-pumpkin,Pie pumpkin (sugar pumpkin),cupboard,,0,pie pumpkin|sugar pumpkin|
 spaghetti-squash,Spaghetti squash,cupboard,,0,spaghetti squash,,1
 yellow-squash,Yellow summer squash,fridge,zucchini,0,yellow squash|crookneck|straightneck,zucchini,1
 pattypan-squash,Pattypan squash,fridge,zucchini,0,patty ?pan,zucchini,1
-pumpkin-puree,Pumpkin purée (canned),cupboard,,0,pumpkin pur|canned pumpkin,,1
+pumpkin-puree,Pumpkin purée (canned),cupboard,,0,pumpkin pur|canned pumpkin,,
 #
 # ── fresh produce ──
 raspberries,Raspberries,fridge,berries,0,raspberr,berries,1
-blackberries,Blackberries,fridge,berries,0,blackberr,berries,1
+blackberries,Blackberries,fridge,berries,0,blackberr,,
 clementines,Clementines / mandarins,cupboard,citrus,0,clementine|mandarin|tangerine|satsuma,orange,1
 grapefruit,Grapefruit,fridge,citrus,0,grapefruit,,1
-peaches,Peaches / nectarines,cupboard,,0,\bpeach(es)?\b(?! yog)|nectarine,,1
+peaches,Peaches / nectarines,cupboard,,0,\bpeach(es)?\b(?! yog)|nectarine,,
 plums,Plums,cupboard,,0,\bplums?\b,,1
-cherries,Cherries,fridge,,0,cherries|\bcherry\b(?! tomato),,1
-kiwi,Kiwi,fridge,,0,kiwi,,1
+cherries,Cherries,fridge,,0,cherries|\bcherry\b(?! tomato),,
+kiwi,Kiwi,fridge,,0,kiwi,,
 watermelon,Watermelon,fridge,,0,watermelon,,1
 cantaloupe,Cantaloupe / honeydew,fridge,,0,cantaloupe|honeydew|\bmelon\b,,1
-brussels-sprouts,Brussels sprouts,fridge,,0,brussels,,1
-beets,Beets,fridge,,0,\bbeets?\b|beetroot,,1
+brussels-sprouts,Brussels sprouts,fridge,,0,brussels,,
+beets,Beets,fridge,,0,\bbeets?\b|beetroot,,
 parsnips,Parsnips,fridge,,0,parsnip,,1
 turnips,Turnips / rutabaga,fridge,,0,turnip|rutabaga,,1
 fennel,Fennel,fridge,,0,fennel,,1
@@ -469,20 +469,42 @@ sardines,Sardines,cupboard,,0,sardine,,1
 basmati-rice,Basmati rice,cupboard,white-rice,0,basmati,rice,1
 jasmine-rice,Jasmine rice,cupboard,white-rice,0,jasmine rice,rice,1
 arborio-rice,Arborio rice,cupboard,white-rice,0,arborio|risotto rice,rice,1
-pinto-beans,Pinto beans,cupboard,,0,pinto,,1
+pinto-beans,Pinto beans,cupboard,,0,pinto,,
 canned-corn,Canned corn,cupboard,,0,canned corn|corn niblets|creamed corn,corn,1
 naan,Naan,cupboard,bread,0,\bnaan\b,pita,1
 sun-dried-tomatoes,Sun-dried tomatoes,cupboard,,0,sun[- ]?dried,,1
 roasted-red-peppers,Roasted red peppers (jar),cupboard,,0,roasted red pepper,,1
-artichoke-hearts,Artichoke hearts (jar or can),cupboard,,0,artichoke,,1
+artichoke-hearts,Artichoke hearts (jar or can),cupboard,,0,artichoke,,
 coconut-cream,Coconut cream,cupboard,,0,coconut cream,,1
 evaporated-milk,Evaporated milk,cupboard,,0,evaporated milk|condensed milk,,1
 pesto,Pesto (jar),fridge,,0,pesto,,1
 almond-butter,Almond butter,cupboard,,0,almond butter|cashew butter,,1
 jam,Jam / jelly,fridge,,0,\bjam\b|jelly|preserves|marmalade,,1
-dates,Dates,cupboard,,0,\bdates?\b|medjool,dried-fruit,1
-pumpkin-seeds,Pumpkin seeds (pepitas),cupboard,,0,pumpkin seed|pepita,,1
-sunflower-seeds,Sunflower seeds,cupboard,,0,sunflower seed,,1
+dates,Dates,cupboard,,0,\bdates?\b|medjool,,
+pumpkin-seeds,Pumpkin seeds (pepitas),cupboard,,0,pumpkin seed|pepita,,
+sunflower-seeds,Sunflower seeds,cupboard,,0,sunflower seed,,
 pine-nuts,Pine nuts,cupboard,,0,pine ?nut,,1
 cereal,Breakfast cereal,cupboard,,0,cereal|cheerios|bran flakes|corn flakes,,1
-crackers,Crackers,cupboard,,0,cracker|triscuit|saltine,,1
+crackers,Crackers,cupboard,,0,cracker|triscuit|saltine,,
+
+# â”€â”€ FOODS ADDED FOR RECIPES 301-579, 2026-10-29 â”€â”€
+# Matched last, so these can only catch ingredient lines the rows above did not. The
+# 14 foods promoted out of the pantry-only block above work the same way: they kept their
+# position, so the original 300 recipes read exactly as before.
+# Dried seasonings here are staple=0 because the database does not list them among its
+# "Standard Pantry Staples Assumed On Hand" - a recipe needing za'atar will say so.
+hemp-seeds,Hemp seeds,cupboard,,0,hemp seed,,
+pistachios,Pistachios,cupboard,,0,pistachio,,
+dried-figs,Dried figs,cupboard,,0,\bfigs?\b,,
+shredded-coconut,Shredded coconut,cupboard,,0,shredded coconut|coconut flakes|desiccated coconut,,
+nutritional-yeast,Nutritional yeast,cupboard,,0,nutritional yeast,,
+tzatziki,Tzatziki,fridge,,0,tzatziki,,
+vinaigrette,Vinaigrette,fridge,,0,vinaigrette,,
+pepperoncini,Pepperoncini,cupboard,,0,pepperoncini,,
+harissa,Harissa paste,fridge,,0,harissa,,
+chili-crisp,Chili crisp,cupboard,,0,chili crisp|chilli crisp,,
+jerk-seasoning,Jerk seasoning,cupboard,,0,jerk seasoning,,
+zaatar,Za'atar,cupboard,,0,za.?atar,,
+matcha,Matcha powder,cupboard,,0,matcha,,
+cardamom,Ground cardamom,cupboard,,0,cardamom,,
+pumpkin-pie-spice,Pumpkin pie spice,cupboard,,0,pumpkin pie spice,,
