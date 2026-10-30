@@ -1006,6 +1006,9 @@ function renderMeals() {
     card.onclick = function() { openDetail(idx); };
 
     var chips = left ? chipHTML('ok', 'nothing to cook') : mealChips(r).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
+    // Why this meal is on the plan, on the card itself. Only while it's still Ren's to decide:
+    // once cooked or skipped the reason is history, not something to act on.
+    var why = (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3));
     var badge = '';
     if (entry.status === 'accepted') { badge = '<span class="state-badge cooked">✓ ' + (left ? 'eaten' : 'cooked') + '</span>'; }
     if (entry.status === 'skipped')  { badge = '<span class="state-badge skipped">skipped</span>'; }
@@ -1021,6 +1024,7 @@ function renderMeals() {
       '<div class="meal-info">' +
         '<h4>' + r.name + '</h4>' +
         '<p class="meta">' + (left ? 'Lunch · leftovers from last night\'s dinner' : Type + ' · ' + r.time) + '</p>' +
+        (why ? '<p class="meal-why">' + esc(why) + '</p>' : '') +
         '<div class="chip-row">' + chips + '</div>' +
       '</div>';
 
@@ -1297,14 +1301,32 @@ function ingredientRowsHTML(r, idx) {
   return { html:html, missing:missing };
 }
 // A one-line reason the planner picked this meal, from the kitchen, never made up.
-function whyLine(r) {
-  var urgent = null;
+//
+// Each branch states something the scorer actually weighed: an ingredient near the end of its
+// window, Ren's own rating, full coverage from the pantry, a weekday time limit. Nothing here
+// infers a reason the plan did not use, and when none of them hold it returns '' rather than
+// filling the gap — a made-up justification would be worse than no line at all.
+function whyLine(r, dayIdx) {
+  var urgent = null, missing = false;
   visibleLines(r).forEach(function(line) {
-    var e = urgentEntryFor(line); if (!e) return;
+    var e = urgentEntryFor(line);
+    if (!e) { if (!line.optional) missing = true; return; }
     var f = freshness(e);
     if (f.known && f.max >= 0 && f.min <= 3 && (!urgent || f.min < urgent.f.min)) urgent = { e:e, f:f };
   });
   if (urgent) return 'Uses your ' + ingName(urgent.e.ing).toLowerCase() + ' while it\'s still good (' + urgent.f.text + ').';
+
+  var p = getPref(r.id);
+  if (p.fav) return missing ? 'One of your favourites.' : 'One of your favourites, and everything it needs is already here.';
+
+  if (!missing) {
+    var lim = (typeof dayIdx === 'number') ? timeLimit(r.type, dayIdx) : null;
+    if (lim && r.mins && r.mins <= lim) {
+      return 'Everything it needs is already here, and it fits your ' + lim + '-minute ' + r.type + '.';
+    }
+    return 'Everything it needs is already in your kitchen.';
+  }
+  if (p.vote === 'up') return 'You liked this one before.';
   return '';
 }
 
@@ -1356,7 +1378,7 @@ function openDetail(idx) {
       '</div>' +
       '<p class="detail-note">Skipped. Nothing was deducted from your pantry.</p>';
   } else {
-    var why = whyLine(r);
+    var why = whyLine(r, Math.floor(idx / 3));
     html += '<div class="actions">' +
         '<button class="btn primary" onclick="acceptMeal(' + idx + ')">Accept</button>' +
         '<button class="btn ghost" onclick="swapMeal(' + idx + ')">Swap</button>' +
@@ -1490,10 +1512,25 @@ function unskip(idx) {
 
 // Swap: the best other recipe of the same meal type for what's in the kitchen, after what the
 // rest of the plan sets aside. Dietary restrictions and "not for us" are hard filters.
+// Alternatives already offered for this slot are excluded alongside the rest of the plan, so Swap
+// keeps moving through the pool instead of bouncing between the same two recipes. `tried` is
+// cleared whenever the planner sets the slot, and reset once the pool runs out (see swapMeal).
 function bestAlternative(idx, current) {
+  var entry = plan[idx], day = Math.floor(idx / 3);
   var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
-  var pick = pickRecipe(current.type, Math.floor(idx / 3), reservationsExcept(idx), others.concat([current.id]));
-  return pick && pick.id !== current.id ? pick : null;
+
+  var pick = pickRecipe(current.type, day, reservationsExcept(idx),
+    others.concat((entry.tried || []).concat([current.id])));
+  if (pick && pick.id !== current.id) return pick;
+
+  // Everything this slot has been offered is used up. Clear the list and start the rotation
+  // again rather than dead-ending on "nothing else fits" when alternatives do exist.
+  if ((entry.tried || []).length) {
+    entry.tried = [];
+    pick = pickRecipe(current.type, day, reservationsExcept(idx), others.concat([current.id]));
+    if (pick && pick.id !== current.id) return pick;
+  }
+  return null;                     // the pool really does hold nothing else for this slot
 }
 
 function swapMeal(idx, silent) {
@@ -1507,13 +1544,17 @@ function swapMeal(idx, silent) {
     return;
   }
 
+  // Remember what this slot has shown, so the next Swap moves on. bestAlternative() clears the
+  // list itself when the pool runs out, so this only ever grows within one rotation.
+  entry.tried = (entry.tried || []).concat([current.id]);
+
   entry.recipe = pick.id;
   entry.status = 'pending';
   delete entry.dietBlocked;
 
   closeDetail();
   renderAll();
-  var why = whyLine(pick);
+  var why = whyLine(pick, Math.floor(idx / 3));
   showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name + (why ? '. ' + why : ''));
 }
 
@@ -1533,6 +1574,7 @@ function enforceDiet() {
       if (violatesDiet(r)) swapped.push(r.name + ' → ' + pick.name);
       entry.recipe = pick.id;
       delete entry.dietBlocked;
+      delete entry.tried;          // the planner chose this slot again; Swap starts fresh
     } else {
       entry.dietBlocked = true;
       stuck.push(r.type);
@@ -1552,7 +1594,7 @@ function enforceTimes() {
     if (!r || entry.status !== 'pending' || entry.dietBlocked || fitsTime(r, day)) return;
     var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
     var pick = pickRecipe(r.type, day, reservationsExcept(idx), others);
-    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; changed++; }
+    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; delete entry.tried; changed++; }
   });
   return changed;
 }
