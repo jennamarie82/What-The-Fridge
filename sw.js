@@ -3,7 +3,10 @@
 // to GitHub shows up on the next open; cached copies are only used offline.
 // Recipe photos and icons are cached the first time they're shown and served from cache after.
 // Bump VERSION to clear old caches after a large change.
-var VERSION = 'wtf-v2';
+// Network requests skip the browser's own HTTP cache ('no-cache' asks GitHub whether the file
+// changed), so a phone that kept an old copy still gets the new one on the next open.
+var VERSION = 'wtf-v3';
+function fresh(req) { return fetch(new Request(req.url, { cache:'no-cache', credentials:'same-origin' })); }
 var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'recipes.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function(e) {
@@ -23,7 +26,7 @@ self.addEventListener('fetch', function(e) {
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) { return; }
 
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(function(res) {
+    e.respondWith(fresh(req).then(function(res) {
       var copy = res.clone();
       caches.open(VERSION).then(function(c) { c.put('index.html', copy); });
       return res;
@@ -33,7 +36,7 @@ self.addEventListener('fetch', function(e) {
 
   // App code and data: network first, so a pushed change arrives on the next open.
   if (!/\/recipe-images\/|\/icons\//.test(req.url)) {
-    e.respondWith(fetch(req).then(function(res) {
+    e.respondWith(fresh(req).then(function(res) {
       if (res.ok) {
         var copy = res.clone();
         caches.open(VERSION).then(function(c) { c.put(req, copy); });

@@ -1,11 +1,26 @@
+// Shown in About and the page footer so anyone can tell which build their phone is running.
+// Change it with each release, together with ?v= on the files in index.html.
+var APP_VERSION = '2026-10-29 (meals, leftovers and cook times)';
+
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
   name: '',                       // what the app calls the user; blank is fine
   since: null,                    // YYYY-MM-DD the household was set up; null until setup is finished
   household: 2,
   dietary: { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false },
-  notify:  { cooked:true, expiry:true, planReady:false }
+  notify:  { cooked:true, expiry:true, planReady:false },
+  // From the setup questionnaire (Profile > Meals & cooking to change):
+  meals:     { breakfast:true, lunch:true, dinner:true },   // which meals to plan
+  leftovers: false,                                          // dinner covers the next day's lunch
+  times:     { breakfast:20, lunch:30, dinner:null }         // weekday cook-time limit in minutes; null = any
 };
+// Settings saved before the questionnaire existed get its defaults, which match the old behaviour.
+function fillMealSettings(s) {
+  if (!s.meals) s.meals = { breakfast:true, lunch:true, dinner:true };
+  if (s.leftovers === undefined) s.leftovers = false;
+  if (!s.times) s.times = { breakfast:20, lunch:30, dinner:null };
+  return s;
+}
 
 // Every meal marked cooked, for the Profile stats. Nothing here is estimated: `rescued`
 // counts ingredients that were still inside their freshness window when they were used.
@@ -198,7 +213,8 @@ function visibleLines(recipe) {
 // Each ingredient line keeps the database's own wording (`text`) and names the food it uses from
 // the shared ingredient list (`id`, or `any` when the recipe offers a choice). Staple lines (salt,
 // oil, spices...) are kept for display but never planned around: they're assumed on hand.
-// Amounts are as written. The database doesn't say how many a recipe serves, so nothing is scaled.
+// Amounts are as written; amountFor() scales them to the household from each recipe's estimated
+// servings (tools/servings.csv), so each line keeps a link to its recipe (`r`).
 var recipes = (window.WTF_RECIPES || []).map(function(src) {
   var lines = [];
   src.ing.forEach(function(l) {
@@ -217,14 +233,19 @@ var recipes = (window.WTF_RECIPES || []).map(function(src) {
     }
     lines.push(line);
   });
-  return { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
-           tags:src.tags || [], all:lines, ing:lines.filter(function(l) { return !l.staple; }), steps:src.steps || [],
-           nut:src.nut || null };
+  var r = { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
+            tags:src.tags || [], all:lines, ing:lines.filter(function(l) { return !l.staple; }), steps:src.steps || [],
+            nut:src.nut || null };
+  lines.forEach(function(l) { l.r = r; });
+  return r;
 });
 
 // ═══════════════ PLAN ═══════════════
 // Three days x breakfast / lunch / dinner, built from the kitchen by the planner below.
 // status: pending | accepted | skipped
+// A slot can also be { off:true } (a meal the household doesn't plan) or { leftover:true,
+// recipe:<last night's dinner> } (lunch is the previous dinner's leftovers: nothing to cook or
+// set aside). `ownLunch` marks a lunch someone chose to cook instead of eating leftovers.
 var plan = [];
 var planSig = null;               // the kitchen the plan was last built for; see kitchenSig()
 var planBuiltEmpty = false;       // true while the plan was made for an empty kitchen
@@ -239,6 +260,15 @@ var unreconciled = [];           // meals that left the horizon still unconfirme
 function recipeById(id) { for (var i=0;i<recipes.length;i++) { if (recipes[i].id === id) return recipes[i]; } return null; }
 function entryById(id)  { for (var i=0;i<pantry.length;i++)  { if (pantry[i].id === id)  return pantry[i];  } return null; }
 function planIndex(day, type) { return (day - 1) * 3 + MEAL_TYPES.indexOf(type); }
+
+// ─── the household's meal choices ───
+function mealOn(type) { return !settings.meals || settings.meals[type] !== false; }
+function leftoversOn() { return !!settings.leftovers && mealOn('lunch') && mealOn('dinner'); }
+// The dinner slot a lunch's leftovers come from, or -1. Not on day 1: last night isn't in the plan.
+function leftoverSource(idx) { return idx % 3 === 1 && idx >= 3 && leftoversOn() ? idx - 2 : -1; }
+// A slot with its own meal to cook (not switched off, not leftovers).
+function isMealEntry(e) { return !!e && !e.off && !e.leftover; }
+function usableDinner(d) { return isMealEntry(d) && d.status !== 'skipped' && !d.dietBlocked; }
 
 function round2(n) { return Math.round(n * 100) / 100; }
 
@@ -406,8 +436,20 @@ function stockOf(ingId, unit, reserved) {
 
 function lineIds(line) { return line.any || [line.id]; }
 function lineName(line) { return lineIds(line).map(ingName).join(' or '); }
-// Amounts are as the recipe file writes them; it doesn't say how many a recipe serves.
-function amountFor(line) { return line.qty === null || line.qty === undefined ? null : line.qty; }
+// How much of a line this household's meal needs: the recipe's amount scaled from its estimated
+// servings to the household, doubled for a dinner that also makes the next day's lunch.
+// Everything that checks, sets aside or deducts food goes through here.
+function amountFor(line) {
+  if (line.qty === null || line.qty === undefined) return null;
+  return Math.round(line.qty * recipeScale(line.r) * 1000) / 1000;
+}
+function servingsFor(r) {
+  return settings.household * (r && r.type === 'dinner' && leftoversOn() ? 2 : 1);
+}
+function recipeScale(r) {
+  if (!r || !r.nut || !r.nut.serves) return 1;
+  return servingsFor(r) / r.nut.serves;
+}
 
 // Whether the kitchen covers one recipe line, needing `amount` (null = presence only):
 //   ok       enough is known to be on hand (or, for presence-only lines, some is)
@@ -494,7 +536,7 @@ function reserveRecipe(r, reserved) {
     (reserved[c.id] = reserved[c.id] || []).push({ qty:a, unit:line.unit });
   });
 }
-function activeEntry(e) { return e && e.status === 'pending' && !e.dietBlocked; }
+function activeEntry(e) { return isMealEntry(e) && e.status === 'pending' && !e.dietBlocked; }
 // What the pending meals OTHER than `skipIdx` set aside (for Swap and re-planning one slot).
 function reservationsExcept(skipIdx) {
   var res = {};
@@ -555,11 +597,12 @@ function optionalMissing() {
 // favourites and likes; using more of what's on hand. A small per-day shuffle keeps equally
 // good plans from repeating every day.
 
-// Monday to Friday, breakfast takes 20 minutes or less and lunch 30 minutes or less.
-var WEEKDAY_MINUTES = { breakfast:20, lunch:30 };
+// Monday to Friday, each meal stays within the household's cook-time limit from setup
+// (by default breakfast 20 minutes or less and lunch 30 or less). Weekends aren't limited.
 function timeLimit(type, dayIdx) {
   var wd = dateFor(dayIdx).getDay();
-  return (wd === 0 || wd === 6) ? null : (WEEKDAY_MINUTES[type] || null);
+  if (wd === 0 || wd === 6) return null;
+  return (settings.times && settings.times[type]) || null;
 }
 function fitsTime(r, dayIdx) {
   var lim = timeLimit(r.type, dayIdx);
@@ -629,19 +672,29 @@ function kitchenSig() {
 // discard meals the change didn't affect. Returns how many meals changed.
 function planKitchen(keep) {
   var res = {}, used = [], kept = [], changed = 0;
-  for (var i = 0; i < 9; i++) { if (plan[i] && plan[i].status !== 'pending') used.push(plan[i].recipe); }
+  for (var i = 0; i < 9; i++) { if (isMealEntry(plan[i]) && plan[i].status !== 'pending') used.push(plan[i].recipe); }
   if (keep) {
     plan.forEach(function(e, i) {
-      if (!e || e.status !== 'pending' || e.dietBlocked) return;
+      if (!isMealEntry(e) || e.status !== 'pending' || e.dietBlocked) return;
+      if (!mealOn(MEAL_TYPES[i % 3]) || (leftoverSource(i) > -1 && !e.ownLunch)) return;   // settings changed
       var r = recipeById(e.recipe);
       if (r && eligible(r, r.type) && fitsTime(r, Math.floor(i / 3)) && fullyCovered(r, res, Math.floor(i / 3))) { reserveRecipe(r, res); kept[i] = true; used.push(r.id); }
     });
   }
   for (var j = 0; j < 9; j++) {
-    var e = plan[j];
-    if (e && (e.status !== 'pending' || kept[j])) continue;
-    var type = MEAL_TYPES[j % 3], pick = pickRecipe(type, Math.floor(j / 3), res, used);
-    var before = e ? e.recipe : null;
+    var e = plan[j], type = MEAL_TYPES[j % 3];
+    if (!mealOn(type)) {                                   // a meal this household doesn't plan
+      if (!e || !e.off) { plan[j] = { off:true, status:'off' }; changed++; }
+      continue;
+    }
+    var src = leftoverSource(j);
+    if (src > -1 && !(e && e.ownLunch) && usableDinner(plan[src])) {   // last night's leftovers
+      if (!e || !e.leftover || e.recipe !== plan[src].recipe) { plan[j] = { leftover:true, recipe:plan[src].recipe, status:'pending' }; changed++; }
+      continue;
+    }
+    if (isMealEntry(e) && (e.status !== 'pending' || kept[j])) continue;
+    var pick = pickRecipe(type, Math.floor(j / 3), res, used);
+    var before = e ? e.recipe : null, own = !!(e && e.ownLunch);
     if (pick) {
       plan[j] = { recipe:pick.id, status:'pending' };
       reserveRecipe(pick, res); used.push(pick.id);
@@ -649,11 +702,36 @@ function planKitchen(keep) {
       // Nothing in the approved files fits: flag the slot rather than break a restriction.
       plan[j] = { recipe:recipes.filter(function(r) { return r.type === type; })[0].id, status:'pending', dietBlocked:true };
     }
+    if (own) plan[j].ownLunch = true;
     if (plan[j].recipe !== before) changed++;
   }
   planSig = kitchenSig();
   planBuiltEmpty = pantryEmpty();
   return changed;
+}
+
+// Keeps the plan's shape in step with the household's choices and with its dinners, without
+// re-planning meals that still work: a meal switched off becomes an empty slot, a lunch follows
+// the dinner it's leftovers of, and a slot that now needs its own meal gets the best one.
+// Run before every render, so a swapped, skipped or changed dinner carries its leftovers along.
+function syncPlanShape() {
+  if (plan.length !== 9) return;
+  plan.forEach(function(e, j) {
+    var type = MEAL_TYPES[j % 3];
+    if (!mealOn(type)) { if (!e || !e.off) plan[j] = { off:true, status:'off' }; return; }
+    var src = leftoverSource(j);
+    if (src > -1 && !(e && e.ownLunch) && usableDinner(plan[src])) {
+      var d = plan[src];
+      if (!e || !e.leftover || e.recipe !== d.recipe) plan[j] = { leftover:true, recipe:d.recipe, status:'pending' };
+      return;
+    }
+    if (isMealEntry(e)) return;
+    var others = plan.map(function(x, i) { return i !== j && isMealEntry(x) ? x.recipe : null; }).filter(Boolean);
+    var pick = pickRecipe(type, Math.floor(j / 3), reservationsExcept(j), others);
+    plan[j] = pick ? { recipe:pick.id, status:'pending' }
+                   : { recipe:recipes.filter(function(r) { return r.type === type; })[0].id, status:'pending', dietBlocked:true };
+    if (e && e.ownLunch) plan[j].ownLunch = true;
+  });
 }
 function replanNow() {
   var n = planKitchen(true);
@@ -804,7 +882,7 @@ function rateMeal(id, kind) {
   if (p.vote === 'down') {
     // A disliked recipe is replaced rather than leaving a hole in the day.
     var idx = -1;
-    for (var i=0;i<plan.length;i++) { if (plan[i].recipe === id && plan[i].status === 'pending') { idx = i; break; } }
+    for (var i=0;i<plan.length;i++) { if (isMealEntry(plan[i]) && plan[i].recipe === id && plan[i].status === 'pending') { idx = i; break; } }
     closeDetail();
     if (idx > -1) { swapMeal(idx, true); }
     showToast(msg);
@@ -912,33 +990,37 @@ function renderMeals() {
   MEAL_TYPES.forEach(function(type, slot) {
     var idx = planIndex(currentDay, type);
     var entry = plan[idx];
+    if (!entry || entry.off) return;                      // a meal this household doesn't plan
     var r = recipeById(entry.recipe);
     if (!r) return;
+    var left = !!entry.leftover;
+    var Type = type.charAt(0).toUpperCase() + type.slice(1);
 
     var pref = getPref(r.id);
     var card = document.createElement('div');
     card.className = 'meal-card' + (slot === spot ? ' spotlight' : '') + (entry.status !== 'pending' ? ' done' : '') + (entry.dietBlocked ? ' blocked' : '');
     card.setAttribute('role', 'button');
-    card.setAttribute('aria-label', r.type.charAt(0).toUpperCase() + r.type.slice(1) + ': ' + r.name + ', ' + r.time + (entry.status === 'accepted' ? ', cooked' : entry.status === 'skipped' ? ', skipped' : ''));
+    card.setAttribute('aria-label', Type + ': ' + (left ? 'leftovers, ' : '') + r.name + ', ' + (left ? 'nothing to cook' : r.time) +
+      (entry.status === 'accepted' ? (left ? ', eaten' : ', cooked') : entry.status === 'skipped' ? ', skipped' : ''));
     card.setAttribute('tabindex', '0');
     card.onclick = function() { openDetail(idx); };
 
-    var chips = mealChips(r).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
+    var chips = left ? chipHTML('ok', 'nothing to cook') : mealChips(r).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
     var badge = '';
-    if (entry.status === 'accepted') { badge = '<span class="state-badge cooked">✓ cooked</span>'; }
+    if (entry.status === 'accepted') { badge = '<span class="state-badge cooked">✓ ' + (left ? 'eaten' : 'cooked') + '</span>'; }
     if (entry.status === 'skipped')  { badge = '<span class="state-badge skipped">skipped</span>'; }
     if (entry.dietBlocked)           { badge = '<span class="state-badge blocked">⚠ doesn\'t fit</span>'; }
 
     card.innerHTML =
       '<div class="meal-hero" style="background:' + heroFor(r) + ';">' +
-        '<span class="meal-type-badge ' + r.type + '">' + r.type + '</span>' +
-        '<span class="time-badge">' + r.time + '</span>' +
+        '<span class="meal-type-badge ' + type + '">' + (left ? 'lunch · leftovers' : type) + '</span>' +
+        '<span class="time-badge">' + (left ? 'reheat' : r.time) + '</span>' +
         badge +
         (pref.fav ? '<span class="fav-badge" title="Favourite">' + rateIcons.fav + '</span>' : '') +
       '</div>' +
       '<div class="meal-info">' +
         '<h4>' + r.name + '</h4>' +
-        '<p class="meta">' + r.type.charAt(0).toUpperCase() + r.type.slice(1) + ' · ' + r.time + '</p>' +
+        '<p class="meta">' + (left ? 'Lunch · leftovers from last night\'s dinner' : Type + ' · ' + r.time) + '</p>' +
         '<div class="chip-row">' + chips + '</div>' +
       '</div>';
 
@@ -952,7 +1034,7 @@ function renderAlloc() {
   if (!body) return;
   var rows = {}, order = [];
   plan.forEach(function(entry, idx) {
-    if (entry.status === 'skipped') return;
+    if (!isMealEntry(entry) || entry.status === 'skipped') return;
     var r = recipeById(entry.recipe);
     var day = Math.floor(idx / 3);
     visibleLines(r).forEach(function(line) {
@@ -1052,6 +1134,8 @@ function openPantrySearch() {
 }
 
 function closePantrySearch() {
+  // Called on every tab switch: if the search bar isn't on the page, there's nothing to close.
+  if (!document.getElementById('pantrySearchBar')) return;
   document.getElementById('pantrySearchBar').style.display = 'none';
   document.getElementById('pantrySearchBtn').style.display = '';
   document.getElementById('pantryTitleText').style.display = '';
@@ -1151,6 +1235,22 @@ function nutritionHTML(r) {
       (n.cover < 100 ? ' (' + n.cover + '% of this recipe\'s ingredient lines were)' : '') + '.</p>';
 }
 
+// The amount this household's plan uses, beside the recipe's own wording, when scaling changes it.
+function scaledNote(line) {
+  var a = amountFor(line);
+  if (a === null || Math.abs(a - line.qty) < 1e-6) return '';
+  return ' <span class="scaled">→ ' + esc(fmtQty(a, line.unit)) + '</span>';
+}
+// What the recipe's amounts are scaled to, in plain words, under the ingredients.
+function scaleHint(r) {
+  if (!r.nut || !r.nut.serves) return 'Amounts as the recipe file writes them.';
+  var people = settings.household, n = servingsFor(r);
+  var who = people + ' ' + (people === 1 ? 'person' : 'people') + (n > people ? ', plus tomorrow\'s leftovers lunch' : '');
+  return 'The recipe file\'s amounts make about ' + r.nut.serves + ' serving' + (r.nut.serves > 1 ? 's' : '') + ' (our estimate). ' +
+    (Math.abs(n - r.nut.serves) < 1e-6 ? 'That fits your household of ' + who + ', so they\'re used as written.'
+      : 'Your plan scales them for ' + who + ' (shown with →), and that\'s what the kitchen check and Accept use.');
+}
+
 // One row per line of the recipe, in the recipe's own words, with what the kitchen has for it.
 // For a meal still to cook, what earlier meals in the plan set aside is taken off first.
 function ingredientRowsHTML(r, idx) {
@@ -1171,7 +1271,7 @@ function ingredientRowsHTML(r, idx) {
     var opt = line.optional && !/optional/i.test(line.text) ? ' <span class="opt">optional</span>' : '';
     if (c.status === 'missing') {
       if (!line.optional) missing.push(line);
-      html += '<div class="ingredient-row"><div><div class="ingredient-name">' + esc(line.text) + opt + '</div>' +
+      html += '<div class="ingredient-row"><div><div class="ingredient-name">' + esc(line.text) + opt + scaledNote(line) + '</div>' +
         '<div class="ingredient-basis">No ' + esc(lineName(line).toLowerCase()) + ' in your kitchen' +
         (line.optional ? ', and the dish works without it' : '') + '</div></div>' +
         chipHTML(line.optional ? 'unknown' : 'now', line.optional ? 'skip it' : 'missing') + '</div>';
@@ -1189,7 +1289,7 @@ function ingredientRowsHTML(r, idx) {
     }
     if (c.status === 'check') { note = ' · <b>how much you have isn\'t recorded in a comparable unit, so check before cooking</b>'; }
     html += '<div class="ingredient-row"><div>' +
-        '<div class="ingredient-name">' + esc(line.text) + opt + '</div>' +
+        '<div class="ingredient-name">' + esc(line.text) + opt + scaledNote(line) + '</div>' +
         '<div class="ingredient-basis">' + esc(e && e.ing !== c.id ? ingName(e.ing) + ' (counts as ' + ingName(c.id).toLowerCase() + ')' : ingName(c.id)) +
           ': ' + esc(basisLine(e)) + note + '</div>' +
       '</div>' + chipHTML(chip[0], chip[1]) + '</div>';
@@ -1211,6 +1311,8 @@ function whyLine(r) {
 function openDetail(idx) {
   detailIndex = idx;
   var entry = plan[idx];
+  if (!entry || entry.off) return;
+  if (entry.leftover) { openLeftoverDetail(idx); return; }
   var r = recipeById(entry.recipe);
   var overlay = document.getElementById('detailOverlay');
 
@@ -1227,8 +1329,7 @@ function openDetail(idx) {
     '</div>' +
     '<div class="section-label" style="margin-top:0;">Ingredients &middot; from your kitchen</div>' +
     '<div class="ingredient-card">' + rows.html + '</div>' +
-    '<p class="field-hint">Amounts as the recipe file writes them. It doesn\'t say how many each recipe serves' +
-      (r.nut ? '; about ' + r.nut.serves + ' is our estimate' : '') + '.</p>';
+    '<p class="field-hint">' + esc(scaleHint(r)) + '</p>';
 
   rows.missing.forEach(function(line) {
     html += '<div class="missing-callout"><b>Missing: ' + esc(lineName(line)) + '</b><span>Required for this recipe. Swap the meal or pick it up.</span></div>';
@@ -1272,6 +1373,50 @@ function openDetail(idx) {
   document.getElementById('fab').style.display = 'none';
 }
 
+// A leftovers lunch: last night's dinner was made for the household twice over, so there's
+// nothing to cook and nothing more to take from the pantry.
+function openLeftoverDetail(idx) {
+  var entry = plan[idx], r = recipeById(entry.recipe), day = Math.floor(idx / 3);
+  document.getElementById('detailHero').style.background = heroFor(r);
+  document.getElementById('detailTitle').textContent = 'Leftovers: ' + r.name;
+  document.getElementById('detailBackLabel').textContent = dayLabel(day) + ' · lunch';
+  var html = '<div class="detail-facts"><div class="detail-fact">Reheat</div><div class="detail-fact">From ' + esc(dayLabel(day - 1).toLowerCase()) + '\'s dinner</div></div>';
+  if (entry.status === 'accepted') {
+    html += '<div class="actions"><button class="btn ghost" onclick="unskip(' + idx + ')">Undo</button></div>' +
+      '<p class="detail-note">Marked eaten. Nothing was deducted: the ingredients were counted when the dinner was cooked.</p>';
+  } else if (entry.status === 'skipped') {
+    html += '<div class="actions"><button class="btn primary" onclick="unskip(' + idx + ')">Put it back on the plan</button></div>' +
+      '<p class="detail-note">Skipped.</p>';
+  } else {
+    html += '<div class="actions">' +
+        '<button class="btn primary" onclick="eatLeftovers(' + idx + ')">Eaten</button>' +
+        '<button class="btn ghost" onclick="cookLunchInstead(' + idx + ')">Cook something else</button>' +
+        '<button class="btn quiet" onclick="skipMeal(' + idx + ')">Skip</button>' +
+      '</div>' +
+      '<p class="detail-note">You eat leftovers, so ' + esc(dayLabel(day - 1).toLowerCase()) + '\'s dinner is planned for ' +
+        settings.household + ' ' + (settings.household === 1 ? 'person' : 'people') + ' twice over: once for dinner and once for this lunch. ' +
+        'There\'s nothing to cook, and nothing more is taken from your pantry. Change this in Profile &rsaquo; Meals &amp; cooking.</p>';
+  }
+  html += nutritionHTML(r);
+  document.getElementById('detailContent').innerHTML = html;
+  document.getElementById('detailOverlay').classList.add('open');
+  document.getElementById('fab').style.display = 'none';
+}
+function eatLeftovers(idx) {
+  plan[idx].status = 'accepted';
+  closeDetail(); renderAll();
+  showToast('Enjoy. Nothing deducted: dinner already counted it.');
+}
+// This lunch gets a meal of its own instead of the leftovers (and keeps it on later re-plans).
+function cookLunchInstead(idx) {
+  var others = plan.map(function(e, i) { return i !== idx && isMealEntry(e) ? e.recipe : null; }).filter(Boolean);
+  var pick = pickRecipe('lunch', Math.floor(idx / 3), reservationsExcept(idx), others);
+  if (!pick) { showToast('No lunch in the approved files fits your settings.'); return; }
+  plan[idx] = { recipe:pick.id, status:'pending', ownLunch:true };
+  closeDetail(); renderAll();
+  showToast('Planned ' + pick.name + ' for lunch instead.');
+}
+
 function closeDetail() {
   document.getElementById('detailOverlay').classList.remove('open');
   detailIndex = null;
@@ -1281,6 +1426,7 @@ function closeDetail() {
 // ═══════════════ ACCEPT / SWAP / SKIP ═══════════════
 function acceptMeal(idx) {
   var entry = plan[idx];
+  if (entry.leftover) { eatLeftovers(idx); return; }
   if (entry.status === 'accepted') return;
   var r = recipeById(entry.recipe);
 
@@ -1352,6 +1498,7 @@ function bestAlternative(idx, current) {
 
 function swapMeal(idx, silent) {
   var entry = plan[idx];
+  if (entry.leftover) { cookLunchInstead(idx); return; }
   var current = recipeById(entry.recipe);
   var pick = bestAlternative(idx, current);
 
@@ -1377,7 +1524,7 @@ function swapMeal(idx, silent) {
 function enforceDiet() {
   var swapped = [], stuck = [];
   plan.forEach(function(entry, idx) {
-    if (entry.status !== 'pending') return;
+    if (!isMealEntry(entry) || entry.status !== 'pending') return;   // leftovers follow their dinner
     var r = recipeById(entry.recipe);
     if (!violatesDiet(r) && !entry.dietBlocked) return;
     var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
@@ -1401,8 +1548,8 @@ function enforceDiet() {
 function enforceTimes() {
   var changed = 0;
   plan.forEach(function(entry, idx) {
-    var day = Math.floor(idx / 3), r = recipeById(entry.recipe);
-    if (entry.status !== 'pending' || entry.dietBlocked || !r || fitsTime(r, day)) return;
+    var day = Math.floor(idx / 3), r = isMealEntry(entry) ? recipeById(entry.recipe) : null;
+    if (!r || entry.status !== 'pending' || entry.dietBlocked || fitsTime(r, day)) return;
     var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
     var pick = pickRecipe(r.type, day, reservationsExcept(idx), others);
     if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; changed++; }
@@ -1422,8 +1569,14 @@ function openSub(which) {
         '<div><div class="val">' + settings.household + '</div><div class="lbl">people</div></div>' +
         '<button class="step-btn" onclick="setHousehold(1)"' + (settings.household >= 8 ? ' disabled' : '') + '>+</button>' +
       '</div>' +
-      '<div class="note-card">The recipe file doesn\'t say how many each recipe serves, so for now recipes aren\'t scaled to this number. ' +
-      'Amounts are shown and deducted as the recipe writes them. Once servings are added to the recipe file, this is what they\'ll scale to.</div>';
+      '<div class="note-card">Recipe amounts are scaled to this number, from each recipe\'s estimated servings (the recipe file doesn\'t state them). ' +
+      'The scaled amounts are what the plan checks against your kitchen and what Accept deducts.</div>';
+  }
+
+  if (which === 'meals') {
+    title = 'Meals & cooking';
+    body = '<p class="sub-intro">Which meals to plan, whether you eat leftovers, and how long weekday cooking can take. Changes apply to the plan straight away; meals already cooked are left alone.</p>' +
+      mealPrefsHTML('meals') + mealPrefsHTML('times');
   }
 
   if (which === 'dietary') {
@@ -1485,6 +1638,7 @@ function openSub(which) {
       '</div>' +
       '<div style="margin-top:var(--s8);color:var(--ink-soft);font-size:13px;line-height:1.5;text-align:center;">' +
         'BUS 860 · Group 3<br>University of Alberta' +
+        '<br><br>Version ' + APP_VERSION +
       '</div>';
   }
 
@@ -1628,7 +1782,8 @@ function toggleAlloc() {
 // guessing. Nothing is deducted until Ren answers.
 // See knowledge/skills/day-roll-reconciliation/SKILL.md.
 function queueUnreconciled(entry, type, day) {
-  if (!entry || entry.status !== 'pending' || entry.dietBlocked) { return; }
+  // Leftovers and unplanned meals have nothing of their own to deduct, so there's nothing to ask.
+  if (!isMealEntry(entry) || entry.status !== 'pending' || entry.dietBlocked) { return; }
   unreconciled.push({ recipe:entry.recipe, type:type, label:fmtDate(day), date:todayKey(day) });
 }
 
@@ -1689,8 +1844,13 @@ function rollDay(departingDate) {
   // The new third day is planned around what the two days already shown set aside. Those two
   // days are left as they are: changing meals someone has already seen, overnight, would surprise.
   var res = reservationsExcept(-1);
-  var used = plan.map(function(e){ return e.recipe; });
+  var used = plan.filter(isMealEntry).map(function(e){ return e.recipe; });
   MEAL_TYPES.forEach(function(type) {
+    if (!mealOn(type)) { plan.push({ off:true, status:'off' }); return; }
+    if (type === 'lunch' && leftoversOn() && usableDinner(plan[5])) {     // yesterday's (day 2's) dinner
+      plan.push({ leftover:true, recipe:plan[5].recipe, status:'pending' });
+      return;
+    }
     var pick = pickRecipe(type, 2, res, used);
     if (pick) {
       plan.push({ recipe:pick.id, status:'pending' });
@@ -1744,6 +1904,7 @@ function renderGreeting() {
 }
 
 function renderAll() {
+  syncPlanShape();
   renderGreeting();
   renderDaySelector();
   renderReconcile();
@@ -1755,6 +1916,8 @@ function renderAll() {
   renderProfile();
   var hh = document.getElementById('hhArrow');
   if (hh) { hh.innerHTML = settings.household + ' &rsaquo;'; }
+  var ma = document.getElementById('mealsArrow');
+  if (ma) { ma.innerHTML = esc(mealsSummary()) + (leftoversOn() ? ' · leftovers' : '') + ' &rsaquo;'; }
   var da = document.getElementById('dietArrow');
   if (da) {
     var n = activeDietLabels().length;
@@ -2735,14 +2898,79 @@ function assignReceiptIng(idx, ingId) {
   renderReceiptReview();
 }
 
+// ═══════════════ MEALS & COOKING (setup questionnaire and Profile) ═══════════════
+// The same controls appear in first-time setup and in Profile > Meals & cooking. `part` is
+// 'meals' (which meals, leftovers) or 'times' (weekday cook-time limits).
+var TIME_CHOICES = { breakfast:[10, 15, 20, 30, 0], lunch:[15, 20, 30, 45, 0], dinner:[20, 30, 45, 60, 0] };
+function mealPrefsHTML(part) {
+  if (part === 'meals') {
+    return '<div>' + MEAL_TYPES.map(function(t) {
+        return '<div class="toggle-row"><div class="tr-name">' + t.charAt(0).toUpperCase() + t.slice(1) + '</div>' +
+          '<button class="switch' + (mealOn(t) ? ' on' : '') + '" onclick="setMealOn(\'' + t + '\')" aria-label="Plan ' + t + '"></button></div>';
+      }).join('') + '</div>' +
+      (mealOn('lunch') && mealOn('dinner')
+        ? '<div class="field-label">Do you eat leftovers?</div>' +
+          '<div class="toggle-row"><div><div class="tr-name">Dinner leftovers for the next day\'s lunch</div>' +
+            '<div class="tr-sub">Dinners are made for twice the household, so lunch is already made.</div></div>' +
+            '<button class="switch' + (settings.leftovers ? ' on' : '') + '" onclick="setLeftovers()" aria-label="Eat leftovers"></button></div>'
+        : '');
+  }
+  return MEAL_TYPES.filter(mealOn).map(function(t) {
+    var cur = settings.times[t] || 0;
+    return '<div class="field-label">' + t.charAt(0).toUpperCase() + t.slice(1) + ' on weekdays</div>' +
+      '<div class="seg wrap">' + TIME_CHOICES[t].map(function(m) {
+        return '<button class="' + (cur === m ? 'on' : '') + '" onclick="setMealTime(\'' + t + '\',' + m + ')">' + (m ? m + ' min or less' : 'Any length') + '</button>';
+      }).join('') + '</div>';
+  }).join('') +
+  '<p class="field-hint">Weekends aren\'t limited. If nothing quick enough fits your kitchen, the quickest of the rest is used.</p>';
+}
+function setMealOn(t) {
+  var on = !mealOn(t);
+  if (!on && MEAL_TYPES.filter(mealOn).length === 1) { showToast('Plan at least one meal a day.'); return; }
+  settings.meals[t] = on;
+  mealPrefsChanged();
+}
+function setLeftovers() { settings.leftovers = !settings.leftovers; mealPrefsChanged(); }
+function setMealTime(t, m) { settings.times[t] = m || null; mealPrefsChanged(); }
+// Redraw wherever the controls are, and bring the plan in line: meals switched off empty their
+// slots, leftovers follow dinners, and meals over a new time limit are swapped.
+function mealPrefsChanged() {
+  if (document.getElementById('setup').classList.contains('open')) { renderSetup(); return; }
+  enforceTimes();
+  renderAll();
+  openSub('meals');
+}
+function mealsSummary() {
+  var on = MEAL_TYPES.filter(mealOn);
+  return on.length === 3 ? 'All three' : on.map(function(t) { return t.charAt(0).toUpperCase() + t.slice(1); }).join(' + ');
+}
+
 // ═══════════════ FIRST-TIME SETUP ═══════════════
-// Three short steps: a name, the household, and how to start. Nothing about the kitchen is
-// assumed: "Add my own food" starts with an empty pantry.
+// Five short steps: a name, the household, which meals (and leftovers), weekday cook times, and
+// how to start. Nothing about the kitchen is assumed: "Add my own food" starts with an empty pantry.
 var setupStep = 1;
 function showSetup() { setupStep = 1; renderSetup(); document.getElementById('setup').classList.add('open'); }
 function renderSetup() {
   var el = document.getElementById('setupBody');
-  var dots = '<div class="setup-dots">' + [1,2,3].map(function(n) { return '<i class="' + (n === setupStep ? 'on' : '') + '"></i>'; }).join('') + '</div>';
+  var dots = '<div class="setup-dots">' + [1,2,3,4,5].map(function(n) { return '<i class="' + (n === setupStep ? 'on' : '') + '"></i>'; }).join('') + '</div>';
+  if (setupStep === 3) {
+    el.innerHTML = dots +
+      '<h2>Which meals should we plan?</h2>' +
+      '<p class="setup-lede">Pick the meals you\'d like help with. The others stay off the plan.</p>' +
+      mealPrefsHTML('meals') +
+      '<div class="actions"><button class="btn primary" onclick="setupStep=4;renderSetup()">Next</button>' +
+        '<button class="btn quiet" onclick="setupStep=2;renderSetup()">Back</button></div>';
+    return;
+  }
+  if (setupStep === 4) {
+    el.innerHTML = dots +
+      '<h2>How long can you cook?</h2>' +
+      '<p class="setup-lede">On a weekday, how much time can each meal take?</p>' +
+      mealPrefsHTML('times') +
+      '<div class="actions"><button class="btn primary" onclick="setupStep=5;renderSetup()">Next</button>' +
+        '<button class="btn quiet" onclick="setupStep=3;renderSetup()">Back</button></div>';
+    return;
+  }
   if (setupStep === 1) {
     el.innerHTML = dots +
       '<div class="setup-mark"><img src="logo-setup-t.webp" alt="What the Fridge"></div>' +
@@ -2779,7 +3007,7 @@ function renderSetup() {
       '<span>Start with an empty kitchen and add what you have. A rough count is fine.</span></button>' +
     '<button class="start-card" onclick="finishSetup(\'sample\')"><b>Look around with a sample kitchen</b>' +
       '<span>About 35 everyday foods, so you can see how planning works. Start over any time from Profile.</span></button>' +
-    '<div class="actions"><button class="btn quiet" onclick="setupStep=2;renderSetup()">Back</button></div>';
+    '<div class="actions"><button class="btn quiet" onclick="setupStep=4;renderSetup()">Back</button></div>';
 }
 function finishSetup(mode) {
   settings.since = todayKey();
@@ -2819,9 +3047,9 @@ function loadState() {
 
   // A saved plan that names a recipe this build doesn't have is rebuilt rather than shown
   // half-broken. The pantry and settings are kept.
-  var valid = s.plan.length === 9 && s.plan.every(function(e) { return e && recipeById(e.recipe); });
+  var valid = s.plan.length === 9 && s.plan.every(function(e) { return e && (e.off || recipeById(e.recipe)); });
 
-  settings = s.settings;
+  settings = fillMealSettings(s.settings);
   pantry = s.pantry.filter(function(e) { return ingById(e.ing); });
   plan = valid ? s.plan : [];
   planSig = valid ? (s.planSig || null) : null;
@@ -2871,6 +3099,8 @@ function startOver() {
   try { localStorage.removeItem(STORE_KEY); } catch (e) {}
   settings.name = ''; settings.since = null; settings.household = 2;
   settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
+  settings.meals = { breakfast:true, lunch:true, dinner:true }; settings.leftovers = false;
+  settings.times = { breakfast:20, lunch:30, dinner:null };
   pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; dayOffset = 0; currentDay = 1;
   planKitchen(false);
   closeDetail(); closeSub(); switchTab('planTab');
@@ -2888,6 +3118,8 @@ function startOver() {
   });
 })();
 
+var versionEl = document.getElementById('appVersion');
+if (versionEl) { versionEl.textContent = 'Version ' + APP_VERSION; }
 var returning = loadState();
 if (plan.length !== 9) { planKitchen(plan.length > 0); }
 else { enforceTimes(); }
