@@ -787,6 +787,7 @@ footer {
 .as-written .aw-line { font-size:13px; padding:6px 0; border-bottom:1px solid var(--border); line-height:1.4; }
 .as-written .aw-line:last-child { border-bottom:none; }
 .method-tip { font-weight:500; text-transform:none; letter-spacing:0; margin-left:4px; }
+.scaled { font-size:12px; font-weight:700; color:var(--leaf); white-space:nowrap; }
 .nutrition-card {
   background:var(--white); border-radius:var(--r);
   padding:var(--s6) var(--s8); box-shadow:0 1px 3px var(--shadow);

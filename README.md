@@ -8,27 +8,33 @@ BUS 860 *Managing Intelligence* · Group 3.
 
 ## What it does
 
-- A short first-time setup (name, household size, dietary filters), then either an empty kitchen
-  to fill or a sample kitchen to look around.
+- A short first-time questionnaire: name, household size and dietary filters; which meals to plan
+  (any of breakfast, lunch and dinner); whether you eat leftovers; and how long each meal can take on
+  a weekday. Then either an empty kitchen to fill or a sample kitchen to look around. All of it can
+  be changed later under **Profile → Meals & cooking** (and Household size, Dietary preferences).
 - Add, edit and remove food in the fridge, freezer and cupboard. You pick from the ingredients the
   approved recipes use, so typing "scallions" finds Green onions. Quantity is optional, and the
   purchase date is always your answer, including "don't know".
 - Estimates freshness from the purchase date (or a printed use-by date you enter) and the shelf-life
   norms for where the food is kept, and always shows the basis. Food with no date, or no matching
   norm, stays "unknown" and is never assumed fresh.
-- Plans today plus the next two days (breakfast, lunch and dinner) from all 300 approved recipes,
-  around what's actually in your kitchen. It fills one meal at a time, setting aside what each uses,
-  so a scarce ingredient is never promised to two meals. Monday to Friday, breakfast takes 20 minutes
-  or less and lunch 30 minutes or less; a slower one is used only when nothing quick enough fits. It
-  prefers meals with nothing missing, then food closest to the end of its window, then (on weekends)
-  breakfasts of 20 minutes or less, then your favourites. Dietary restrictions and "not for us" are
-  hard filters.
+- Plans today plus the next two days (the meals you chose) from the approved recipes, around what's
+  actually in your kitchen. It fills one meal at a time, setting aside what each uses, so a scarce
+  ingredient is never promised to two meals. Monday to Friday, each meal stays within your cook-time
+  limit (by default breakfast 20 minutes or less and lunch 30 or less); a slower one is used only when
+  nothing quick enough fits. It prefers meals with nothing missing, then food closest to the end of
+  its window, then (on weekends) breakfasts of 20 minutes or less, then your favourites. Dietary
+  restrictions and "not for us" are hard filters.
+- If you eat leftovers, each dinner is made for the household twice over and the next day's lunch is
+  its leftovers: nothing to cook, and nothing more taken from the pantry. Swapping or skipping the
+  dinner carries the lunch along; **Cook something else** gives that lunch a meal of its own.
 - Says plainly when the kitchen can't cover the plan: what's missing, which meal runs short because
   an earlier one uses the same food, and what will have turned before its meal. Where an amount isn't
   recorded in a comparable unit, it asks you to check rather than guessing. **Re-plan** replaces only
   the meals that no longer work.
-- Amounts are used as the recipe file writes them. The file doesn't say how many each recipe serves,
-  so nothing is scaled to household size yet.
+- Amounts are scaled to your household from each recipe's estimated servings (`tools/servings.csv`;
+  the recipe file doesn't state servings). The meal screen shows the recipe's own wording with the
+  scaled amount beside it, and the scaled amount is what the kitchen check and **Accept** use.
 - Each meal shows its ingredients in the recipe's own words next to what you have, then the
   numbered steps, then estimated nutrition per serving (calories, protein, carbs, fat, fibre,
   sodium). The recipe file states neither servings nor nutrition, so both are estimates and are
