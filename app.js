@@ -1490,10 +1490,25 @@ function unskip(idx) {
 
 // Swap: the best other recipe of the same meal type for what's in the kitchen, after what the
 // rest of the plan sets aside. Dietary restrictions and "not for us" are hard filters.
+// Alternatives already offered for this slot are excluded alongside the rest of the plan, so Swap
+// keeps moving through the pool instead of bouncing between the same two recipes. `tried` is
+// cleared whenever the planner sets the slot, and reset once the pool runs out (see swapMeal).
 function bestAlternative(idx, current) {
+  var entry = plan[idx], day = Math.floor(idx / 3);
   var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
-  var pick = pickRecipe(current.type, Math.floor(idx / 3), reservationsExcept(idx), others.concat([current.id]));
-  return pick && pick.id !== current.id ? pick : null;
+
+  var pick = pickRecipe(current.type, day, reservationsExcept(idx),
+    others.concat((entry.tried || []).concat([current.id])));
+  if (pick && pick.id !== current.id) return pick;
+
+  // Everything this slot has been offered is used up. Clear the list and start the rotation
+  // again rather than dead-ending on "nothing else fits" when alternatives do exist.
+  if ((entry.tried || []).length) {
+    entry.tried = [];
+    pick = pickRecipe(current.type, day, reservationsExcept(idx), others.concat([current.id]));
+    if (pick && pick.id !== current.id) return pick;
+  }
+  return null;                     // the pool really does hold nothing else for this slot
 }
 
 function swapMeal(idx, silent) {
@@ -1506,6 +1521,10 @@ function swapMeal(idx, silent) {
     showToast('No other ' + current.type + ' in the approved files fits your settings.');
     return;
   }
+
+  // Remember what this slot has shown, so the next Swap moves on. bestAlternative() clears the
+  // list itself when the pool runs out, so this only ever grows within one rotation.
+  entry.tried = (entry.tried || []).concat([current.id]);
 
   entry.recipe = pick.id;
   entry.status = 'pending';
@@ -1533,6 +1552,7 @@ function enforceDiet() {
       if (violatesDiet(r)) swapped.push(r.name + ' → ' + pick.name);
       entry.recipe = pick.id;
       delete entry.dietBlocked;
+      delete entry.tried;          // the planner chose this slot again; Swap starts fresh
     } else {
       entry.dietBlocked = true;
       stuck.push(r.type);
@@ -1552,7 +1572,7 @@ function enforceTimes() {
     if (!r || entry.status !== 'pending' || entry.dietBlocked || fitsTime(r, day)) return;
     var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
     var pick = pickRecipe(r.type, day, reservationsExcept(idx), others);
-    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; changed++; }
+    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; delete entry.tried; changed++; }
   });
   return changed;
 }
