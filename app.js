@@ -1554,8 +1554,10 @@ function swapMeal(idx, silent) {
 
   closeDetail();
   renderAll();
-  var why = whyLine(pick, Math.floor(idx / 3));
-  showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name + (why ? '. ' + why : ''));
+  // The reason stays on the card and in the detail view, where Ren can read it at her own pace.
+  // Repeating it here pushed the toast past 100 characters for a 2.6-second appearance, which is
+  // not long enough to read two clauses even when they fit.
+  showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name);
 }
 
 // Applied whenever a dietary preference changes. Any pending meal that breaks a restriction is
