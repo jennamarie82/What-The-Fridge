@@ -1306,7 +1306,16 @@ function ingredientRowsHTML(r, idx) {
 // window, Ren's own rating, full coverage from the pantry, a weekday time limit. Nothing here
 // infers a reason the plan did not use, and when none of them hold it returns '' rather than
 // filling the gap — a made-up justification would be worse than no line at all.
-function whyLine(r, dayIdx) {
+//
+// It never says an ingredient is "still good". That is a claim about the food's condition, and
+// the agent has only read a date Ren typed — the same reason the detail note says these windows
+// are "not a check of the food itself". What it can say is which ingredient to use FIRST, which
+// is arithmetic on the record. Priority, never condition. "Before it goes bad" is the same claim
+// in the future tense and is avoided for the same reason: a stated spoilage date is the single
+// biggest driver of food being binned while it is still fine.
+//
+// `where` is 'detail' for the detail view, anything else for the card.
+function whyLine(r, dayIdx, where) {
   var urgent = null, missing = false;
   visibleLines(r).forEach(function(line) {
     var e = urgentEntryFor(line);
@@ -1314,17 +1323,32 @@ function whyLine(r, dayIdx) {
     var f = freshness(e);
     if (f.known && f.max >= 0 && f.min <= 3 && (!urgent || f.min < urgent.f.min)) urgent = { e:e, f:f };
   });
-  if (urgent) return 'Uses your ' + ingName(urgent.e.ing).toLowerCase() + ' while it\'s still good (' + urgent.f.text + ').';
+
+  if (urgent) {
+    // On the card the freshness chip already reads "uses spinach · use today", so a sentence
+    // saying it again is noise in the place with the least room. In the detail view the spec
+    // requires the basis — the date Ren gave and the shelf-life assumption — so show it in full
+    // and leave the judgement where it belongs.
+    if (where === 'detail') {
+      return 'Uses your ' + ingName(urgent.e.ing).toLowerCase() + '. ' + basisLine(urgent.e) +
+        '. Worth a look before you cook.';
+    }
+    // On the card the chip has the urgency covered, so the only thing left worth adding is Ren's
+    // own rating — the coverage and timing facts are what the other chips are for. Without this
+    // the favourite branch below would never be reached on a card that also has an urgent chip.
+    var up = getPref(r.id);
+    if (up.fav) return 'One of your favourites.';
+    if (up.vote === 'up') return 'You liked this one before.';
+    return '';
+  }
 
   var p = getPref(r.id);
-  if (p.fav) return missing ? 'One of your favourites.' : 'One of your favourites, and everything it needs is already here.';
+  if (p.fav) return 'One of your favourites.';
 
   if (!missing) {
     var lim = (typeof dayIdx === 'number') ? timeLimit(r.type, dayIdx) : null;
-    if (lim && r.mins && r.mins <= lim) {
-      return 'Everything it needs is already here, and it fits your ' + lim + '-minute ' + r.type + '.';
-    }
-    return 'Everything it needs is already in your kitchen.';
+    if (lim && r.mins && r.mins <= lim) { return 'Quick enough for your ' + lim + '-minute ' + r.type + '.'; }
+    return 'Nothing missing.';
   }
   if (p.vote === 'up') return 'You liked this one before.';
   return '';
@@ -1378,7 +1402,7 @@ function openDetail(idx) {
       '</div>' +
       '<p class="detail-note">Skipped. Nothing was deducted from your pantry.</p>';
   } else {
-    var why = whyLine(r, Math.floor(idx / 3));
+    var why = whyLine(r, Math.floor(idx / 3), 'detail');
     html += '<div class="actions">' +
         '<button class="btn primary" onclick="acceptMeal(' + idx + ')">Accept</button>' +
         '<button class="btn ghost" onclick="swapMeal(' + idx + ')">Swap</button>' +
@@ -1554,8 +1578,10 @@ function swapMeal(idx, silent) {
 
   closeDetail();
   renderAll();
-  var why = whyLine(pick, Math.floor(idx / 3));
-  showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name + (why ? '. ' + why : ''));
+  // The reason stays on the card and in the detail view, where Ren can read it at her own pace.
+  // Repeating it here pushed the toast past 100 characters for a 2.6-second appearance, which is
+  // not long enough to read two clauses even when they fit.
+  showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name);
 }
 
 // Applied whenever a dietary preference changes. Any pending meal that breaks a restriction is

@@ -727,9 +727,20 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
   padding:var(--s4) var(--s8); border-radius:20px;
   font-size:13px; font-weight:600; z-index:60;
   opacity:0; transition:all .35s var(--ease);
-  white-space:nowrap;
+  /* A long message wraps inside the frame instead of running off both edges. It used to be
+     `nowrap` with no max-width, so a swap message ran 644px wide in a 351px phone — 146px lost
+     off each side. The pill still hugs short messages; max-width is relative to the screen. */
+  white-space:normal;
+  /* `left:50%` leaves only half the frame as available width, so a shrink-to-fit box would wrap
+     at 176px however high max-width is. max-content asks for the full line first; max-width then
+     caps it. The centring transform is untouched. */
+  width:max-content;
+  max-width:calc(100% - 2 * var(--s8));
+  line-height:1.4;
+  text-align:left;
 }
 .toast { display:flex; align-items:center; gap:10px; }
+.toast > span { min-width:0; }   /* a flex item won't shrink below its text without this */
 .toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
 .toast-action {
   background:none; border:1px solid rgba(255,255,255,.6); color:#fff;
