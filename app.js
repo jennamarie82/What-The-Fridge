@@ -1072,6 +1072,7 @@ function renderPantry() {
         '<button class="btn ghost small" onclick="openReceipt(\'Pantry\')" style="margin-top:0;">Scan receipt</button>' +
       '</div></div>';
     zones.innerHTML = '';
+    document.getElementById('pantryNotices').innerHTML = '';   // don't leave a stale low-stock card
     return;
   }
 
@@ -1083,21 +1084,45 @@ function renderPantry() {
     return f.known ? f.min <= 3 : e.zone !== 'cupboard';
   }).sort(byUrgency);
 
-  att.innerHTML = attention.map(function(e) {
+  // Needs attention is a zone row like the three storage zones, so the tab reads as one list
+  // instead of a flat block sitting above a set of rows.
+  //
+  // It closes like them too, which took some deciding. The spec wants the freshness flag
+  // "prominent enough that skipping it takes a deliberate action", and opening by default looked
+  // like the safe reading — until it was measured: the sample kitchen puts 59 items in here, so
+  // open-by-default just rebuilds the wall this change exists to remove, and a wall of 59 rows is
+  // skimmed, not read. What has to be unmissable is the signal, not the detail. So the row itself
+  // carries the worst chip in its own colour — "21 use today" — and that is what Ren has to
+  // deliberately ignore. The per-item basis is one tap away.
+  var attOpen = openZones.attention;
+  var worst = attention.length ? freshness(attention[0]) : null;   // sorted byUrgency above
+  var worstCount = worst ? attention.filter(function(e) { return freshness(e).text === worst.text; }).length : 0;
+  var attLines = attention.map(function(e) {
     var f = freshness(e);
-    return '<div class="pantry-item" onclick="openEditItem(\'' + e.id + '\')">' +
-      '<div>' +
-        '<div class="name">' + esc(ingName(e.ing)) + '</div>' +
-        '<div class="qty">' + entryQty(e) + ' · ' + zoneLabel(e.zone).toLowerCase() + '</div>' +
-        '<div class="basis">' + esc(basisLine(e)) + '</div>' +
-      '</div>' + chipHTML(f.cls, f.text) +
+    return '<div class="zone-line" onclick="event.stopPropagation();openEditItem(\'' + e.id + '\')">' +
+      '<div><div class="zl-name">' + esc(ingName(e.ing)) + '</div>' +
+      '<div class="zl-sub">' + esc(zoneLabel(e.zone).toLowerCase() + ' · ' + basisLine(e)) + '</div></div>' +
+      '<div class="zl-right"><div class="zl-qty">' + entryQty(e) + '</div>' + chipHTML(f.cls, f.text) + '</div>' +
     '</div>';
-  }).join('') || '<p class="pantry-note" style="margin-top:0;">Nothing needs urgent attention. Rare and beautiful.</p>';
+  }).join('') || '<div class="zone-line empty"><div class="zl-sub">Nothing needs urgent attention. Rare and beautiful.</div></div>';
 
-  // Low-stock guidance when pantry is nearly empty
+  att.innerHTML =
+    '<div class="zone-row attention' + (attOpen ? ' open' : '') + '" onclick="toggleZone(\'attention\')">' +
+      '<span class="zone-name">Needs attention' +
+        (worst ? ' ' + chipHTML(worst.cls, worstCount + ' ' + worst.text) : '') +
+      '</span>' +
+      '<span class="zone-count">' + attention.length + ' item' + (attention.length === 1 ? '' : 's') +
+        ' <span class="caret">&rsaquo;</span></span>' +
+    '</div>' +
+    (attOpen ? '<div class="zone-items">' + attLines + '</div>' : '');
+
+  // Low-stock guidance when pantry is nearly empty. Kept outside the collapsible section so
+  // closing Needs attention can't hide it.
+  var notices = document.getElementById('pantryNotices');
+  notices.innerHTML = '';
   var inStockCount = pantry.filter(inStock).length;
   if (inStockCount > 0 && inStockCount <= 5) {
-    att.innerHTML += '<div class="empty-card" style="margin-top:var(--s4);"><strong>Supplies running low</strong>' +
+    notices.innerHTML = '<div class="empty-card" style="margin-top:var(--s4);"><strong>Supplies running low</strong>' +
       '<span>Only ' + inStockCount + ' item' + (inStockCount === 1 ? '' : 's') + ' left. Add your food items with the <b>+</b> button or scan a receipt.</span></div>';
   }
 
@@ -1122,7 +1147,7 @@ function renderPantry() {
   }).join('');
 }
 
-var openZones = { fridge:false, freezer:false, cupboard:false };
+var openZones = { attention:false, fridge:false, freezer:false, cupboard:false };
 function toggleZone(key) { openZones[key] = !openZones[key]; renderPantry(); }
 
 // ─── pantry search ───
