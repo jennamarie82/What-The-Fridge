@@ -1095,22 +1095,42 @@ function renderPantry() {
   // carries the worst chip in its own colour — "21 use today" — and that is what Ren has to
   // deliberately ignore. The per-item basis is one tap away.
   var attOpen = openZones.attention;
-  var worst = attention.length ? freshness(attention[0]) : null;   // sorted byUrgency above
-  var worstCount = worst ? attention.filter(function(e) { return freshness(e).text === worst.text; }).length : 0;
-  var attLines = attention.map(function(e) {
+
+  // The list used to treat every flagged item the same, but they are not the same. Food the plan
+  // already draws on is handled — it will be used. Food nothing is planning to touch is the food
+  // that actually gets thrown away, and until now it was indistinguishable from the rest.
+  var planned = plannedIngredientIds();
+  var atRisk  = attention.filter(function(e) { return !planned[e.ing]; });
+  var covered = attention.filter(function(e) { return planned[e.ing]; });
+
+  var row = function(e, act) {
     var f = freshness(e);
     return '<div class="zone-line" onclick="event.stopPropagation();openEditItem(\'' + e.id + '\')">' +
       '<div><div class="zl-name">' + esc(ingName(e.ing)) + '</div>' +
-      '<div class="zl-sub">' + esc(zoneLabel(e.zone).toLowerCase() + ' · ' + basisLine(e)) + '</div></div>' +
+      '<div class="zl-sub">' + esc(zoneLabel(e.zone).toLowerCase() + ' · ' + basisLine(e)) + '</div>' +
+      (act ? '<button class="btn ghost small use-it" onclick="event.stopPropagation();planAround(\'' + e.id + '\')">Use it in a meal</button>' : '') +
+      '</div>' +
       '<div class="zl-right"><div class="zl-qty">' + entryQty(e) + '</div>' + chipHTML(f.cls, f.text) + '</div>' +
     '</div>';
-  }).join('') || '<div class="zone-line empty"><div class="zl-sub">Nothing needs urgent attention. Rare and beautiful.</div></div>';
+  };
+  var group = function(label, items, act) {
+    if (!items.length) return '';
+    return '<div class="zone-group">' + esc(label) + '</div>' + items.map(function(e) { return row(e, act); }).join('');
+  };
+
+  var attLines =
+    group('Nothing planned uses these', atRisk, true) +
+    group('Your plan uses these', covered, false) ||
+    '<div class="zone-line empty"><div class="zl-sub">Nothing needs urgent attention. Rare and beautiful.</div></div>';
+
+  // The collapsed row carries the number that asks for a decision. "21 use today" says how bad
+  // it is; "22 not in your plan" says how much of it is still nobody's job.
+  var headChip = atRisk.length ? chipHTML('now', atRisk.length + ' not in your plan')
+               : attention.length ? chipHTML('ok', 'all in your plan') : '';
 
   att.innerHTML =
     '<div class="zone-row attention' + (attOpen ? ' open' : '') + '" onclick="toggleZone(\'attention\')">' +
-      '<span class="zone-name">Needs attention' +
-        (worst ? ' ' + chipHTML(worst.cls, worstCount + ' ' + worst.text) : '') +
-      '</span>' +
+      '<span class="zone-name">Needs attention' + (headChip ? ' ' + headChip : '') + '</span>' +
       '<span class="zone-count">' + attention.length + ' item' + (attention.length === 1 ? '' : 's') +
         ' <span class="caret">&rsaquo;</span></span>' +
     '</div>' +
@@ -1146,6 +1166,62 @@ function renderPantry() {
       (open ? '<div class="zone-items">' + lines + '</div>' : '');
   }).join('');
 }
+
+// Every ingredient the current plan would draw on. A meal already cooked or skipped doesn't
+// count: the question is what the days still ahead will use up.
+function plannedIngredientIds() {
+  var out = {};
+  plan.forEach(function(e) {
+    if (!e || !e.recipe || e.status === 'skipped') return;
+    var r = recipeById(e.recipe);
+    if (!r) return;
+    visibleLines(r).forEach(function(l) { lineIds(l).forEach(function(id) { out[id] = true; }); });
+  });
+  return out;
+}
+function recipeUses(r, ingId) {
+  return visibleLines(r).some(function(l) { return lineIds(l).indexOf(ingId) > -1; });
+}
+
+// Swaps one pending meal for the best approved recipe that uses this food, so a warning about
+// something about to turn becomes a change Ren can make in one tap. Only recipes the kitchen can
+// actually cover are offered — suggesting a meal that needs three things she hasn't got would
+// move the problem rather than solve it.
+function planAround(entryId) {
+  var e = entryById(entryId);
+  if (!e) return;
+  var name = ingName(e.ing).toLowerCase(), best = null;
+  plan.forEach(function(slot, idx) {
+    if (!isMealEntry(slot) || slot.status !== 'pending' || slot.dietBlocked) return;
+    var type = MEAL_TYPES[idx % 3], day = Math.floor(idx / 3);
+    if (recipeById(slot.recipe) && recipeUses(recipeById(slot.recipe), e.ing)) return;  // already does
+    var others = plan.map(function(x, i) { return i === idx ? null : x.recipe; }).filter(Boolean);
+    var reserved = reservationsExcept(idx);
+    recipes.forEach(function(r) {
+      if (r.type !== type || !eligible(r, type) || others.indexOf(r.id) > -1) return;
+      if (!recipeUses(r, e.ing) || !fitsTime(r, day)) return;
+      var s = scoreRecipe(r, day, reserved);
+      if (!s.feasible) return;
+      if (!best || s.score > best.score) best = { idx:idx, r:r, score:s.score, day:day };
+    });
+  });
+
+  if (!best) {
+    showToast('Nothing in the approved recipes uses ' + name + ' with what else is in your kitchen.');
+    return;
+  }
+  var slot = plan[best.idx], was = recipeById(slot.recipe);
+  slot.recipe = best.r.id;
+  slot.status = 'pending';
+  delete slot.tried;                     // a fresh rotation from the new meal
+  renderAll();
+  showToast(DAY_WORDS[best.day] + ' ' + MEAL_TYPES[best.idx % 3] + ' is now ' + best.r.name +
+    ', which uses your ' + name + '.', { label:'Undo', fn:function() {
+      slot.recipe = was.id; delete slot.tried; renderAll();
+      showToast('Put ' + was.name + ' back.');
+    } });
+}
+var DAY_WORDS = ['Today’s', 'Tomorrow’s', 'Day 3’s'];
 
 var openZones = { attention:false, fridge:false, freezer:false, cupboard:false };
 function toggleZone(key) { openZones[key] = !openZones[key]; renderPantry(); }
