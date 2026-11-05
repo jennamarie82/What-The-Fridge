@@ -28,7 +28,7 @@ var cookLog = [];                 // { date:'YYYY-MM-DD', recipe:id, rescued:n }
 // Food Ren said went bad. The counterpart to cookLog's `rescued`: one side counts what got used
 // in time, this side counts what didn't. It records Ren's own call — the app never decides that
 // a thing has gone off, it only writes down that she said so.
-// { date:'YYYY-MM-DD', ing:id, qty, unit, reason, daysPast }
+// { date:'YYYY-MM-DD', ing:id, qty, unit, reason, daysPast, wasPlanned }
 var wasteLog = [];
 
 // ═══════════════ INGREDIENTS & SHELF-LIFE NORMS ═══════════════
@@ -2331,7 +2331,17 @@ function finishItem(outcome) {
 // inventing an expiry.
 function logWaste(e) {
   var f = freshness(e), past = (f.known && f.max < 0) ? -f.max : (f.known ? 0 : null);
-  wasteLog.push({ date:todayKey(), ing:e.ing, qty:e.qty, unit:e.unit, reason:null, daysPast:past });
+  // Whether any meal on the plan was ever going to use this. It decides whose miss the loss was,
+  // and it can only be known now — once the item is gone and the plan has rolled, it is lost.
+  // (Inlined rather than sharing a helper so this branch doesn't collide with the pantry work.)
+  var wasPlanned = false;
+  plan.forEach(function(p) {
+    if (wasPlanned || !p || !p.recipe || p.status === 'skipped') return;
+    var r = recipeById(p.recipe);
+    if (r && visibleLines(r).some(function(l) { return lineIds(l).indexOf(e.ing) > -1; })) wasPlanned = true;
+  });
+  wasteLog.push({ date:todayKey(), ing:e.ing, qty:e.qty, unit:e.unit,
+                  reason:null, daysPast:past, wasPlanned:wasPlanned });
   pantry.splice(pantry.indexOf(e), 1);
 }
 
@@ -2341,16 +2351,31 @@ function logWaste(e) {
 // What the log is for. A tally on its own just tells Ren she wasted food, which she knew; the
 // repeat offender and the reason behind it are the parts she can act on next shop.
 function wasteHint() {
-  var byIng = {}, byReason = {};
+  var byIng = {}, byReason = {}, unplanned = 0;
   wasteLog.forEach(function(w) {
     byIng[w.ing] = (byIng[w.ing] || 0) + 1;
     if (w.reason) byReason[w.reason] = (byReason[w.reason] || 0) + 1;
+    if (w.wasPlanned === false) unplanned++;
   });
-  var worst = null;
-  Object.keys(byIng).forEach(function(k) { if (!worst || byIng[k] > byIng[worst]) worst = k; });
+  var top = function(counts) {
+    var best = null;
+    Object.keys(counts).forEach(function(k) { if (!best || counts[k] > counts[best]) best = k; });
+    return best;
+  };
+
+  // The planner's share comes first. When most of what was lost was never in a plan at all, the
+  // miss is the app's, and telling Ren to buy less would be both wrong and a little insulting.
+  if (unplanned >= 2 && unplanned >= wasteLog.length / 2) {
+    return unplanned + ' of these were never in a plan — that one’s on the planner, not you.';
+  }
+
+  var why = top(byReason);
+  if (why === 'notime') {
+    return 'Mostly three days not stretching far enough. Fewer perishables per shop would help more than planning harder.';
+  }
+
+  var worst = top(byIng);
   if (worst && byIng[worst] > 1) {
-    var why = null;
-    wasteLog.forEach(function(w) { if (w.ing === worst && w.reason) why = w.reason; });
     var tail = why === 'toomuch' ? ' Try buying half as much.'
              : why === 'forgot'  ? ' Worth planning it on day 1.'
              : why === 'disliked'? ' Maybe mark it “not for us”.'
@@ -2360,7 +2385,12 @@ function wasteHint() {
   return 'Every one logged is one you’ll spot sooner next time.';
 }
 
+// `notime` matters more than it looks. Without it every reason here codes the loss as something
+// Ren did — forgot, over-bought, changed her mind, picked badly — so a household that planned
+// well, cooked twice and still lost six things has nothing honest to file it under, and skips.
+// That empties the one field worth having exactly when the pattern is worth knowing.
 var WASTE_REASONS = [
+  ['notime',  'Couldn’t fit it into three days'],
   ['forgot',  'Forgot about it'],
   ['toomuch', 'Bought too much'],
   ['plans',   'Plans changed'],
