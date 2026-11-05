@@ -557,6 +557,13 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
 .zone-line:last-child { border-bottom:none; }
 .zone-line .zl-name { font-weight:600; }
 .zone-line .zl-sub { font-size:11px; color:var(--ink-soft); margin-top:2px; }
+/* Divides "nothing planned uses these" from "your plan uses these" inside Needs attention. */
+.zone-group {
+  font-size:10px; font-weight:700; letter-spacing:.6px; text-transform:uppercase;
+  color:var(--ink-soft); padding:var(--s6) 0 var(--s2); border-bottom:1px solid var(--border);
+}
+/* The one-tap rescue, on at-risk items only. Sits under the basis so the row stays scannable. */
+.zone-line .use-it { margin-top:6px; padding:3px 10px; font-size:11px; }
 .zone-line .zl-qty { font-weight:700; font-size:13px; white-space:nowrap; }
 .zone-line.out .zl-name, .zone-line.out .zl-qty { color:var(--ink-soft); text-decoration:line-through; }
 
