@@ -25,6 +25,11 @@ function fillMealSettings(s) {
 // Every meal marked cooked, for the Profile stats. Nothing here is estimated: `rescued`
 // counts ingredients that were still inside their freshness window when they were used.
 var cookLog = [];                 // { date:'YYYY-MM-DD', recipe:id, rescued:n }
+// Food Ren said went bad. The counterpart to cookLog's `rescued`: one side counts what got used
+// in time, this side counts what didn't. It records Ren's own call — the app never decides that
+// a thing has gone off, it only writes down that she said so.
+// { date:'YYYY-MM-DD', ing:id, qty, unit, reason, daysPast, wasPlanned }
+var wasteLog = [];
 
 // ═══════════════ INGREDIENTS & SHELF-LIFE NORMS ═══════════════
 // Both generated from the approved files by tools/build-recipes.ps1 — see recipes.js.
@@ -2163,6 +2168,20 @@ function renderProfile() {
     '<div class="profile-stat"><div class="num">' + streak + '</div><div class="label">Day<br>streak</div></div>' +
     '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Used before<br>they turned</div></div>';
 
+  // The ledger line. Deliberately a ratio and not a fourth stat tile or a milestone ladder: a
+  // count that only climbs is dispiriting, and the way to "win" a low-waste badge is to stop
+  // logging. Logging a loss costs nothing here — it never touches the streak, and never reduces
+  // `rescued`, because those ingredients really were used in time.
+  var lost = wasteLog.length;
+  var ledger = document.getElementById('profileLedger');
+  if (ledger) {
+    ledger.innerHTML = !cooked && !lost ? '' :
+      '<span class="led-good">' + rescued + ' used in time</span>' +
+      '<span class="led-dot">·</span>' +
+      '<span class="led-lost">' + lost + ' got away</span>' +
+      (lost ? '<div class="led-hint">' + esc(wasteHint()) + '</div>' : '');
+  }
+
   var r = ladderHTML(rescued, [10, 25, 50, 100], function(s) { return s; });
   var st = ladderHTML(streak, [7, 14, 30, 60, 180], function(s) { return s < 30 ? (s / 7) + ' wk' : (s / 30) + ' mo'; });
   var rPrev = r.next === null ? 100 : [0, 10, 25, 50][[10, 25, 50, 100].indexOf(r.next)];
@@ -2322,8 +2341,14 @@ function renderItemScreen() {
     '<div class="preview" id="itemPreview"></div>' +
     '<div class="actions">' +
       '<button class="btn primary" id="itemSave" onclick="saveItem()">' + (draft.id ? 'Save' : 'Add to ' + zoneLabel(draft.zone).toLowerCase()) + '</button>' +
-      (draft.id ? '<button class="btn quiet" onclick="removeItem()">Remove</button>' : '') +
-    '</div>';
+      (draft.id ? '<button class="btn quiet" onclick="askOutcome()">Remove</button>' : '') +
+    '</div>' +
+    (draft.id ? '<div class="outcome" id="outcomeBox" style="display:none;">' +
+      '<div class="outcome-q">What happened to it?</div>' +
+      '<button class="btn ghost" onclick="finishItem(\'used\')">Used it up</button>' +
+      '<button class="btn ghost" onclick="finishItem(\'waste\')">Threw it out</button>' +
+      '<button class="btn quiet" onclick="finishItem(\'mistake\')">Added by mistake</button>' +
+    '</div>' : '');
   updateItemPreview();
 }
 
@@ -2411,14 +2436,120 @@ function saveItem() {
   renderAll();
   renderItemScreen();
 }
-function removeItem() {
+// Removing used to be one button and a confirm box, so food eaten, food binned and a typo all
+// left the same way and left no trace — the rescued count had no counterpart. Now it asks which
+// of the three it was. "Added by mistake" earns its place: without it, every bad receipt read
+// and mistyped item would quietly inflate the waste figure.
+function askOutcome() {
+  var box = document.getElementById('outcomeBox');
+  if (box) { box.style.display = 'block'; box.scrollIntoView({ block:'nearest' }); }
+}
+
+function finishItem(outcome) {
   var e = entryById(draft.id);
   if (!e) return;
-  if (!confirm('Remove ' + ingName(e.ing).toLowerCase() + ' from your kitchen?')) return;
+  var name = ingName(e.ing).toLowerCase();
+
+  if (outcome === 'waste') { logWaste(e); closeSub(); renderAll(); askWasteReason(e); return; }
+
   pantry.splice(pantry.indexOf(e), 1);
   closeSub();
   renderAll();
-  showToast('Removed ' + ingName(e.ing).toLowerCase() + '.');
+  showToast(outcome === 'used' ? 'Finished the ' + name + '.' : 'Removed ' + name + '.');
+}
+
+// How far past its estimated window it got, when there was an estimate at all. Null stays null:
+// an item with no date has no "days past" and inventing one would be the same mistake as
+// inventing an expiry.
+function logWaste(e) {
+  var f = freshness(e), past = (f.known && f.max < 0) ? -f.max : (f.known ? 0 : null);
+  // Whether any meal on the plan was ever going to use this. It decides whose miss the loss was,
+  // and it can only be known now — once the item is gone and the plan has rolled, it is lost.
+  // (Inlined rather than sharing a helper so this branch doesn't collide with the pantry work.)
+  var wasPlanned = false;
+  plan.forEach(function(p) {
+    if (wasPlanned || !p || !p.recipe || p.status === 'skipped') return;
+    var r = recipeById(p.recipe);
+    if (r && visibleLines(r).some(function(l) { return lineIds(l).indexOf(e.ing) > -1; })) wasPlanned = true;
+  });
+  wasteLog.push({ date:todayKey(), ing:e.ing, qty:e.qty, unit:e.unit,
+                  reason:null, daysPast:past, wasPlanned:wasPlanned });
+  pantry.splice(pantry.indexOf(e), 1);
+}
+
+// The reason is the only part of a waste entry that can change anything later, so it is asked
+// once, right after, in four taps or none. Skipping is fine — a logged loss with no reason still
+// counts, and nagging for it would make logging feel like a punishment.
+// What the log is for. A tally on its own just tells Ren she wasted food, which she knew; the
+// repeat offender and the reason behind it are the parts she can act on next shop.
+function wasteHint() {
+  var byIng = {}, byReason = {}, unplanned = 0;
+  wasteLog.forEach(function(w) {
+    byIng[w.ing] = (byIng[w.ing] || 0) + 1;
+    if (w.reason) byReason[w.reason] = (byReason[w.reason] || 0) + 1;
+    if (w.wasPlanned === false) unplanned++;
+  });
+  var top = function(counts) {
+    var best = null;
+    Object.keys(counts).forEach(function(k) { if (!best || counts[k] > counts[best]) best = k; });
+    return best;
+  };
+
+  // The planner's share comes first. When most of what was lost was never in a plan at all, the
+  // miss is the app's, and telling Ren to buy less would be both wrong and a little insulting.
+  if (unplanned >= 2 && unplanned >= wasteLog.length / 2) {
+    return unplanned + ' of these were never in a plan — that one’s on the planner, not you.';
+  }
+
+  var why = top(byReason);
+  if (why === 'notime') {
+    return 'Mostly three days not stretching far enough. Fewer perishables per shop would help more than planning harder.';
+  }
+
+  var worst = top(byIng);
+  if (worst && byIng[worst] > 1) {
+    var tail = why === 'toomuch' ? ' Try buying half as much.'
+             : why === 'forgot'  ? ' Worth planning it on day 1.'
+             : why === 'disliked'? ' Maybe mark it “not for us”.'
+             : '';
+    return ingName(worst) + ' has got away ' + byIng[worst] + ' times.' + tail;
+  }
+  return 'Every one logged is one you’ll spot sooner next time.';
+}
+
+// `notime` matters more than it looks. Without it every reason here codes the loss as something
+// Ren did — forgot, over-bought, changed her mind, picked badly — so a household that planned
+// well, cooked twice and still lost six things has nothing honest to file it under, and skips.
+// That empties the one field worth having exactly when the pattern is worth knowing.
+var WASTE_REASONS = [
+  ['notime',  'Couldn’t fit it into three days'],
+  ['forgot',  'Forgot about it'],
+  ['toomuch', 'Bought too much'],
+  ['plans',   'Plans changed'],
+  ['disliked','Nobody wanted it']
+];
+function askWasteReason(e) {
+  var holder = document.getElementById('wasteReasons');
+  if (!holder) { showToast('Logged the ' + ingName(e.ing).toLowerCase() + '.'); return; }
+  holder.innerHTML =
+    '<div class="waste-sheet">' +
+      '<div class="waste-q">Why did the ' + esc(ingName(e.ing).toLowerCase()) + ' get away?</div>' +
+      WASTE_REASONS.map(function(r) {
+        return '<button class="btn ghost" onclick="setWasteReason(\'' + r[0] + '\')">' + esc(r[1]) + '</button>';
+      }).join('') +
+      '<button class="btn quiet" onclick="closeWasteReasons()">Skip</button>' +
+    '</div>';
+  holder.style.display = 'flex';
+}
+function setWasteReason(reason) {
+  if (wasteLog.length) { wasteLog[wasteLog.length - 1].reason = reason; }
+  closeWasteReasons();
+  saveState();
+  renderAll();
+}
+function closeWasteReasons() {
+  var holder = document.getElementById('wasteReasons');
+  if (holder) { holder.style.display = 'none'; holder.innerHTML = ''; }
 }
 
 // ═══════════════ RECEIPT UPLOAD & OCR ═══════════════
@@ -3213,7 +3344,7 @@ function finishSetup(mode) {
   settings.since = todayKey();
   pantry = mode === 'sample' ? samplePantry() : [];
   plan = [];
-  unreconciled = []; cookLog = []; currentDay = 1;
+  unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1;
   planKitchen(false);
   renderAll();
   document.getElementById('setup').classList.remove('open');
@@ -3232,7 +3363,7 @@ function saveState() {
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       lastSeen:lastSeen || todayKey(), settings:settings, pantry:pantry, plan:plan,
-      prefs:prefs, unreconciled:unreconciled, cookLog:cookLog, dayOffset:dayOffset,
+      prefs:prefs, unreconciled:unreconciled, cookLog:cookLog, wasteLog:wasteLog, dayOffset:dayOffset,
       planSig:planSig, planBuiltEmpty:planBuiltEmpty
     }));
   } catch (e) { /* private mode or storage full — the app still works, it just won't remember */ }
@@ -3256,6 +3387,7 @@ function loadState() {
   planBuiltEmpty = valid ? !!s.planBuiltEmpty : false;
   prefs = s.prefs || {};
   cookLog = s.cookLog || [];
+  wasteLog = s.wasteLog || [];
   unreconciled = (s.unreconciled || []).filter(function(u) { return recipeById(u.recipe); });
   dayOffset = s.dayOffset || 0;
   lastSeen = s.lastSeen || todayKey();
@@ -3301,7 +3433,7 @@ function startOver() {
   settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
   settings.meals = { breakfast:true, lunch:true, dinner:true }; settings.leftovers = false;
   settings.times = { breakfast:20, lunch:30, dinner:null };
-  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; dayOffset = 0; currentDay = 1;
+  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1;
   planKitchen(false);
   closeDetail(); closeSub(); switchTab('planTab');
   renderAll();
