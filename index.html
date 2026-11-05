@@ -64,6 +64,8 @@
 
   <!-- ══════ TOAST ══════ -->
   <div class="toast" id="toast"></div>
+  <!-- Asked once, right after Ren logs something as thrown out. Skippable; see askWasteReason(). -->
+  <div class="waste-backdrop" id="wasteReasons" style="display:none;" onclick="if(event.target===this)closeWasteReasons()"></div>
 
   <!-- ══════ VIEW AREA ══════ -->
   <div class="view" id="mainView">
@@ -158,6 +160,7 @@
       <div class="view-pad">
         <div id="profileHead"></div>
         <div class="profile-stat-row" id="profileStats"></div>
+        <div class="profile-ledger" id="profileLedger"></div>
         <div id="profileRewards"></div>
 
         <div class="section-label">Settings</div>

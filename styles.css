@@ -1026,3 +1026,29 @@ footer {
 .ing-picker-more {
   padding:6px 10px; font-size:11px; color:var(--ink-soft); text-align:center;
 }
+
+/* ─── waste log: outcome picker, reason sheet, profile ledger ─── */
+.outcome { margin-top:var(--s6); padding-top:var(--s6); border-top:1px solid var(--border); }
+.outcome .outcome-q { font-size:13px; font-weight:600; margin-bottom:var(--s4); }
+.outcome .btn { width:100%; margin-top:var(--s2); }
+
+.waste-backdrop {
+  position:absolute; inset:0; z-index:70;
+  background:rgba(0,0,0,.35); backdrop-filter:blur(2px);
+  display:flex; align-items:flex-end; justify-content:center;
+}
+.waste-sheet {
+  background:var(--white); width:100%;
+  border-radius:var(--r) var(--r) 0 0;
+  padding:var(--s8); box-shadow:0 -4px 24px var(--shadow);
+}
+.waste-sheet .waste-q { font-size:15px; font-weight:700; margin-bottom:var(--s6); }
+.waste-sheet .btn { width:100%; margin-top:var(--s2); }
+
+/* A ratio, not a scoreboard — the loss sits beside the rescue, never instead of it. */
+.profile-ledger { text-align:center; font-size:13px; margin-top:var(--s4); }
+.profile-ledger:empty { display:none; }
+.profile-ledger .led-good { color:var(--leaf); font-weight:700; }
+.profile-ledger .led-dot  { color:var(--ink-soft); margin:0 6px; }
+.profile-ledger .led-lost { color:var(--ink-soft); font-weight:700; }
+.profile-ledger .led-hint { font-size:11px; color:var(--ink-soft); margin-top:var(--s2); line-height:1.5; }
