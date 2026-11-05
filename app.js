@@ -201,7 +201,10 @@ function visibleLines(recipe) {
     if (!ok.length) return;
     if (ok.length === lineIds(line).length) { out.push(line); return; }
     var copy = {}; for (var k in line) copy[k] = line[k];
-    if (ok.length === 1) { delete copy.any; copy.id = ok[0]; } else { copy.any = ok; }
+    delete copy.any; delete copy.all;
+    if (ok.length === 1) { copy.id = ok[0]; }
+    else if (line.all) { copy.all = ok; }     // still every one of what's left, not any of them
+    else { copy.any = ok; }
     out.push(copy);
   });
   return out;
@@ -227,7 +230,13 @@ var recipes = (window.WTF_RECIPES || []).map(function(src) {
     var foods = ids.filter(function(id) { var i = ingById(id); return i && !i.staple; });
     var line = { text:l.text, optional:!!l.optional, staple:staple };
     if (!staple) {
-      if (foods.length === 1) line.id = foods[0]; else line.any = foods;
+      // `alt` is the build's own flag, set only where a line was split on "or". Without it a
+      // list line ("Dressing: 1 avocado, juice of 2 limes, …") and an "and" line ("cilantro and
+      // Thai basil") both became `any`, which coverage() reads as either-or — so one of several
+      // required foods was enough to mark the line covered.
+      if (foods.length === 1) line.id = foods[0];
+      else if (l.alt) line.any = foods;       // any ONE of these satisfies the line
+      else line.all = foods;                  // every one of these is needed
       line.qty = (l.qty === undefined || l.qty === null || foods.length !== ids.length) ? null : l.qty;
       line.unit = line.qty === null ? null : (l.unit || 'ea');
     }
@@ -434,8 +443,8 @@ function stockOf(ingId, unit, reserved) {
   return { any:any, known:round2(Math.max(0, known)), uncertain:uncertain };
 }
 
-function lineIds(line) { return line.any || [line.id]; }
-function lineName(line) { return lineIds(line).map(ingName).join(' or '); }
+function lineIds(line) { return line.any || line.all || [line.id]; }
+function lineName(line) { return lineIds(line).map(ingName).join(line.all ? ' and ' : ' or '); }
 // How much of a line this household's meal needs: the recipe's amount scaled from its estimated
 // servings to the household, doubled for a dinner that also makes the next day's lunch.
 // Everything that checks, sets aside or deducts food goes through here.
@@ -457,17 +466,33 @@ function recipeScale(r) {
 //   short    the known amount isn't enough (after `reserved`, if given)
 //   missing  none on hand at all
 var COVER_RANK = { missing:0, short:1, check:2, ok:3 };
+function coverStatus(s, amount) {
+  if (!s.any) return 'missing';
+  if (amount === null || s.known >= amount - 1e-9) return 'ok';
+  return s.uncertain ? 'check' : 'short';
+}
 function coverage(line, amount, reserved) {
-  var best = null;
-  lineIds(line).forEach(function(id) {
-    var s = stockOf(id, line.unit, reserved), st;
-    if (!s.any) st = 'missing';
-    else if (amount === null || s.known >= amount - 1e-9) st = 'ok';
-    else if (s.uncertain) st = 'check';
-    else st = 'short';
-    if (!best || COVER_RANK[st] > COVER_RANK[best.status]) { best = { status:st, id:id, stock:s }; }
+  var cands = lineIds(line).map(function(id) {
+    var s = stockOf(id, line.unit, reserved);
+    return { status:coverStatus(s, amount), id:id, stock:s,
+             urgent:entriesFor(id).filter(inStock).sort(byUrgency)[0] || null };
   });
-  return best;
+  // An ALL group needs every food on the line, so the line is only as covered as its worst part.
+  if (line.all) {
+    return cands.reduce(function(worst, c) {
+      return !worst || COVER_RANK[c.status] < COVER_RANK[worst.status] ? c : worst;
+    }, null);
+  }
+  // Alternatives: the best-covered option. Between equally covered ones, take the one closest to
+  // turning — otherwise the line is satisfied by whichever id the recipe happened to list first,
+  // and the app cooks the fresh pita while the tortillas it promised to rescue go to waste.
+  cands.sort(function(a, b) {
+    var d = COVER_RANK[b.status] - COVER_RANK[a.status];
+    if (d) return d;
+    if (a.urgent && b.urgent) return byUrgency(a.urgent, b.urgent);
+    return a.urgent ? -1 : (b.urgent ? 1 : 0);
+  });
+  return cands[0];
 }
 
 // The entry a recipe line would draw on first: the one closest to the end of its window.
@@ -485,17 +510,23 @@ function urgentEntryFor(line) {
 function deductLine(line) {
   var amount = amountFor(line);
   if (amount === null) return [];
-  var id = coverage(line, amount).id;
-  var es = entriesFor(id).filter(function(e) {
-    return e.qty !== null && e.qty > 0 && convert(1, line.unit, e.unit) !== null;
-  }).sort(byUrgency);
-  var left = amount, taken = [];
-  es.forEach(function(e) {
-    if (left <= 1e-9) return;
-    var t = Math.min(e.qty, convert(left, line.unit, e.unit));
-    e.qty = round2(e.qty - t);
-    left -= convert(t, e.unit, line.unit);
-    taken.push({ entry:e.id, qty:round2(t) });
+  // An ALL group needs every food on the line, so each is drawn down. An alternative draws only
+  // on the option that covered it. (No ALL group carries a quantity today, so this is a no-op
+  // for them — it is here so adding one later deducts the whole line rather than one part.)
+  var ids = line.all ? lineIds(line) : [coverage(line, amount).id];
+  var taken = [];
+  ids.forEach(function(id) {
+    var es = entriesFor(id).filter(function(e) {
+      return e.qty !== null && e.qty > 0 && convert(1, line.unit, e.unit) !== null;
+    }).sort(byUrgency);
+    var left = amount;
+    es.forEach(function(e) {
+      if (left <= 1e-9) return;
+      var t = Math.min(e.qty, convert(left, line.unit, e.unit));
+      e.qty = round2(e.qty - t);
+      left -= convert(t, e.unit, line.unit);
+      taken.push({ entry:e.id, qty:round2(t) });
+    });
   });
   return taken;
 }
