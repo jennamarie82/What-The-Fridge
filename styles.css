@@ -1064,3 +1064,22 @@ footer {
 .receipt-nodate { margin-top:var(--s4); padding:var(--s6); background:var(--white); border-radius:var(--r); border:1px solid var(--border); }
 .receipt-nodate .rn-q { font-size:13px; font-weight:700; }
 .receipt-nodate .rn-s { font-size:11px; color:var(--ink-soft); line-height:1.5; margin:var(--s2) 0 var(--s4); }
+
+/* ─── logging several losses at once ─── */
+.zone-line.batch-cta { cursor:pointer; }
+.zone-line.batch-cta .zl-sub { color:var(--leaf); }
+
+.waste-sheet.batch { max-height:78%; display:flex; flex-direction:column; }
+.waste-sheet .waste-sub { font-size:11px; color:var(--ink-soft); line-height:1.5; margin-bottom:var(--s4); }
+.waste-sheet .waste-q.small { font-size:13px; margin:var(--s6) 0 var(--s2); }
+.batch-list { overflow-y:auto; flex:1; margin-bottom:var(--s2); }
+.batch-row {
+  display:flex; align-items:center; gap:var(--s4);
+  padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; cursor:pointer;
+}
+.batch-row:last-child { border-bottom:none; }
+.batch-row .br-name { flex:1; font-weight:600; }
+.batch-row input { width:18px; height:18px; accent-color:var(--leaf); flex-shrink:0; }
+.batch-reasons { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:var(--s4); }
+.batch-reasons .btn { width:auto; margin-top:0; flex:0 0 auto; }
+.waste-sheet .btn[disabled] { opacity:.45; pointer-events:none; }

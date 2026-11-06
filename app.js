@@ -1169,6 +1169,13 @@ function renderPantry() {
     group('No date, so no estimate — tap to add one', undated, false) ||
     '<div class="zone-line empty"><div class="zl-sub">Nothing needs urgent attention. Rare and beautiful.</div></div>';
 
+  // The way out for a bad week. Sits at the end of the list, where Ren arrives having just read
+  // what is about to go — not as a banner, because most days nothing has gone.
+  if (attention.length) {
+    attLines += '<div class="zone-line batch-cta" onclick="event.stopPropagation();openWasteBatch()">' +
+      '<div class="zl-sub">Something already gone off? <b>Log several at once</b></div></div>';
+  }
+
   // The collapsed row carries whatever is most worth acting on. Food about to turn that nothing
   // is planning to use comes first; with none of that, a gap in the record is the next most
   // useful thing to say. "All in your plan" is only honest once both are clear.
@@ -2559,6 +2566,82 @@ function setWasteReason(reason) {
   saveState();
   renderAll();
 }
+// ─── logging several at once ───
+// One item at a time is fine for one item and punishing for six: open, Remove, Threw it out,
+// pick a reason, repeat. Six items cost 24 taps, and they cost them on the day Ren is already
+// annoyed — which is exactly the day the data is worth having. A flow that makes you repeat the
+// bad news six times is the punitive thing the log was supposed to avoid.
+//
+// Here it is one sheet: tick what's gone, pick one reason for the lot, confirm. Six items is
+// nine taps. The reason is per-batch rather than per-item because a batch is usually one story
+// ("the week got away from me"); anything that needs its own reason can still go through the
+// item screen.
+var wasteBatch = { ids:{}, reason:null };
+
+function openWasteBatch() {
+  wasteBatch = { ids:{}, reason:null };
+  renderWasteBatch();
+}
+
+function wasteBatchCandidates() {
+  return pantry.filter(function(e) {
+    if (!inStock(e)) return false;
+    var f = freshness(e);
+    return f.known ? f.min <= 3 : e.zone !== 'cupboard';
+  }).sort(byUrgency);
+}
+
+function renderWasteBatch() {
+  var holder = document.getElementById('wasteReasons');
+  if (!holder) return;
+  var items = wasteBatchCandidates();
+  var picked = Object.keys(wasteBatch.ids).filter(function(k) { return wasteBatch.ids[k]; }).length;
+
+  holder.innerHTML =
+    '<div class="waste-sheet batch">' +
+      '<div class="waste-q">Anything already gone?</div>' +
+      '<div class="waste-sub">Tick what you threw out. Nothing here is removed until you confirm.</div>' +
+      '<div class="batch-list">' +
+        (items.length ? items.map(function(e) {
+          var f = freshness(e), on = !!wasteBatch.ids[e.id];
+          return '<label class="batch-row' + (on ? ' on' : '') + '">' +
+            '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="toggleWasteBatch(\'' + e.id + '\')">' +
+            '<span class="br-name">' + esc(ingName(e.ing)) + '</span>' +
+            chipHTML(f.cls, f.text) +
+          '</label>';
+        }).join('') : '<div class="waste-sub">Nothing is near its window. Rare and beautiful.</div>') +
+      '</div>' +
+      (picked ? '<div class="waste-q small">Why did ' + (picked === 1 ? 'it' : 'they') + ' get away?</div>' +
+        '<div class="batch-reasons">' + WASTE_REASONS.map(function(r) {
+          return '<button class="btn ' + (wasteBatch.reason === r[0] ? 'primary' : 'ghost') + ' small"' +
+            ' onclick="setBatchReason(\'' + r[0] + '\')">' + esc(r[1]) + '</button>';
+        }).join('') + '</div>' : '') +
+      '<button class="btn primary"' + (picked ? '' : ' disabled') + ' onclick="confirmWasteBatch()">' +
+        (picked ? 'Log ' + picked + ' item' + (picked === 1 ? '' : 's') : 'Nothing ticked') + '</button>' +
+      '<button class="btn quiet" onclick="closeWasteReasons()">Cancel</button>' +
+    '</div>';
+  holder.style.display = 'flex';
+}
+function toggleWasteBatch(id) { wasteBatch.ids[id] = !wasteBatch.ids[id]; renderWasteBatch(); }
+function setBatchReason(r) { wasteBatch.reason = wasteBatch.reason === r ? null : r; renderWasteBatch(); }
+
+function confirmWasteBatch() {
+  var ids = Object.keys(wasteBatch.ids).filter(function(k) { return wasteBatch.ids[k]; });
+  if (!ids.length) return;
+  var reason = wasteBatch.reason, n = 0;
+  ids.forEach(function(id) {
+    var e = entryById(id);
+    if (!e) return;
+    logWaste(e);                                   // same record as the single-item path
+    wasteLog[wasteLog.length - 1].reason = reason; // null when Ren skipped the question
+    n++;
+  });
+  closeWasteReasons();
+  saveState();
+  renderAll();
+  showToast('Logged ' + n + ' item' + (n === 1 ? '' : 's') + '.');
+}
+
 function closeWasteReasons() {
   var holder = document.getElementById('wasteReasons');
   if (holder) { holder.style.display = 'none'; holder.innerHTML = ''; }
