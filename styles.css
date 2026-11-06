@@ -1059,3 +1059,8 @@ footer {
 .profile-ledger .led-dot  { color:var(--ink-soft); margin:0 6px; }
 .profile-ledger .led-lost { color:var(--ink-soft); font-weight:700; }
 .profile-ledger .led-hint { font-size:11px; color:var(--ink-soft); margin-top:var(--s2); line-height:1.5; }
+
+/* Receipt with no printed date: say so, and offer the one honest way to fill it in. */
+.receipt-nodate { margin-top:var(--s4); padding:var(--s6); background:var(--white); border-radius:var(--r); border:1px solid var(--border); }
+.receipt-nodate .rn-q { font-size:13px; font-weight:700; }
+.receipt-nodate .rn-s { font-size:11px; color:var(--ink-soft); line-height:1.5; margin:var(--s2) 0 var(--s4); }

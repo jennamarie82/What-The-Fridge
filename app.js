@@ -2652,8 +2652,13 @@ function readWithClaude(file) {
 // app's own matcher then finds that name in the food list, as it does for typed searches.
 function parseClaudeReceipt(result) {
   receiptItems = [];
+  // No date printed means no date. Falling back to today used to look harmless — the receipt is
+  // usually today's — but it writes a purchase date nobody supplied, and every freshness estimate
+  // for that item is then computed from it. The spec calls inventing a purchase date a stop-work
+  // condition, and an undated item is meant to stay flagged as unknown rather than assumed fresh.
+  // The Worker already returns null here; this used to throw that away.
   var date = result.purchase_date && /^\d{4}-\d{2}-\d{2}$/.test(result.purchase_date) && result.purchase_date <= todayKey()
-    ? result.purchase_date : todayKey();
+    ? result.purchase_date : null;
   (result.items || []).forEach(function(it) {
     var printed = String(it.printed || it.name || '').trim();
     if (!printed) return;
@@ -2757,8 +2762,9 @@ function parseReceiptText(text) {
       receiptDate = y + '-' + m + '-' + d;
     }
   }
-  // Fall back to today if no date found
-  if (!receiptDate) receiptDate = todayKey();
+  // No date on the receipt means the items go in undated — see parseClaudeReceipt(). The
+  // on-phone reader gets the same rule as the Claude one.
+  if (!receiptDate) receiptDate = null;
 
   lines.forEach(function(raw) {
     var line = raw.trim();
@@ -3053,6 +3059,14 @@ function matchReceiptLine(line) {
   return bestScore >= 30 ? best : null;
 }
 
+// Ren supplying the shopping date is not the app inventing one, so this is the one way a date
+// gets filled in after the fact. Clearing the field puts the items back to undated.
+function setReceiptDate(v) {
+  var ok = /^\d{4}-\d{2}-\d{2}$/.test(v) && v <= todayKey() ? v : null;
+  receiptItems.forEach(function(r) { r.date = ok; });
+  renderReceiptReview();
+}
+
 function renderReceiptReview() {
   var statusEl = document.getElementById('receiptStatus');
   var resultsEl = document.getElementById('receiptResults');
@@ -3060,12 +3074,24 @@ function renderReceiptReview() {
   var matched = receiptItems.filter(function(r) { return r.ing; });
   var unrecognized = receiptItems.filter(function(r) { return !r.ing && r.confidence !== 'non_food'; });
 
+  // When the receipt carried no date, say so rather than quietly filling one in, and offer the
+  // one honest alternative: Ren tells us. Left blank, the items go in undated and read "no date"
+  // everywhere, which is true and keeps them out of the freshness estimates.
+  var undated = receiptItems.some(function(r) { return !r.date; });
+
   statusEl.style.display = 'block';
   statusEl.innerHTML =
     '<div class="receipt-summary">' +
       '<strong>' + matched.length + ' food item' + (matched.length !== 1 ? 's' : '') + ' found</strong>' +
       (unrecognized.length ? '<br><span style="color:var(--ink-soft);">' + unrecognized.length + ' line' + (unrecognized.length !== 1 ? 's' : '') + ' couldn’t be matched</span>' : '') +
-    '</div>';
+    '</div>' +
+    (undated && matched.length ? '<div class="receipt-nodate">' +
+      '<div class="rn-q">No date printed on this receipt.</div>' +
+      '<div class="rn-s">Added without one, these show as <b>no date</b> and get no freshness estimate. ' +
+        'If you know when you shopped, set it here.</div>' +
+      '<input class="field" type="date" max="' + todayKey() + '" ' +
+        'onchange="setReceiptDate(this.value)">' +
+    '</div>' : '');
 
   var html = '';
 
