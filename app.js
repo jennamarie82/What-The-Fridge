@@ -1132,12 +1132,21 @@ function renderPantry() {
   // deliberately ignore. The per-item basis is one tap away.
   var attOpen = openZones.attention;
 
-  // The list used to treat every flagged item the same, but they are not the same. Food the plan
-  // already draws on is handled — it will be used. Food nothing is planning to touch is the food
-  // that actually gets thrown away, and until now it was indistinguishable from the rest.
+  // Three groups, because they ask three different things of Ren.
+  //
+  // An item with a date close to running out and nothing planning to use it is a decision: cook
+  // it or lose it. One the plan already draws on is reassurance. But an item the app can't
+  // estimate at all is neither — it is a gap in the record, and no amount of urgency styling
+  // changes that, because there is no urgency to report. Lumping it in with the first two made
+  // the whole list look like a warning and made the genuine warnings harder to find.
+  //
+  // It matters more now that an undated receipt no longer invents today's date: items legitimately
+  // arrive with nothing on record, and this is where Ren closes that gap.
   var planned = plannedIngredientIds();
-  var atRisk  = attention.filter(function(e) { return !planned[e.ing]; });
-  var covered = attention.filter(function(e) { return planned[e.ing]; });
+  var dated   = attention.filter(function(e) { return freshness(e).known; });
+  var undated = attention.filter(function(e) { return !freshness(e).known; });
+  var atRisk  = dated.filter(function(e) { return !planned[e.ing]; });
+  var covered = dated.filter(function(e) { return planned[e.ing]; });
 
   var row = function(e, act) {
     var f = freshness(e);
@@ -1156,13 +1165,16 @@ function renderPantry() {
 
   var attLines =
     group('Nothing planned uses these', atRisk, true) +
-    group('Your plan uses these', covered, false) ||
+    group('Your plan uses these', covered, false) +
+    group('No date, so no estimate — tap to add one', undated, false) ||
     '<div class="zone-line empty"><div class="zl-sub">Nothing needs urgent attention. Rare and beautiful.</div></div>';
 
-  // The collapsed row carries the number that asks for a decision. "21 use today" says how bad
-  // it is; "22 not in your plan" says how much of it is still nobody's job.
-  var headChip = atRisk.length ? chipHTML('now', atRisk.length + ' not in your plan')
-               : attention.length ? chipHTML('ok', 'all in your plan') : '';
+  // The collapsed row carries whatever is most worth acting on. Food about to turn that nothing
+  // is planning to use comes first; with none of that, a gap in the record is the next most
+  // useful thing to say. "All in your plan" is only honest once both are clear.
+  var headChip = atRisk.length  ? chipHTML('now', atRisk.length + ' not in your plan')
+               : undated.length ? chipHTML('unknown', undated.length + ' need a date')
+               : dated.length   ? chipHTML('ok', 'all in your plan') : '';
 
   att.innerHTML =
     '<div class="zone-row attention' + (attOpen ? ' open' : '') + '" onclick="toggleZone(\'attention\')">' +
