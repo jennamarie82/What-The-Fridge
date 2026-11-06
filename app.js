@@ -1242,36 +1242,84 @@ function recipeUses(r, ingId) {
 // something about to turn becomes a change Ren can make in one tap. Only recipes the kitchen can
 // actually cover are offered — suggesting a meal that needs three things she hasn't got would
 // move the problem rather than solve it.
+// What a recipe is short of right now, by name, ignoring optional lines.
+function missingFor(r, day, reserved) {
+  return visibleLines(r).filter(function(l) {
+    return !l.optional && coverage(l, amountFor(l), reserved).status === 'missing';
+  }).map(lineName);
+}
+function nameList(names) {
+  if (names.length === 1) return names[0].toLowerCase();
+  return names.slice(0, -1).map(function(n) { return n.toLowerCase(); }).join(', ') +
+    ' and ' + names[names.length - 1].toLowerCase();
+}
+
+// Two things were wrong here.
+//
+// It only offered recipes the kitchen could already cover completely, and when it found none it
+// said "Nothing in the approved recipes uses ground beef with what else is in your kitchen."
+// Measured against a half-empty fridge that sentence was hiding this: twenty recipes use ground
+// beef, none were cookable, and the closest needed two things. A dead end was being reported as
+// an absence, and Ren reasonably read it as "this food is not in the recipe book".
+//
+// So: near misses are now offered, with the gap named, because being two items short of twenty
+// recipes is a decision rather than a refusal — Ren may well have the broccoli and not have
+// logged it. And when nothing can be offered, the message says which of the several possible
+// reasons it actually is.
+var NEAR_MISS_MAX = 2;   // beyond this it stops being a near miss and becomes a shopping list
+
 function planAround(entryId) {
   var e = entryById(entryId);
   if (!e) return;
-  var name = ingName(e.ing).toLowerCase(), best = null;
+  var name = ingName(e.ing).toLowerCase();
+
+  var uses = recipes.filter(function(r) { return recipeUses(r, e.ing); });
+  if (!uses.length) { showToast('No approved recipe uses ' + name + ' yet.'); return; }
+  if (plannedIngredientIds()[e.ing]) { showToast('Your plan already uses your ' + name + '.'); return; }
+
+  var best = null, nearest = null, fitAny = false;
   plan.forEach(function(slot, idx) {
     if (!isMealEntry(slot) || slot.status !== 'pending' || slot.dietBlocked) return;
     var type = MEAL_TYPES[idx % 3], day = Math.floor(idx / 3);
-    if (recipeById(slot.recipe) && recipeUses(recipeById(slot.recipe), e.ing)) return;  // already does
     var others = plan.map(function(x, i) { return i === idx ? null : x.recipe; }).filter(Boolean);
     var reserved = reservationsExcept(idx);
-    recipes.forEach(function(r) {
+    uses.forEach(function(r) {
       if (r.type !== type || !eligible(r, type) || others.indexOf(r.id) > -1) return;
-      if (!recipeUses(r, e.ing) || !fitsTime(r, day)) return;
-      var s = scoreRecipe(r, day, reserved);
-      if (!s.feasible) return;
-      if (!best || s.score > best.score) best = { idx:idx, r:r, score:s.score, day:day };
+      if (!fitsTime(r, day)) return;
+      fitAny = true;
+      var s = scoreRecipe(r, day, reserved), gaps = missingFor(r, day, reserved);
+      var cand = { idx:idx, r:r, score:s.score, day:day, gaps:gaps };
+      if (!gaps.length) {
+        if (!best || s.score > best.score) best = cand;
+      } else if (!nearest || gaps.length < nearest.gaps.length ||
+                 (gaps.length === nearest.gaps.length && s.score > nearest.score)) {
+        nearest = cand;
+      }
     });
   });
 
-  if (!best) {
-    showToast('Nothing in the approved recipes uses ' + name + ' with what else is in your kitchen.');
+  var pick = best || (nearest && nearest.gaps.length <= NEAR_MISS_MAX ? nearest : null);
+  if (!pick) {
+    if (nearest) {
+      showToast(uses.length + ' recipe' + (uses.length === 1 ? '' : 's') + ' use ' + name +
+        '. The closest needs ' + nameList(nearest.gaps) + '.');
+    } else if (fitAny) {
+      showToast('The recipes that use ' + name + ' are already on your plan.');
+    } else {
+      showToast('The recipes that use ' + name + ' don’t fit your settings for these three days.');
+    }
     return;
   }
-  var slot = plan[best.idx], was = recipeById(slot.recipe);
-  slot.recipe = best.r.id;
+
+  var slot = plan[pick.idx], was = recipeById(slot.recipe);
+  slot.recipe = pick.r.id;
   slot.status = 'pending';
   delete slot.tried;                     // a fresh rotation from the new meal
   renderAll();
-  showToast(DAY_WORDS[best.day] + ' ' + MEAL_TYPES[best.idx % 3] + ' is now ' + best.r.name +
-    ', which uses your ' + name + '.', { label:'Undo', fn:function() {
+  showToast(DAY_WORDS[pick.day] + ' ' + MEAL_TYPES[pick.idx % 3] + ' is now ' + pick.r.name +
+    ', which uses your ' + name + '.' +
+    (pick.gaps.length ? ' You’ll need ' + nameList(pick.gaps) + '.' : ''),
+    { label:'Undo', fn:function() {
       slot.recipe = was.id; delete slot.tried; renderAll();
       showToast('Put ' + was.name + ' back.');
     } });
