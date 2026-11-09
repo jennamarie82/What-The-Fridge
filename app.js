@@ -780,99 +780,14 @@ function replanNow() {
 // Photos live in recipe-images/ beside this file — one per approved recipe,
 // 1280x720 WebP, named as a slug of the recipe title (which is also the recipe id).
 var RECIPE_IMAGE_DIR = 'recipe-images/';
-var RECIPE_IMAGES = [
-  '15-minute-beef-and-broccoli-stir-fry','15-minute-tomato-spinach-tortellini',
-  'apple-cinnamon-overnight-oats','arroz-con-pollo','avgolemono',
-  'avocado-and-egg-toast-with-everything-seasoning','baja-fish-tacos','baked-beans-and-cornbread-skillet',
-  'baked-lemon-butter-cod','baked-macaroni-and-cheese','baked-pesto-white-fish-with-cherry-tomatoes',
-  'baked-ziti','banana-berry-overnight-chia-oats','barbecue-turkey-meatballs-with-rice','bbq-baby-back-ribs',
-  'bbq-pulled-pork-sandwiches','beef-and-barley-soup','beef-bourguignon','beef-empanadas',
-  'beef-enchiladas-rojas','beef-ragu-with-pappardelle','beef-stroganoff','beef-sukiyaki',
-  'beef-tacos-with-pico-de-gallo','belgian-waffles','berry-smoothie-bowl','bibimbap-bowl',
-  'black-bean-burgers-with-avocado','black-bean-soup','blackened-tilapia-with-rice',
-  'black-pepper-beef-stir-fry','blt-sandwich','blueberry-muffins','breakfast-potato-and-pepper-hash',
-  'broccoli-cheddar-soup','buffalo-chicken-macaroni-and-cheese','buffalo-chicken-wrap','butter-chicken',
-  'buttermilk-biscuits-with-turkey-sausage-gravy','buttermilk-fried-chicken',
-  'butternut-squash-and-sage-risotto','butternut-squash-soup','cacio-e-pepe','caesar-chicken-wrap',
-  'camarones-a-la-diabla','caprese-chicken-ciabatta-sandwich','caprese-pasta-salad',
-  'caprese-sandwich-on-focaccia','carne-asada-with-charred-salsa','carnitas-tacos','carrot-ginger-soup',
-  'cashew-chicken','cauliflower-steaks-with-chimichurri','chana-masala','cheese-pupusas-with-curtido',
-  'cheesy-grits-with-soft-cooked-eggs','chicken-and-dumplings','chicken-and-sausage-gumbo','chicken-banh-mi',
-  'chicken-burrito-bowl','chicken-cacciatore','chicken-caesar-salad','chicken-cordon-bleu',
-  'chicken-enchiladas-verdes','chicken-fried-rice','chicken-gyro-pita','chicken-katsu-with-japanese-curry',
-  'chicken-marsala','chicken-mole-poblano','chicken-parmesan','chicken-pho','chicken-piccata',
-  'chicken-pot-pie','chicken-pozole-rojo','chicken-salad-sandwich','chicken-shawarma-wrap',
-  'chicken-souvlaki-with-lemon-potatoes','chicken-tikka-masala','chicken-tinga-tostadas',
-  'chicken-tortilla-soup','chicken-udon-noodle-soup','chicken-yakitori-rice-bowl','chickpea-and-kale-soup',
-  'chickpea-smash-sandwich','chilaquiles-verdes','chiles-rellenos','chimichurri-skirt-steak','cioppino',
-  'classic-banana-bread','classic-buttermilk-pancakes','classic-cheese-omelette',
-  'classic-chicken-noodle-soup','classic-crepes-with-berries-and-cream','classic-egg-salad-sandwich',
-  'classic-grilled-cheese','classic-lasagna','classic-meatloaf','classic-potato-salad','cobb-salad',
-  'coconut-chickpea-and-sweet-potato-stew','coq-au-vin','corn-chowder','cottage-cheese-and-tomato-toast',
-  'country-fried-steak-with-gravy','crab-cakes-with-remoulade','creamy-macaroni-salad','creamy-tomato-soup',
-  'crispy-teriyaki-tofu-and-veggie-stir-fry','cuban-black-beans-and-rice','curried-chicken-salad-wrap',
-  'curried-lentil-and-sweet-potato-soup','dal-tadka-with-basmati-rice','dan-dan-noodles',
-  'dutch-baby-pancake','easy-egg-and-veggie-fried-rice','egg-and-turkey-sausage-breakfast-sandwich',
-  'egg-drop-soup','eggplant-and-chickpea-tagine','eggplant-parmesan','eggs-benedict',
-  'elote-chicken-rice-bowl','falafel-grain-bowl','falafel-pita-with-tahini',
-  'falafel-platter-with-tahini-and-salad','farro-salad-with-roasted-vegetables','fattoush-salad',
-  'fettuccine-alfredo','fish-and-chips','french-dip-sandwich','french-onion-soup',
-  'french-toast-with-cinnamon-and-maple','garlic-butter-scallops','garlic-butter-shrimp-and-spinach-pasta',
-  'gazpacho','general-tso-s-chicken','ginger-scallion-congee','ginger-scallion-steamed-chicken',
-  'gnocchi-with-tomato-basil-sauce','greek-moussaka','greek-salad-with-grilled-chicken',
-  'grilled-bbq-chicken-thighs','grilled-halibut-with-mango-salsa','grilled-ribeye-with-garlic-butter',
-  'grilled-vegetable-and-goat-cheese-ciabatta','ground-turkey-and-black-bean-skillet-tacos',
-  'healthy-egg-salad-lettuce-boats','hearty-beef-stew','hearty-lentil-soup',
-  'high-protein-greek-yogurt-and-berry-parfait','homemade-maple-granola','honey-mustard-glazed-pork-chops',
-  'hot-and-sour-soup','huevos-rancheros','hummus-and-roasted-vegetable-wrap','italian-sub',
-  'italian-wedding-soup','jambalaya','japchae','kimchi-fried-rice','king-ranch-chicken-casserole',
-  'korean-beef-bulgogi','korean-fried-chicken','kung-pao-chicken','lamb-gyro-platter',
-  'lemon-dill-tuna-and-white-bean-salad','lemongrass-chicken-vermicelli-bowl','lemon-herb-orzo-salad',
-  'lemon-herb-roast-chicken-with-potatoes','lentil-and-feta-salad','lentil-bolognese-with-spaghetti',
-  'lentil-shepherd-s-pie','linguine-with-clams','loaded-breakfast-burrito','mapo-tofu','margherita-pizza',
-  'massaman-beef-curry','meatball-sub','mediterranean-breakfast-bowl','mediterranean-chickpea-salad',
-  'mediterranean-stuffed-bell-peppers','menemen','minestrone-soup','miso-glazed-cod','miso-soup-with-tofu',
-  'mongolian-beef','moroccan-chicken-tagine-with-olives','mushroom-and-spinach-egg-muffin-cups',
-  'mushroom-barley-soup','mushroom-risotto','mushroom-stroganoff','mussels-in-white-wine-and-garlic',
-  'new-england-clam-chowder','new-england-lobster-rolls','one-pot-chickpea-and-spinach-coconut-curry',
-  'orange-chicken','osso-buco','oven-fried-chicken-tenders-with-honey-mustard',
-  'overnight-cinnamon-french-toast-bake','pad-see-ew','pad-thai','paella-valenciana','palak-paneer',
-  'pan-seared-salmon-with-dill-cream-sauce','panzanella','pasta-primavera','pasta-puttanesca',
-  'peanut-butter-and-chocolate-protein-smoothie','peanut-butter-banana-oatmeal','penne-alla-vodka',
-  'pepperoni-pizza','peruvian-lomo-saltado','pesto-chicken-pasta-salad','philly-cheesesteak','picadillo',
-  'pollo-asado-with-lime-rice','potato-leek-soup','pot-roast-with-gravy','pulled-bbq-chicken-sandwich',
-  'quiche-lorraine','quick-black-bean-and-rice-burrito-bowl','quick-sheet-pan-chicken-fajitas','ratatouille',
-  'reuben-sandwich','ricotta-and-berry-honey-toast','roast-beef-and-horseradish-sandwich',
-  'roasted-vegetable-buddha-bowl-with-tahini','roast-turkey-breast-with-pan-gravy','ropa-vieja',
-  'salade-nicoise','salisbury-steak-with-mushroom-gravy','salmon-en-papillote','salmon-rice-bowl',
-  'savory-oatmeal-with-soft-egg-and-scallions','sesame-crusted-tuna-steak','sesame-peanut-noodle-bowl',
-  'shakshuka','sheet-pan-garlic-lemon-chicken-and-asparagus','sheet-pan-salmon-with-zucchini-and-tomatoes',
-  'sheet-pan-smoked-sausage-peppers-and-onions','shepherd-s-pie','shoyu-ramen-with-chicken',
-  'shrimp-and-grits','shrimp-scampi','shrimp-taco-salad','shrimp-tacos-with-chipotle-crema',
-  'singapore-noodles-with-shrimp','skillet-caprese-chicken','skillet-tamale-pie','sloppy-joes',
-  'smash-burgers','smoked-salmon-and-cream-cheese-bagel','soba-noodle-salad-with-edamame',
-  'southwest-chicken-salad-with-lime-ranch','southwestern-mason-jar-quinoa-salad','spaghetti-bolognese',
-  'spaghetti-carbonara','spanakopita','spanish-potato-tortilla','spicy-korean-chicken-stir-fry',
-  'spinach-and-cheese-stuffed-chicken-breast','spinach-and-mushroom-quiche',
-  'spinach-egg-and-avocado-breakfast-wrap','split-pea-soup','steak-frites-with-herb-butter',
-  'steel-cut-oats-with-brown-sugar-and-pecans','stuffed-portobello-mushrooms',
-  'stuffed-shells-with-ricotta-and-spinach','sweet-and-sour-pork','tabbouleh','teriyaki-chicken-rice-bowl',
-  'teriyaki-salmon-donburi','texas-chili-con-carne','thai-basil-chicken','thai-green-curry-with-chicken',
-  'thai-red-curry-with-shrimp','three-bean-salad','tom-kha-gai','tropical-green-power-smoothie','tuna-melt',
-  'tuna-noodle-casserole','tuna-poke-bowl','turkey-and-cranberry-sandwich','turkey-and-wild-rice-soup',
-  'turkey-avocado-and-hummus-wrap','turkey-burgers-with-avocado','turkey-chili-with-beans',
-  'turkey-club-sandwich','turkey-marinara-over-zucchini-noodles','tuscan-white-bean-and-spinach-soup',
-  'vegetable-biryani','vegetable-chow-mein','vegetable-lasagna','vegetarian-black-bean-chili',
-  'vegetarian-enchilada-casserole','vegetarian-red-beans-and-rice','veggie-scramble-with-feta-and-herbs',
-  'vietnamese-caramelized-chicken','waldorf-salad','western-omelette','whole-wheat-banana-pancakes'
-];
 var FALLBACK_HERO = 'linear-gradient(135deg,#FFF3E0 0%,#FFE0B2 40%,#FFCC80 100%)';
 
-// A missing photo falls back to a gradient — never to another dish's photo.
+// The gradient sits under the photo, so a missing photo falls back to it — never to another
+// dish's photo. There is deliberately no list of photo names here: the build checks every
+// recipe has one, and a list kept by hand went stale the moment recipes were added.
 // Single quotes only: this value is injected into a double-quoted style="" attribute.
 function heroFor(recipe) {
-  if (RECIPE_IMAGES.indexOf(recipe.id) === -1) { return FALLBACK_HERO; }
-  return "url('" + RECIPE_IMAGE_DIR + recipe.id + ".webp') center/cover no-repeat";
+  return "url('" + RECIPE_IMAGE_DIR + recipe.id + ".webp') center/cover no-repeat, " + FALLBACK_HERO;
 }
 
 // ═══════════════ CHIP ICONS ═══════════════
