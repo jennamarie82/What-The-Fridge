@@ -1,13 +1,16 @@
-// What the Fridge: receipt reader (Cloudflare Worker).
+// What the Fridge: receipt and pantry-photo reader (Cloudflare Worker).
 //
-// The app sends a photo of a grocery receipt here; this Worker adds the Anthropic API key (a
-// Cloudflare secret, never in this repository) and asks Claude to read it. It returns each line
-// as a plain grocery name, and the app matches those names to its own food list and shows the
-// usual review screen. Nothing is stored here.
+// The app sends a photo here; this Worker adds the Anthropic API key (a Cloudflare secret, never
+// in this repository) and asks Claude to read it. Two modes:
+//   - "receipt" (the default, and what older copies of the app send): each printed line as a
+//     plain grocery name, plus the purchase date if one is printed.
+//   - "pantry": the foods Claude can clearly see in a photo of a fridge, freezer or cupboard.
+// Either way the app matches the names to its own food list and shows a review screen where the
+// person ticks what to add. Nothing is stored here.
 //
 // Deploy: Cloudflare dashboard > Workers & Pages > wtf-receipt-reader > Edit code, replace
 // everything with this file, Deploy. The key lives in Settings > Variables and Secrets as a
-// Secret named ANTHROPIC_API_KEY.
+// Secret named ANTHROPIC_API_KEY; deploying new code leaves it untouched.
 //
 // Raw HTTP rather than the Anthropic SDK: the dashboard editor has no build step to install it.
 
@@ -23,8 +26,11 @@ const ALLOWED_ORIGINS = [
 // The app shrinks photos before sending; this stops anything unreasonable getting through.
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const UNITS = ['ea', 'lb', 'kg', 'g', 'oz', 'l', 'ml'];
 
-const SYSTEM = `You read photos of grocery receipts for a meal-planning app.
+// ─── Receipts (unchanged) ───
+
+const RECEIPT_SYSTEM = `You read photos of grocery receipts for a meal-planning app.
 
 List every line item printed on the receipt, top to bottom. For each item give:
 - printed: the item text exactly as printed, without the price.
@@ -43,7 +49,7 @@ Also give purchase_date as YYYY-MM-DD if a date is printed, otherwise null.
 Only report what is printed. If a line can't be read, skip it; never guess at items that aren't
 there. If the photo isn't a receipt or can't be read at all, return an empty items list.`;
 
-const SCHEMA = {
+const RECEIPT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['purchase_date', 'items'],
@@ -60,7 +66,61 @@ const SCHEMA = {
           name: { type: 'string' },
           is_food: { type: 'boolean' },
           quantity: { anyOf: [{ type: 'number' }, { type: 'null' }] },
-          unit: { anyOf: [{ type: 'string', enum: ['ea', 'lb', 'kg', 'g', 'oz', 'l', 'ml'] }, { type: 'null' }] },
+          unit: { anyOf: [{ type: 'string', enum: UNITS }, { type: 'null' }] },
+        },
+      },
+    },
+  },
+};
+
+// ─── Pantry photos ───
+// The spec's rules for this feature: nothing is added until the person ticks it; a photo can't
+// show when food was bought, so no dates; counts are estimates the person can change; and the
+// app never says whether food is still good. The prompt keeps Claude inside those lines.
+
+const AREAS = ['fridge', 'freezer', 'cupboard'];
+
+const PANTRY_SYSTEM = `You look at photos of a home fridge, freezer or cupboard for a meal-planning app.
+The app shows your list to the person, who ticks what to add to their pantry, so leaving an item
+out costs them a few seconds while listing something that isn't there misleads them.
+
+List each food or drink you can clearly identify. For each one give:
+- name: what it is, as a home cook would write it on a shopping list ("cheddar cheese",
+  "green onions", "frozen peas", "canned black beans"). Use a readable label when there is one;
+  leave out brand names unless the brand is the only clue to what the food is.
+- quantity and unit: how many you can see, as a count in "ea" (3 apples, 2 cans, 1 carton). Use a
+  weight or volume only when it is printed and readable on the package. Use null for both when
+  you can't tell, for example a bag of loose spinach.
+- form: "fresh", "frozen", "canned", "dried", "packaged" (boxes, jars, bottles, cartons) or
+  "other".
+- sure: true when the item is plainly visible and you are confident what it is; false when it is
+  partly hidden or you are inferring from shape or colour.
+
+Rules:
+- Only list what is visible. Never guess at what is inside an opaque or unlabelled container,
+  and skip leftovers in containers unless the food itself is plainly visible.
+- List each kind of food once, with the total you can see.
+- Skip things that aren't food or drink, and skip condiments only when you can't tell what they are.
+- Don't estimate when anything was bought, how old it is, or whether it is still good to eat.
+- If the photo doesn't show food storage, or nothing can be identified, return an empty items list.`;
+
+const PANTRY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['items'],
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'quantity', 'unit', 'form', 'sure'],
+        properties: {
+          name: { type: 'string' },
+          quantity: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+          unit: { anyOf: [{ type: 'string', enum: UNITS }, { type: 'null' }] },
+          form: { type: 'string', enum: ['fresh', 'frozen', 'canned', 'dried', 'packaged', 'other'] },
+          sure: { type: 'boolean' },
         },
       },
     },
@@ -73,8 +133,8 @@ export default {
     const cors = corsHeaders(origin);
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-    if (request.method === 'GET') return reply({ ok: true, service: 'What the Fridge receipt reader' }, 200, cors);
-    if (request.method !== 'POST') return reply({ error: 'Send the receipt with POST.' }, 405, cors);
+    if (request.method === 'GET') return reply({ ok: true, service: 'What the Fridge photo reader', modes: ['receipt', 'pantry'] }, 200, cors);
+    if (request.method !== 'POST') return reply({ error: 'Send the photo with POST.' }, 405, cors);
     if (!ALLOWED_ORIGINS.includes(origin)) return reply({ error: 'This reader only works from the What the Fridge app.' }, 403, cors);
     if (!env.ANTHROPIC_API_KEY) return reply({ error: 'The reader is not set up yet (no ANTHROPIC_API_KEY secret).' }, 500, cors);
 
@@ -85,55 +145,75 @@ export default {
     if (!image || !mediaType) return reply({ error: 'Expected an image and its type.' }, 400, cors);
     if (image.length * 0.75 > MAX_IMAGE_BYTES) return reply({ error: 'That photo is too large.' }, 413, cors);
 
-    let res;
-    try {
-      res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          // If a safety check declines the request, Anthropic re-runs it on its recommended
-          // fallback model instead of failing.
-          'anthropic-beta': 'server-side-fallback-2026-07-01',
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 16000,
-          fallbacks: 'default',
-          output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-          system: SYSTEM,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-              { type: 'text', text: 'Read this receipt.' },
-            ],
-          }],
-        }),
-      });
-    } catch {
-      return reply({ error: 'Could not reach Claude.' }, 502, cors);
+    const mode = body.mode === undefined ? 'receipt' : body.mode;
+    if (mode !== 'receipt' && mode !== 'pantry') return reply({ error: 'Unknown mode.' }, 400, cors);
+
+    if (mode === 'receipt') {
+      const out = await askClaude(env, RECEIPT_SYSTEM, RECEIPT_SCHEMA, image, mediaType, 'Read this receipt.');
+      if (out.error) return reply({ error: out.error, status: out.status }, out.code, cors);
+      return reply({ purchase_date: out.result.purchase_date, items: out.result.items, model: out.model }, 200, cors);
     }
 
-    if (!res.ok) {
-      // 400 from a spent workspace limit, 401 from a bad or expired key, 429/529 when busy.
-      // The details stay in the Worker's logs; the app just falls back to its own reader.
-      console.log('Anthropic error', res.status, await res.text());
-      return reply({ error: 'Claude could not read the receipt right now.', status: res.status }, 502, cors);
-    }
-
-    const msg = await res.json();
-    if (msg.stop_reason === 'refusal' || msg.stop_reason === 'max_tokens') {
-      return reply({ error: 'Claude could not read this receipt.' }, 422, cors);
-    }
-    const text = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
-    let result;
-    try { result = JSON.parse(text); } catch { return reply({ error: 'Unexpected answer from Claude.' }, 502, cors); }
-
-    return reply({ purchase_date: result.purchase_date, items: result.items, model: msg.model }, 200, cors);
+    // The app knows which shelf the person photographed, which helps with look-alikes
+    // (a frozen bag versus a fresh one). It is a hint only.
+    const area = AREAS.includes(body.area) ? body.area : null;
+    const ask = area ? 'This photo shows my ' + area + '. List the food you can see.' : 'List the food you can see.';
+    const out = await askClaude(env, PANTRY_SYSTEM, PANTRY_SCHEMA, image, mediaType, ask);
+    if (out.error) return reply({ error: out.error, status: out.status }, out.code, cors);
+    return reply({ area, items: out.result.items, model: out.model }, 200, cors);
   },
 };
+
+async function askClaude(env, system, schema, image, mediaType, ask) {
+  let res;
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        // If a safety check declines the request, Anthropic re-runs it on its recommended
+        // fallback model instead of failing.
+        'anthropic-beta': 'server-side-fallback-2026-07-01',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 16000,
+        fallbacks: 'default',
+        output_config: { effort: 'low', format: { type: 'json_schema', schema } },
+        system,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
+            { type: 'text', text: ask },
+          ],
+        }],
+      }),
+    });
+  } catch {
+    return { error: 'Could not reach Claude.', code: 502 };
+  }
+
+  if (!res.ok) {
+    // 400 from a spent workspace limit, 401 from a bad or expired key, 429/529 when busy.
+    // The details stay in the Worker's logs; the app falls back or asks the person to add by hand.
+    console.log('Anthropic error', res.status, await res.text());
+    return { error: 'Claude could not read the photo right now.', status: res.status, code: 502 };
+  }
+
+  const msg = await res.json();
+  if (msg.stop_reason === 'refusal' || msg.stop_reason === 'max_tokens') {
+    return { error: 'Claude could not read this photo.', code: 422 };
+  }
+  const text = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  try {
+    return { result: JSON.parse(text), model: msg.model };
+  } catch {
+    return { error: 'Unexpected answer from Claude.', code: 502 };
+  }
+}
 
 function corsHeaders(origin) {
   return {
