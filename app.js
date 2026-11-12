@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-12 (desktop layout)';
+var APP_VERSION = '2026-11-12 (snap your shelves)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -1832,7 +1832,7 @@ function openSub(which) {
       '<div class="note-card" style="margin-top:var(--s4);">' +
         '<strong>Privacy</strong><br>' +
         'Your food, plan and settings are saved in this browser only and never leave your device. ' +
-        'The one exception: when you scan a receipt, the photo is sent to Claude (by Anthropic) to read it, and isn\'t stored by the app.' +
+        'The one exception: when you scan a receipt or photograph your shelves, the photo is sent to Claude (by Anthropic) to read it, and isn\'t stored by the app.' +
       '</div>' +
       '<div style="margin-top:var(--s8);color:var(--ink-soft);font-size:13px;line-height:1.5;text-align:center;">' +
         'BUS 860 · Group 3<br>University of Alberta' +
@@ -1883,7 +1883,20 @@ function openSub(which) {
       '<div id="receiptResults" style="display:none;"></div>';
   }
 
-  document.getElementById('subBackLabel').textContent = which === 'receipt' ? receiptBack : 'Profile';
+  if (which === 'shelves') {
+    title = 'Snap your shelves';
+    body =
+      '<p class="sub-intro">Take one photo of each place you keep food. Claude lists the food it can ' +
+        'clearly see, and you check every item before it\'s added. Only the photo is sent, to read it; ' +
+        'it isn\'t stored.</p>' +
+      '<div class="shelf-areas" id="shelfAreas">' + shelfAreasHTML() + '</div>' +
+      '<p class="field-hint">For the best list, open the door wide, step back so a whole shelf fits, ' +
+        'and use good light. Food behind other food or in closed containers won\'t be seen, so add those after.</p>' +
+      '<div id="receiptStatus" style="display:none;"></div>' +
+      '<div id="receiptResults" style="display:none;"></div>';
+  }
+
+  document.getElementById('subBackLabel').textContent = (which === 'receipt' || which === 'shelves') ? receiptBack : 'Profile';
   document.getElementById('subTitle').textContent = title;
   document.getElementById('subBody').innerHTML = body;
   document.getElementById('subScreen').classList.add('open');
@@ -2696,13 +2709,143 @@ function closeWasteReasons() {
 
 var receiptItems = [];   // extracted lines awaiting review
 var receiptBack = 'Profile';   // where the receipt screen's Back goes: Profile or Pantry
+// The receipt screen's review list also serves shelf photos ("Snap your shelves"): same tick-
+// every-item step, same matcher. photoMode says which one is on screen.
+var photoMode = 'receipt';     // 'receipt' or 'shelves'
+var shelfBought = 'unsure';    // shelves only: 'week', 'older' or 'unsure', asked once for all items
+var shelfCounts = {};          // shelves only: items found per area, shown on that area's button
 
 // Opens the receipt screen from Profile or from the Pantry's Add food screen.
 function openReceipt(from) {
   receiptBack = from || 'Profile';
   receiptItems = [];
+  photoMode = 'receipt';
   if (receiptBack === 'Pantry' && currentTab !== 'pantryTab') { switchTab('pantryTab'); }
   openSub('receipt');
+}
+
+// Snap your shelves: one photo per place food is kept, Claude lists what it can clearly see, and
+// every photo's finds collect into one review list. The agreed rules: nothing is added until it is
+// ticked; a photo can't show when food was bought, so the person answers that once for everything;
+// amounts are estimates they can change; and nothing here says whether food is still good.
+function openShelves(from) {
+  receiptBack = from || 'Pantry';
+  receiptItems = [];
+  photoMode = 'shelves';
+  shelfBought = 'unsure';
+  shelfCounts = {};
+  if (currentTab !== 'pantryTab') { switchTab('pantryTab'); }
+  openSub('shelves');
+}
+function shelfAreasHTML() {
+  return ZONES.map(function(z) {
+    var n = shelfCounts[z.key];
+    return '<label class="shelf-area' + (n !== undefined ? ' done' : '') + '" for="shelfFile_' + z.key + '">' +
+        '<b>' + z.label + '</b>' +
+        '<span>' + (n === undefined ? 'Take a photo' : '✓ ' + n + ' found · add another') + '</span>' +
+      '</label>' +
+      '<input type="file" id="shelfFile_' + z.key + '" accept="image/*" style="display:none;" ' +
+        'onchange="handleShelfFile(this,\'' + z.key + '\')">';
+  }).join('');
+}
+function handleShelfFile(input, area) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  input.value = '';
+  var place = (ZONES.filter(function(z) { return z.key === area; })[0] || { label:'shelf' }).label.toLowerCase();
+  var statusEl = document.getElementById('receiptStatus');
+  statusEl.style.display = 'block';
+  statusEl.innerHTML =
+    '<div class="receipt-progress">' +
+      '<div class="spinner"></div>' +
+      '<div><strong>Claude is looking at your ' + esc(place) + '…</strong>' +
+        '<p class="receipt-step">This usually takes 5 to 10 seconds.</p>' +
+      '</div>' +
+    '</div>';
+  readShelfWithClaude(file, area).then(function(result) {
+    shelfCounts[area] = (shelfCounts[area] || 0) + parseClaudeShelf(result, area);
+    var areas = document.getElementById('shelfAreas');
+    if (areas) areas.innerHTML = shelfAreasHTML();
+    renderReceiptReview();
+  }).catch(function() {
+    // No on-phone backup here: the phone's text reader can read a receipt but can't recognise food.
+    if (receiptItems.length) {
+      renderReceiptReview();
+      showToast('Claude couldn’t read that photo. Try it again in a moment.');
+    } else {
+      statusEl.innerHTML =
+        '<div class="note-card" style="border-left-color:var(--amber);">Claude couldn’t read that photo. ' +
+          'Check your connection and try again, or add food by hand from the Pantry tab.</div>';
+    }
+  });
+}
+function readShelfWithClaude(file, area) {
+  return receiptImage(file).then(function(data) {
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function() { if (ctrl) ctrl.abort(); }, 60000);
+    return fetch(RECEIPT_API, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: data, mediaType: 'image/jpeg', mode: 'pantry', area: area }),
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(function(res) {
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('reader ' + res.status);
+      return res.json();
+    });
+  });
+}
+// Adds one photo's finds to the review list and returns how many there were. An item starts ticked
+// only when Claude was sure it saw it AND it matched a food exactly; everything else waits for a
+// person to tick it. The place is the one photographed, not the food's usual home: a jar of salsa
+// in the fridge is in the fridge.
+// The food matcher finds a food named anywhere in a phrase, which is right for typed searches but
+// too loose to pre-tick photo finds: tested on a real cupboard photo it paired "bread machine yeast"
+// with Bread, "whipped chocolate frosting" with Dark chocolate and "diced tomatoes with green
+// chilies" with Fresh chili peppers. A photo match is trusted only when the phrase's main word (its
+// last word, before any "with ...") is a word of the matched food's name: "yeast" isn't in "Bread",
+// "corn" is in "Corn kernels". Untrusted matches still show, unticked, for the person to check.
+function singularWord(w) { return w.replace(/ies$/, 'y').replace(/(o|s|x|ch|sh)es$/, '$1').replace(/s$/, ''); }
+function trustedShelfMatch(phrase, ingName) {
+  var words = phrase.toLowerCase().split(/\s+with\s+/)[0].match(/[a-z]+/g) || [];
+  var head = words.length ? singularWord(words[words.length - 1]) : '';
+  var ingWords = (ingName.toLowerCase().match(/[a-z]+/g) || []).map(singularWord);
+  return !!head && ingWords.indexOf(head) > -1;
+}
+function parseClaudeShelf(result, area) {
+  var n = 0;
+  (result.items || []).forEach(function(it) {
+    var name = String(it.name || '').trim();
+    if (!name) return;
+    var match = matchFoodName(name) || matchReceiptLine(name);
+    var trusted = !!match && match.exact && trustedShelfMatch(name, match.name);
+    var unit = UNITS.indexOf(it.unit) > -1 ? it.unit : null;
+    var qty = unit && typeof it.quantity === 'number' && it.quantity > 0 ? it.quantity : null;
+    var sure = it.sure !== false;
+    receiptItems.push({
+      raw: name,
+      ing: match ? match.id : null,
+      ingName: match ? match.name : null,
+      confidence: match ? (trusted ? 'exact_match' : 'probable') : 'unrecognized',
+      zone: area,
+      include: trusted && sure,
+      qty: qty, unit: qty === null ? null : unit,
+      date: null,
+      sure: sure
+    });
+    n++;
+  });
+  return n;
+}
+function setShelfBought(v) {
+  shelfBought = v;
+  renderReceiptReview();
+}
+// The person can correct any amount; a blank amount is added with no amount, as typed foods are.
+function setReceiptQty(idx, v) {
+  var item = receiptItems[idx], n = parseFloat(v);
+  if (!item) return;
+  if (n > 0) { item.qty = n; item.unit = item.unit || 'ea'; }
+  else { item.qty = null; item.unit = null; }
 }
 // The + button offers two ways in: scan a receipt (straight to the camera) or add manually.
 function openAddSheet() {
@@ -3215,14 +3358,31 @@ function renderReceiptReview() {
   // one honest alternative: Ren tells us. Left blank, the items go in undated and read "no date"
   // everywhere, which is true and keeps them out of the freshness estimates.
   var undated = receiptItems.some(function(r) { return !r.date; });
+  var shelves = photoMode === 'shelves';
+
+  // A shelf photo never shows when food was bought, so ask once for everything. "This week" is
+  // counted from the oldest day in the week, so no estimate makes food look fresher than it might be.
+  var boughtHTML = !shelves || !matched.length ? '' :
+    '<div class="receipt-nodate">' +
+      '<div class="rn-q">When did you buy most of this?</div>' +
+      '<div class="rn-s">A photo can’t show it. <b>This week</b> counts everything as bought 6 days ago, ' +
+        'so nothing looks fresher than it might be. <b>Older</b> or <b>Not sure</b> adds it with no date ' +
+        'and no freshness estimate. You can change any item later.</div>' +
+      '<div class="receipt-zone-pick">' +
+        [['week','This week'], ['older','Older'], ['unsure','Not sure']].map(function(o) {
+          return '<button class="' + (shelfBought === o[0] ? 'active' : '') + '" onclick="setShelfBought(\'' + o[0] + '\')">' + o[1] + '</button>';
+        }).join('') +
+      '</div>' +
+    '</div>';
 
   statusEl.style.display = 'block';
   statusEl.innerHTML =
     '<div class="receipt-summary">' +
       '<strong>' + matched.length + ' food item' + (matched.length !== 1 ? 's' : '') + ' found</strong>' +
-      (unrecognized.length ? '<br><span style="color:var(--ink-soft);">' + unrecognized.length + ' line' + (unrecognized.length !== 1 ? 's' : '') + ' couldn’t be matched</span>' : '') +
-    '</div>' +
-    (undated && matched.length ? '<div class="receipt-nodate">' +
+      (unrecognized.length ? '<br><span style="color:var(--ink-soft);">' + unrecognized.length + (shelves ? ' seen but' : ' line' + (unrecognized.length !== 1 ? 's' : '')) + ' couldn’t be matched</span>' : '') +
+      (shelves && matched.length ? '<br><span style="color:var(--ink-soft);">Only items Claude was sure of start ticked. Check the rest.</span>' : '') +
+    '</div>' + boughtHTML +
+    (!shelves && undated && matched.length ? '<div class="receipt-nodate">' +
       '<div class="rn-q">No date printed on this receipt.</div>' +
       '<div class="rn-s">Added without one, these show as <b>no date</b> and get no freshness estimate. ' +
         'If you know when you shopped, set it here.</div>' +
@@ -3242,8 +3402,12 @@ function renderReceiptReview() {
         '<div class="receipt-item">' +
           '<div class="ri-check"><input type="checkbox"' + (item.include ? ' checked' : '') + ' onchange="toggleReceiptItem(' + idx + ',this.checked)"></div>' +
           '<div class="ri-body">' +
-            '<div><span class="ri-name">' + esc(item.ingName) + '</span><span class="ri-conf ' + confClass + '">' + confLabel + '</span></div>' +
-            '<div class="ri-raw">' + esc(item.raw) + '</div>' +
+            '<div><span class="ri-name">' + esc(item.ingName) + '</span><span class="ri-conf ' + confClass + '">' + confLabel + '</span>' +
+              (shelves && item.sure === false ? '<span class="ri-conf probable">not sure it’s there</span>' : '') + '</div>' +
+            '<div class="ri-raw">' + (shelves ? 'Claude saw: ' : '') + esc(item.raw) + '</div>' +
+            (shelves ? '<label class="ri-amount">Amount <input type="number" min="0" step="any" inputmode="decimal" ' +
+              'value="' + (item.qty || '') + '" placeholder="?" onchange="setReceiptQty(' + idx + ',this.value)"> ' +
+              esc(item.unit || 'ea') + '</label>' : '') +
             '<div class="receipt-zone-pick">' +
               ZONES.map(function(z) {
                 return '<button class="' + (item.zone === z.key ? 'active' : '') + '" onclick="setReceiptZone(' + idx + ',\'' + z.key + '\')">' + z.label + '</button>';
@@ -3257,7 +3421,7 @@ function renderReceiptReview() {
   // Show non-food / unrecognized lines — unmatched ones get a correction picker
   var others = receiptItems.filter(function(r) { return !r.ing; });
   if (others.length) {
-    html += '<div class="section-label">Other lines on the receipt</div>';
+    html += '<div class="section-label">' + (shelves ? 'Seen but not matched to a food' : 'Other lines on the receipt') + '</div>';
     others.forEach(function(item) {
       var idx = receiptItems.indexOf(item);
       if (item.confidence === 'non_food') {
@@ -3291,6 +3455,13 @@ function renderReceiptReview() {
         '<button class="btn primary" onclick="confirmReceipt()">Add ' + selected + ' item' + (selected !== 1 ? 's' : '') + ' to pantry</button>' +
       '</div>' +
       '<div class="actions"><button class="btn" onclick="resetReceipt()">Cancel</button></div>';
+  } else if (shelves) {
+    // The area buttons stay above the list, so another photo is one tap away.
+    html +=
+      '<div class="note-card" style="margin-top:var(--s6);border-left-color:var(--amber);">' +
+        'Claude didn’t find food it could match in this photo. Try again closer and in better light, ' +
+        'or add food by hand from the Pantry tab.' +
+      '</div>';
   } else {
     html +=
       '<div class="note-card" style="margin-top:var(--s6);border-left-color:var(--amber);">' +
@@ -3317,8 +3488,11 @@ function setReceiptZone(idx, zone) {
 }
 
 function confirmReceipt() {
-  var added = [];
+  var added = [], shelves = photoMode === 'shelves';
+  // Shelf photos: the person's one answer sets the date for everything ("This week" = 6 days ago).
+  var shelfDate = shelfBought === 'week' ? todayKey(addDays(new Date(), -6)) : null;
   receiptItems.forEach(function(item) {
+    if (shelves) item.date = shelfDate;
     if (!item.include || !item.ing) return;
     var ing = ingById(item.ing);
     if (!ing) return;
@@ -3335,18 +3509,19 @@ function confirmReceipt() {
     added.push(ing.name.toLowerCase());
   });
   receiptItems = [];
+  photoMode = 'receipt';
   closeSub();
   if (planBuiltEmpty && !pantryEmpty()) {
     planKitchen(true);
   }
   renderAll();
   if (added.length) {
-    showToast('Added ' + added.length + ' item' + (added.length !== 1 ? 's' : '') + ' from receipt.');
+    showToast('Added ' + added.length + ' item' + (added.length !== 1 ? 's' : '') + (shelves ? ' from your photos.' : ' from receipt.'));
   }
 }
 
 function resetReceipt() {
-  openReceipt(receiptBack);
+  if (photoMode === 'shelves') openShelves(receiptBack); else openReceipt(receiptBack);
 }
 
 // ── Receipt correction: ingredient picker for unmatched lines ──
@@ -3497,6 +3672,8 @@ function renderSetup() {
   }
   el.innerHTML = dots +
     '<h2>How do you want to start?</h2>' +
+    '<button class="start-card" onclick="finishSetup(\'photos\')"><b>Snap my shelves</b>' +
+      '<span>Fastest. Photograph your fridge, freezer and cupboard, then tick the food Claude finds.</span></button>' +
     '<button class="start-card" onclick="finishSetup(\'own\')"><b>Add my own food</b>' +
       '<span>Start with an empty kitchen and add what you have. A rough count is fine.</span></button>' +
     '<button class="start-card" onclick="finishSetup(\'sample\')"><b>Look around with a sample kitchen</b>' +
@@ -3511,7 +3688,8 @@ function finishSetup(mode) {
   planKitchen(false);
   renderAll();
   document.getElementById('setup').classList.remove('open');
-  if (mode === 'own') { switchTab('pantryTab'); openAddItem(); }
+  if (mode === 'photos') { switchTab('pantryTab'); openShelves('Pantry'); }
+  else if (mode === 'own') { switchTab('pantryTab'); openAddItem(); }
   else { showToast('Welcome! This is a sample kitchen. Swap in your own food from the Pantry tab.'); }
 }
 
