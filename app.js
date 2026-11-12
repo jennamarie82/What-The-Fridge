@@ -1399,7 +1399,7 @@ function scaleHint(r) {
   var who = people + ' ' + (people === 1 ? 'person' : 'people') + (n > people ? ', plus tomorrow\'s leftovers lunch' : '');
   return 'The recipe file\'s amounts make about ' + r.nut.serves + ' serving' + (r.nut.serves > 1 ? 's' : '') + ' (our estimate). ' +
     (Math.abs(n - r.nut.serves) < 1e-6 ? 'That fits your household of ' + who + ', so they\'re used as written.'
-      : 'Your plan scales them for ' + who + ' (shown with →), and that\'s what the kitchen check and Accept use.');
+      : 'Your plan scales them for ' + who + ' (shown with →), and that\'s what the kitchen check and Cooked it use.');
 }
 
 // One row per line of the recipe, in the recipe's own words, with what the kitchen has for it.
@@ -1551,12 +1551,12 @@ function openDetail(idx) {
   } else {
     var why = whyLine(r, Math.floor(idx / 3), 'detail');
     html += '<div class="actions">' +
-        '<button class="btn primary" onclick="acceptMeal(' + idx + ')">Accept</button>' +
+        '<button class="btn primary" onclick="acceptMeal(' + idx + ')">Cooked it</button>' +
         '<button class="btn ghost" onclick="swapMeal(' + idx + ')">Swap</button>' +
         '<button class="btn quiet" onclick="skipMeal(' + idx + ')">Skip</button>' +
       '</div>' +
       '<p class="detail-note">' + (why ? esc(why) + '<br><br>' : '') +
-        'Accepting deducts what this recipe uses from your pantry. Swap and Skip do not. ' +
+        '<b>Cooked it</b> takes what this recipe uses out of your pantry, so tap it once the meal is made. Swap and Skip take nothing. ' +
         'Freshness windows are estimates from purchase dates and the norms in <i>shelf-life-norms.md</i>, not a check of the food itself.' +
       '</p>';
   }
@@ -1617,11 +1617,22 @@ function closeDetail() {
 }
 
 // ═══════════════ ACCEPT / SWAP / SKIP ═══════════════
-function acceptMeal(idx) {
+function acceptMeal(idx, confirmed) {
   var entry = plan[idx];
   if (entry.leftover) { eatLeftovers(idx); return; }
   if (entry.status === 'accepted') return;
   var r = recipeById(entry.recipe);
+
+  // The button used to say "Accept", which reads like agreeing to the plan, and on a future day's
+  // meal it took that meal's food out of the pantry days early (T4). It now says "Cooked it", and
+  // a meal that isn't today's asks first, since cooking ahead is possible but rarely what's meant.
+  var day = Math.floor(idx / 3);
+  if (day > 0 && !confirmed) {
+    showToast(dayLabel(day) + '’s ' + MEAL_TYPES[idx % 3] + ' isn’t until ' + (day === 1 ? 'tomorrow' : dayLabel(day)) +
+      '. Cooked it already? Its ingredients come out of your pantry now.',
+      { label:'Yes, cooked', ms:8000, fn:function() { acceptMeal(idx, true); } });
+    return;
+  }
 
   var used = deductRecipe(r);
   entry.taken = used.taken;
@@ -1796,7 +1807,7 @@ function openSub(which) {
         '<button class="step-btn" onclick="setHousehold(1)"' + (settings.household >= 8 ? ' disabled' : '') + '>+</button>' +
       '</div>' +
       '<div class="note-card">Recipe amounts are scaled to this number, from each recipe\'s estimated servings (the recipe file doesn\'t state them). ' +
-      'The scaled amounts are what the plan checks against your kitchen and what Accept deducts.</div>';
+      'The scaled amounts are what the plan checks against your kitchen and what Cooked it deducts.</div>';
   }
 
   if (which === 'meals') {
