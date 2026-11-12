@@ -2930,11 +2930,13 @@ var receiptBack = 'Profile';   // where the receipt screen's Back goes: Profile 
 var photoMode = 'receipt';     // 'receipt' or 'shelves'
 var shelfBought = 'unsure';    // shelves only: 'week', 'older' or 'unsure', asked once for all items
 var shelfCounts = {};          // shelves only: items found per area, shown on that area's button
+var receiptDateNote = null;    // where the receipt's purchase date came from: { by:'receipt'|'you', raw, other }
 
 // Opens the receipt screen from Profile or from the Pantry's Add food screen.
 function openReceipt(from) {
   receiptBack = from || 'Profile';
   receiptItems = [];
+  receiptDateNote = null;
   photoMode = 'receipt';
   if (receiptBack === 'Pantry' && currentTab !== 'pantryTab') { switchTab('pantryTab'); }
   openSub('receipt');
@@ -3161,6 +3163,7 @@ function parseClaudeReceipt(result) {
   // The Worker already returns null here; this used to throw that away.
   var date = result.purchase_date && /^\d{4}-\d{2}-\d{2}$/.test(result.purchase_date) && result.purchase_date <= todayKey()
     ? result.purchase_date : null;
+  receiptDateNote = date ? { by:'receipt' } : null;
   (result.items || []).forEach(function(it) {
     var printed = String(it.printed || it.name || '').trim();
     if (!printed) return;
@@ -3253,24 +3256,44 @@ function loadTesseract(cb) {
   document.head.appendChild(s);
 }
 
+// A printed date, read the way the phone's reader sees it. "05/11/26" is month-first in the US and
+// day-first in Canada, and the reader used to take it as May 11 every time (T6). Both readings are
+// tried, a reading in the future is impossible, and of the rest the most recent wins, since
+// receipts are photographed soon after shopping. When two readings survive, the other one is kept
+// so the review can say the date could be read either way. Year-first dates (2026-11-05) work too.
+function readReceiptDate(text) {
+  var today = todayKey(), cands = [], raw = null;
+  function add(y, m, d) {
+    m = +m; d = +d;
+    if (m < 1 || m > 12 || d < 1 || d > 31) return;
+    var k = y + '-' + ('0' + m).slice(-2) + '-' + ('0' + d).slice(-2);
+    if (parseKey(k).getMonth() + 1 !== m) return;              // 31/02 and the like
+    if (k <= today && cands.indexOf(k) === -1) cands.push(k);
+  }
+  var iso = text.match(/\b(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})\b/);
+  if (iso) { raw = iso[0]; add(iso[1], iso[2], iso[3]); }
+  else {
+    var m = text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](20\d{2}|\d{2})\b/);
+    if (!m) return null;
+    raw = m[0];
+    var y = m[3].length === 2 ? '20' + m[3] : m[3];
+    add(y, m[1], m[2]);   // month first
+    add(y, m[2], m[1]);   // day first
+  }
+  if (!cands.length) return null;
+  cands.sort();
+  return { date:cands[cands.length - 1], raw:raw, other:cands.length > 1 ? cands[0] : null };
+}
+
 function parseReceiptText(text) {
   receiptItems = [];
   var lines = text.split('\n');
 
-  // Try to find a date on the receipt (MM/DD/YYYY or DD/MM/YYYY or similar)
-  var dateMatch = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](20\d{2}|\d{2})/);
-  var receiptDate = null;
-  if (dateMatch) {
-    var y = dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3];
-    var m = dateMatch[1].padStart(2, '0');
-    var d = dateMatch[2].padStart(2, '0');
-    if (+m >= 1 && +m <= 12 && +d >= 1 && +d <= 31) {
-      receiptDate = y + '-' + m + '-' + d;
-    }
-  }
   // No date on the receipt means the items go in undated — see parseClaudeReceipt(). The
   // on-phone reader gets the same rule as the Claude one.
-  if (!receiptDate) receiptDate = null;
+  var read = readReceiptDate(text);
+  var receiptDate = read ? read.date : null;
+  receiptDateNote = read ? { by:'receipt', raw:read.raw, other:read.other } : null;
 
   lines.forEach(function(raw) {
     var line = raw.trim();
@@ -3572,7 +3595,25 @@ function matchReceiptLine(line) {
 function setReceiptDate(v) {
   var ok = /^\d{4}-\d{2}-\d{2}$/.test(v) && v <= todayKey() ? v : null;
   receiptItems.forEach(function(r) { r.date = ok; });
+  receiptDateNote = ok ? { by:'you' } : null;
   renderReceiptReview();
+}
+
+// The purchase date every freshness estimate on this receipt will count from, always shown with
+// where it came from. It used to be applied without ever being shown, so a misread date went in
+// unseen (T6).
+function receiptDateHTML(show) {
+  if (!show) return '';
+  var date = receiptItems[0] && receiptItems[0].date;
+  if (!date) return '';
+  var note = receiptDateNote || { by:'receipt' };
+  return '<div class="receipt-nodate">' +
+    '<div class="rn-q">Purchase date: ' + esc(fmtKey(date)) + (note.by === 'you' ? ' (you set it)' : ' (read from the receipt)') + '</div>' +
+    '<div class="rn-s">' + (note.other
+      ? 'The receipt says <b>' + esc(note.raw) + '</b>, which could also mean ' + esc(fmtKey(note.other)) + '. Change it if that’s the right one.'
+      : 'Freshness estimates count from this date. Change it if it’s wrong.') + '</div>' +
+    '<input class="field" type="date" max="' + todayKey() + '" value="' + date + '" onchange="setReceiptDate(this.value)">' +
+  '</div>';
 }
 
 function renderReceiptReview() {
@@ -3609,7 +3650,7 @@ function renderReceiptReview() {
       '<strong>' + matched.length + ' food item' + (matched.length !== 1 ? 's' : '') + ' found</strong>' +
       (unrecognized.length ? '<br><span style="color:var(--ink-soft);">' + unrecognized.length + (shelves ? ' seen but' : ' line' + (unrecognized.length !== 1 ? 's' : '')) + ' couldn’t be matched</span>' : '') +
       (shelves && matched.length ? '<br><span style="color:var(--ink-soft);">Only items Claude was sure of start ticked. Check the rest.</span>' : '') +
-    '</div>' + boughtHTML +
+    '</div>' + boughtHTML + receiptDateHTML(!shelves && !undated && matched.length) +
     (!shelves && undated && matched.length ? '<div class="receipt-nodate">' +
       '<div class="rn-q">No date printed on this receipt.</div>' +
       '<div class="rn-s">Added without one, these show as <b>no date</b> and get no freshness estimate. ' +
