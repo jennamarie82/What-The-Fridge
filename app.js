@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-10-29 (meals, leftovers and cook times)';
+var APP_VERSION = '2026-11-12 (desktop layout)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
