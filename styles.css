@@ -226,14 +226,22 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
   font-size:11px; font-weight:600;
 }
 .chip svg { width:12px; height:12px; flex-shrink:0; }
-.chip.ok { background:var(--leaf-light); color:var(--leaf); }
-.chip.ok svg { stroke:var(--leaf); }
-.chip.soon { background:var(--amber-soft); color:#C4880F; }
-.chip.soon svg { stroke:#C4880F; }
-.chip.now { background:var(--tomato-soft); color:var(--tomato); }
-.chip.now svg { stroke:var(--tomato); }
-.chip.unknown { background:#EEECEC; color:#777; }
-.chip.unknown svg { stroke:#777; }
+/* Keyboard focus is always visible (T7). Mouse and touch clicks don't show it. */
+button:focus-visible, [role="button"]:focus-visible, [role="switch"]:focus-visible,
+input:focus-visible, select:focus-visible, a:focus-visible {
+  outline:3px solid var(--leaf); outline-offset:2px;
+}
+
+/* Chip text is darkened from the accent so each reads at 4.5:1 or better on its own tint (T7):
+   the old colours measured 3.3 (ok), 2.8 (soon), 2.7 (now) and 3.8 (unknown). Same hues. */
+.chip.ok { background:var(--leaf-light); color:#1D6B4E; }
+.chip.ok svg { stroke:#1D6B4E; }
+.chip.soon { background:var(--amber-soft); color:#8A5B00; }
+.chip.soon svg { stroke:#8A5B00; }
+.chip.now { background:var(--tomato-soft); color:#A63D24; }
+.chip.now svg { stroke:#A63D24; }
+.chip.unknown { background:#EEECEC; color:#595959; }
+.chip.unknown svg { stroke:#595959; }
 
 /* ─── next-meal spotlight ─── */
 .spotlight .meal-hero { height:160px; }
