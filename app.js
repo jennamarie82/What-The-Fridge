@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-12 (snap your shelves)';
+var APP_VERSION = '2026-11-12 (stricter receipt matching)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -2843,15 +2843,21 @@ function readShelfWithClaude(file, area) {
 // person to tick it. The place is the one photographed, not the food's usual home: a jar of salsa
 // in the fridge is in the fridge.
 // The food matcher finds a food named anywhere in a phrase, which is right for typed searches but
-// too loose to pre-tick photo finds: tested on a real cupboard photo it paired "bread machine yeast"
-// with Bread, "whipped chocolate frosting" with Dark chocolate and "diced tomatoes with green
-// chilies" with Fresh chili peppers. A photo match is trusted only when the phrase's main word (its
-// last word, before any "with ...") is a word of the matched food's name: "yeast" isn't in "Bread",
-// "corn" is in "Corn kernels". Untrusted matches still show, unticked, for the person to check.
+// too loose to pre-tick what Claude reads from a photo: tested on a real cupboard photo it paired
+// "bread machine yeast" with Bread, "whipped chocolate frosting" with Dark chocolate and "diced
+// tomatoes with green chilies" with Fresh chili peppers. A match is trusted only when the phrase's
+// main word (its last word, before any "with ...") is a word of the matched food's name: "yeast"
+// isn't in "Bread", "corn" is in "Corn kernels". Shelf photos and Claude-read receipts both use it;
+// untrusted matches still show, unticked, for the person to check.
 function singularWord(w) { return w.replace(/ies$/, 'y').replace(/(o|s|x|ch|sh)es$/, '$1').replace(/s$/, ''); }
-function trustedShelfMatch(phrase, ingName) {
-  var words = phrase.toLowerCase().split(/\s+with\s+/)[0].match(/[a-z]+/g) || [];
-  var head = words.length ? singularWord(words[words.length - 1]) : '';
+// Words that name a cut or a form rather than the food, and that the food list leaves out:
+// "cheddar cheese" is Cheddar, "salmon fillets" is Salmon. The word before them is the food.
+var FORM_WORDS = ['cheese', 'fillet', 'filet', 'loin', 'piece', 'chunk'];
+function trustedMatch(phrase, ingName) {
+  var words = (phrase.toLowerCase().split(/\s+with\s+/)[0].match(/[a-z]+/g) || []).map(singularWord);
+  if (words.length > 1 && FORM_WORDS.indexOf(words[words.length - 1]) > -1 &&
+      ingName.toLowerCase().indexOf(words[words.length - 1]) === -1) { words.pop(); }
+  var head = words.length ? words[words.length - 1] : '';
   var ingWords = (ingName.toLowerCase().match(/[a-z]+/g) || []).map(singularWord);
   return !!head && ingWords.indexOf(head) > -1;
 }
@@ -2861,7 +2867,7 @@ function parseClaudeShelf(result, area) {
     var name = String(it.name || '').trim();
     if (!name) return;
     var match = matchFoodName(name) || matchReceiptLine(name);
-    var trusted = !!match && match.exact && trustedShelfMatch(name, match.name);
+    var trusted = !!match && match.exact && trustedMatch(name, match.name);
     var unit = UNITS.indexOf(it.unit) > -1 ? it.unit : null;
     var qty = unit && typeof it.quantity === 'number' && it.quantity > 0 ? it.quantity : null;
     var sure = it.sure !== false;
@@ -2993,15 +2999,19 @@ function parseClaudeReceipt(result) {
       return;
     }
     var match = (name && matchFoodName(name)) || matchReceiptLine(printed);
+    // Pre-ticked only when the match is trusted (see trustedMatch): Claude's plain name, or the
+    // printed line when it gave none, must have its main word in the food's name. A loose pairing
+    // still shows, unticked, so the person decides.
+    var trusted = !!match && match.exact && trustedMatch(name || printed, match.name);
     var unit = UNITS.indexOf(it.unit) > -1 ? it.unit : null;
     var qty = unit && typeof it.quantity === 'number' && it.quantity > 0 ? it.quantity : null;
     receiptItems.push({
       raw: label,
       ing: match ? match.id : null,
       ingName: match ? match.name : null,
-      confidence: match ? (match.exact ? 'exact_match' : 'probable') : 'unrecognized',
+      confidence: match ? (trusted ? 'exact_match' : 'probable') : 'unrecognized',
       zone: match ? (ingById(match.id) || {}).zone || 'fridge' : 'fridge',
-      include: !!match,
+      include: trusted,
       qty: qty, unit: qty === null ? null : unit,
       date: date
     });
@@ -3110,7 +3120,9 @@ function parseReceiptText(text) {
       ingName: match ? match.name : null,
       confidence: match ? (match.exact ? 'exact_match' : 'probable') : (isNonFood ? 'non_food' : 'unrecognized'),
       zone: match ? (ingById(match.id) || {}).zone || 'fridge' : 'fridge',
-      include: !!match,
+      // The phone's reader sees raw receipt text ("BNLS CHKN BRST"), so the main-word check can't
+      // apply here; but a fuzzy "probable" guess no longer starts ticked either.
+      include: !!match && match.exact,
       date: receiptDate
     });
   });
