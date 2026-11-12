@@ -1128,3 +1128,9 @@ footer {
    the date is what gives it a sense of pace. */
 .rung-when { display:block; font-size:9px; font-weight:600; opacity:.75; margin-top:2px; }
 .rung { line-height:1.25; }
+
+/* The 30-day window under the rescue ladder. A cumulative total stops meaning anything; this
+   keeps the number informative, and stays honest about a quiet month. */
+.window-line { font-size:11px; color:var(--ink-soft); margin-top:var(--s4); text-align:center; }
+.window-line b { color:var(--leaf); font-size:13px; }
+.window-line .win-best { color:var(--leaf); font-weight:700; }
