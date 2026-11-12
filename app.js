@@ -2133,14 +2133,42 @@ function renderAll() {
 // ═══════════════ PROFILE ═══════════════
 // Counted only from the user's own cook log, so nothing here is an estimate. There is no
 // money figure: the app has no prices to base one on.
-function cookStreak() {
+// Consecutive-day streaks were replaced because they were unreachable, not merely hard. Measured
+// over eight weeks: a household cooking six days out of seven cooks 48 meals and never gets a
+// streak past 6, so the rungs at 7, 14, 30, 60 and 180 could not be reached by anyone who ever
+// orders a pizza. A count over a window rewards the same habit and forgives a night off.
+function cookedDaysIn(daysBack, offset) {
+  var from = todayKey(addDays(new Date(), -(daysBack + (offset || 0))));
+  var to   = todayKey(addDays(new Date(), -(offset || 0)));
   var days = {};
-  cookLog.forEach(function(c) { days[c.date] = true; });
-  var d = new Date();
-  if (!days[todayKey(d)]) d = addDays(d, -1);      // today isn't over yet
-  var n = 0;
-  while (days[todayKey(d)]) { n++; d = addDays(d, -1); }
-  return n;
+  cookLog.forEach(function(c) { if (c.date > from && c.date <= to) days[c.date] = true; });
+  return Object.keys(days).length;
+}
+
+// Ingredients rescued inside a window, so the headline number stops being only cumulative. A
+// running total of 340 and one of 360 feel identical; "34 in the last 30 days" still says
+// something, and says it honestly on a quiet month too.
+function rescuedIn(daysBack, offset) {
+  var from = todayKey(addDays(new Date(), -(daysBack + (offset || 0))));
+  var to   = todayKey(addDays(new Date(), -(offset || 0)));
+  return cookLog.reduce(function(s, c) {
+    return (c.date > from && c.date <= to) ? s + (c.rescued || 0) : s;
+  }, 0);
+}
+
+// The best any 30-day stretch has ever managed, so "best yet" is a fact rather than a flourish.
+function bestRescueWindow() {
+  if (!cookLog.length) return 0;
+  var ends = {}, best = 0;
+  cookLog.forEach(function(c) { ends[c.date] = true; });
+  Object.keys(ends).forEach(function(end) {
+    var from = todayKey(addDays(parseKey(end), -30));
+    var sum = cookLog.reduce(function(s, c) {
+      return (c.date > from && c.date <= end) ? s + (c.rescued || 0) : s;
+    }, 0);
+    if (sum > best) best = sum;
+  });
+  return best;
 }
 function ladderHTML(value, steps, fmt, dates) {
   var next = null;
@@ -2220,11 +2248,11 @@ function renderProfile() {
     '<div class="profile-sub">Household of ' + settings.household + (since ? ' &middot; planning since ' + since : '') + '</div>';
 
   var cooked = cookLog.length;
-  var streak = cookStreak();
+  var days30 = cookedDaysIn(30), days7 = cookedDaysIn(7);
   var rescued = cookLog.reduce(function(s, c) { return s + (c.rescued || 0); }, 0);
   document.getElementById('profileStats').innerHTML =
     '<div class="profile-stat"><div class="num">' + cooked + '</div><div class="label">Meals<br>cooked</div></div>' +
-    '<div class="profile-stat"><div class="num">' + streak + '</div><div class="label">Day<br>streak</div></div>' +
+    '<div class="profile-stat"><div class="num">' + days30 + '</div><div class="label">Days cooked<br>this month</div></div>' +
     '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Used before<br>they turned</div></div>';
 
   // The ledger line. Deliberately a ratio and not a fourth stat tile or a milestone ladder: a
@@ -2248,7 +2276,10 @@ function renderProfile() {
   var rSteps = ladderWindow(allSteps, rescued);
   var rDates = milestoneDates(allSteps);
   var r = ladderHTML(rescued, rSteps, rescueStepLabel, rDates);
-  var st = ladderHTML(streak, [7, 14, 30, 60, 180], function(s) { return s < 30 ? (s / 7) + ' wk' : (s / 30) + ' mo'; });
+  // Reachable rungs: 5 of 30 days is a household that cooks now and then, 25 is one that cooks
+  // most nights. Every one of them is attainable by someone who takes a night off.
+  var COOK_STEPS = [5, 10, 15, 20, 25, 30];
+  var st = ladderHTML(days30, ladderWindow(COOK_STEPS, days30), function(s) { return s + 'd'; });
 
   var prevStep = function(steps, next) {
     var p = 0;
@@ -2256,18 +2287,30 @@ function renderProfile() {
     return p;
   };
   var rPrev = prevStep(allSteps, r.next);
-  var sPrev = st.next === null ? 180 : [0, 7, 14, 30, 60][[7, 14, 30, 60, 180].indexOf(st.next)];
+  var sPrev = prevStep(COOK_STEPS, st.next);
   var rPct = r.next === null ? 100 : Math.round((rescued - rPrev) / (r.next - rPrev) * 100);
-  var sPct = st.next === null ? 100 : Math.round((streak - sPrev) / (st.next - sPrev) * 100);
+  var sPct = st.next === null ? 100 : Math.round((days30 - sPrev) / (st.next - sPrev) * 100);
 
   var rWit = !cooked ? 'Cook something from the plan and this starts counting every ingredient you use before its window closes.'
     : !rescued ? 'Nothing rescued yet — the first ingredient you use inside its window starts the count.'
     : rescued < 10 ? rescued + ' ingredient' + (rescued === 1 ? '' : 's') + ' used while still in their prime. The crisper drawer thanks you.'
     : rescuePace(allSteps, rDates) ||
       'That\'s ' + rescued + ' things that didn\'t end up as a science experiment at the back of the fridge.';
-  var sWit = !streak ? (cooked ? 'No meal logged today or yesterday. The streak is resting, not gone forever.' : 'Mark a meal cooked to start a streak.')
-    : streak < 7 ? streak + ' day' + (streak === 1 ? '' : 's') + ' in a row. Momentum smells like garlic.'
-    : streak + ' days straight. The takeout menus are starting to feel ignored.';
+  // The cumulative total stops carrying information somewhere past a few hundred — 340 and 360
+  // feel the same. A 30-day window keeps saying something, including on a quiet month, which the
+  // running total hides. "Best yet" is checked against every 30-day stretch in the log, so it is
+  // a fact and not a flourish.
+  var win30 = rescuedIn(30), prev30 = rescuedIn(30, 30), bestWin = bestRescueWindow();
+  var windowLine = !rescued ? '' :
+    '<div class="window-line"><b>' + win30 + '</b> in the last 30 days' +
+      (prev30 ? ' &middot; ' + prev30 + ' the 30 before' : '') +
+      (win30 >= bestWin && win30 > 0 && prev30 ? ' &middot; <span class="win-best">best yet</span>' : '') +
+    '</div>';
+
+  var sWit = !days30 ? (cooked ? 'Nothing logged in the last month. The plan is still here when you are.' : 'Mark a meal cooked and this starts counting.')
+    : days7 >= 6 ? days7 + ' of the last 7 days. The takeaway menus are starting to feel ignored.'
+    : days7 ? days7 + ' of the last 7 days, ' + days30 + ' of the last 30. Nights off are allowed.'
+    : days30 + ' days this month. Nothing this week yet — no streak to break, just pick it up.';
 
   document.getElementById('profileRewards').innerHTML =
     '<div class="section-label">Food rescued</div>' +
@@ -2276,11 +2319,12 @@ function renderProfile() {
       '<div class="s">' + (r.next === 1 ? 'Cook anything from the plan to start'
         : rescued + ' so far &middot; ' + (r.next - rescued) + ' to go') + '</div></div></div>' +
       '<div class="progress-track"><div class="progress-fill leaf" style="width:' + rPct + '%;"></div></div>' +
-      '<div class="ladder">' + r.rungs + '</div><p class="witty">' + rWit + '</p></div>' +
-    '<div class="section-label">Cooking streak</div>' +
+      '<div class="ladder">' + r.rungs + '</div>' + windowLine + '<p class="witty">' + rWit + '</p></div>' +
+    '<div class="section-label">Cooking regularly</div>' +
     '<div class="reward-card"><div class="reward-head"><div class="reward-icon flame">🔥</div><div>' +
-      '<div class="t">' + (streak ? streak + '-day streak' : 'No streak yet') + '</div>' +
-      '<div class="s">' + (st.next === null ? 'Six months. Legendary.' : 'Next badge at ' + st.next + ' days') + '</div></div></div>' +
+      '<div class="t">' + (days30 ? 'Cooked ' + days30 + ' of the last 30 days' : 'No meals logged yet') + '</div>' +
+      '<div class="s">' + (st.next === null ? 'Every night this month. Remarkable.'
+        : 'Next badge at ' + st.next + ' days &middot; ' + (st.next - days30) + ' to go') + '</div></div></div>' +
       '<div class="progress-track"><div class="progress-fill amber" style="width:' + sPct + '%;"></div></div>' +
       '<div class="ladder">' + st.rungs + '</div><p class="witty">' + sWit + '</p></div>';
 }
