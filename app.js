@@ -278,8 +278,16 @@ function planIndex(day, type) { return (day - 1) * 3 + MEAL_TYPES.indexOf(type);
 // ─── the household's meal choices ───
 function mealOn(type) { return !settings.meals || settings.meals[type] !== false; }
 function leftoversOn() { return !!settings.leftovers && mealOn('lunch') && mealOn('dinner'); }
-// The dinner slot a lunch's leftovers come from, or -1. Not on day 1: last night isn't in the plan.
-function leftoverSource(idx) { return idx % 3 === 1 && idx >= 3 && leftoversOn() ? idx - 2 : -1; }
+// The dinner a lunch's leftovers come from, or null. Later days use the dinner two slots back.
+// Today's lunch uses last night's dinner, which the midnight roll has already dropped from the
+// plan, so the roll keeps a note of it in `lastNight`. Without that note the leftover lunch was
+// replaced by a new recipe after midnight, though double had been cooked (T2).
+var lastNight = null;   // { recipe, status, date } of the dinner that left the plan at the last roll
+function leftoverDinner(idx) {
+  if (idx % 3 !== 1 || !leftoversOn()) return null;
+  if (idx >= 3) return plan[idx - 2] || null;
+  return idx === 1 ? lastNight : null;
+}
 // A slot with its own meal to cook (not switched off, not leftovers).
 function isMealEntry(e) { return !!e && !e.off && !e.leftover; }
 function usableDinner(d) { return isMealEntry(d) && d.status !== 'skipped' && !d.dietBlocked; }
@@ -313,6 +321,7 @@ function dateFor(dayIndex) {           // dayIndex 0,1,2 — 0 is always today
   return d;
 }
 function dayLabel(dayIndex) {
+  if (dayIndex === -1) return 'Yesterday';
   if (dayIndex === 0) return 'Today';
   if (dayIndex === 1) return 'Tomorrow';
   return dateFor(dayIndex).toLocaleDateString(undefined, { weekday:'long' });
@@ -721,7 +730,7 @@ function planKitchen(keep) {
   if (keep) {
     plan.forEach(function(e, i) {
       if (!isMealEntry(e) || e.status !== 'pending' || e.dietBlocked) return;
-      if (!mealOn(MEAL_TYPES[i % 3]) || (leftoverSource(i) > -1 && !e.ownLunch)) return;   // settings changed
+      if (!mealOn(MEAL_TYPES[i % 3]) || (leftoverDinner(i) && !e.ownLunch)) return;   // settings changed
       var r = recipeById(e.recipe);
       if (r && eligible(r, r.type) && fitsTime(r, Math.floor(i / 3)) && fullyCovered(r, res, Math.floor(i / 3))) { reserveRecipe(r, res); kept[i] = true; used.push(r.id); }
     });
@@ -732,9 +741,9 @@ function planKitchen(keep) {
       if (!e || !e.off) { plan[j] = { off:true, status:'off' }; changed++; }
       continue;
     }
-    var src = leftoverSource(j);
-    if (src > -1 && !(e && e.ownLunch) && usableDinner(plan[src])) {   // last night's leftovers
-      if (!e || !e.leftover || e.recipe !== plan[src].recipe) { plan[j] = { leftover:true, recipe:plan[src].recipe, status:'pending' }; changed++; }
+    var src = leftoverDinner(j);
+    if (src && !(e && e.ownLunch) && usableDinner(src)) {   // last night's leftovers
+      if (!e || !e.leftover || e.recipe !== src.recipe) { plan[j] = { leftover:true, recipe:src.recipe, status:'pending' }; changed++; }
       continue;
     }
     if (isMealEntry(e) && (e.status !== 'pending' || kept[j])) continue;
@@ -764,9 +773,8 @@ function syncPlanShape() {
   plan.forEach(function(e, j) {
     var type = MEAL_TYPES[j % 3];
     if (!mealOn(type)) { if (!e || !e.off) plan[j] = { off:true, status:'off' }; return; }
-    var src = leftoverSource(j);
-    if (src > -1 && !(e && e.ownLunch) && usableDinner(plan[src])) {
-      var d = plan[src];
+    var d = leftoverDinner(j);
+    if (d && !(e && e.ownLunch) && usableDinner(d)) {
       if (!e || !e.leftover || e.recipe !== d.recipe) plan[j] = { leftover:true, recipe:d.recipe, status:'pending' };
       return;
     }
@@ -2094,6 +2102,11 @@ function reconcile(i, outcome) {
       cookLog.push({ date:u.date || todayKey(), recipe:r.id, rescued:used.rescued });
     }
   }
+  // Last night's dinner didn't happen, so there are no leftovers for today's lunch: drop the note,
+  // and the lunch gets a meal of its own on the next render (syncPlanShape).
+  if (outcome !== 'cooked' && lastNight && u.type === 'dinner' && u.recipe === lastNight.recipe && u.date === lastNight.date) {
+    lastNight = null;
+  }
   unreconciled.splice(i, 1);
   renderAll();
   showToast(outcome === 'cooked'
@@ -2114,6 +2127,10 @@ function rollDay(departingDate) {
   plan.slice(0, 3).forEach(function(entry, i) {
     queueUnreconciled(entry, MEAL_TYPES[i], departing);
   });
+  // Keep a note of the departing dinner so today's lunch can still be its leftovers. A dinner that
+  // was never confirmed stays usable until Ren answers the rolled-past question (see reconcile()).
+  var dinner = plan[2];
+  lastNight = usableDinner(dinner) ? { recipe:dinner.recipe, status:dinner.status, date:todayKey(departing) } : null;
   plan.splice(0, 3);
   // The new third day is planned around what the two days already shown set aside. Those two
   // days are left as they are: changing meals someone has already seen, overnight, would surprise.
@@ -3859,7 +3876,7 @@ function finishSetup(mode) {
   settings.since = todayKey();
   pantry = mode === 'sample' ? samplePantry() : [];
   plan = [];
-  unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1;
+  unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1; lastNight = null;
   planKitchen(false);
   renderAll();
   document.getElementById('setup').classList.remove('open');
@@ -3880,7 +3897,7 @@ function saveState() {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       lastSeen:lastSeen || todayKey(), settings:settings, pantry:pantry, plan:plan,
       prefs:prefs, unreconciled:unreconciled, cookLog:cookLog, wasteLog:wasteLog, dayOffset:dayOffset,
-      planSig:planSig, planBuiltEmpty:planBuiltEmpty
+      planSig:planSig, planBuiltEmpty:planBuiltEmpty, lastNight:lastNight
     }));
   } catch (e) { /* private mode or storage full — the app still works, it just won't remember */ }
 }
@@ -3906,6 +3923,7 @@ function loadState() {
   wasteLog = s.wasteLog || [];
   unreconciled = (s.unreconciled || []).filter(function(u) { return recipeById(u.recipe); });
   dayOffset = s.dayOffset || 0;
+  lastNight = valid && s.lastNight && recipeById(s.lastNight.recipe) ? s.lastNight : null;
   lastSeen = s.lastSeen || todayKey();
   catchUp();
   return true;
@@ -3949,7 +3967,7 @@ function startOver() {
   settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
   settings.meals = { breakfast:true, lunch:true, dinner:true }; settings.leftovers = false;
   settings.times = { breakfast:20, lunch:30, dinner:null };
-  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1;
+  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1; lastNight = null;
   planKitchen(false);
   closeDetail(); closeSub(); switchTab('planTab');
   renderAll();
