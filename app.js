@@ -300,6 +300,26 @@ function fmtQty(qty, unit) {
   if (!unit || unit === 'ea') { return s; }
   return s + ' ' + unit;
 }
+// A recipe amount as a cook would measure it. Scaling a recipe to a household gave "0.67 egg" and
+// "0.08 cup breadcrumbs" (T8). Spoon, cup and count amounts now read as kitchen fractions, and an
+// amount too small for its measure moves to the next one down (0.08 cup is 1¼ tbsp). Weights and
+// volumes round to whole numbers. Display only: the plan still checks and deducts the exact amount.
+var FRACTIONS = [[0, ''], [0.25, '¼'], [1 / 3, '⅓'], [0.5, '½'], [2 / 3, '⅔'], [0.75, '¾'], [1, '']];
+function kitchenQty(qty, unit) {
+  if (qty === null || qty === undefined) { return 'amount not recorded'; }
+  if (qty <= 0) { return (!unit || unit === 'ea') ? '0' : '0 ' + unit; }
+  if (unit === 'cup' && qty < 0.25) { qty = qty * 16; unit = 'tbsp'; }
+  if (unit === 'tbsp' && qty < 1) { qty = qty * 3; unit = 'tsp'; }
+  if (UNIT_BASE[unit] && ['tsp', 'tbsp', 'cup'].indexOf(unit) === -1) {
+    return (qty >= 10 ? Math.round(qty) : Math.round(qty * 10) / 10) + ' ' + unit;
+  }
+  var whole = Math.floor(qty), part = qty - whole, best = FRACTIONS[0];
+  FRACTIONS.forEach(function(f) { if (Math.abs(part - f[0]) < Math.abs(part - best[0])) best = f; });
+  if (best[0] === 1) { whole++; best = FRACTIONS[0]; }
+  if (!whole && !best[1]) best = FRACTIONS[1];          // never show 0 for something the recipe uses
+  var s = (whole ? String(whole) : '') + best[1];
+  return (!unit || unit === 'ea') ? s : s + ' ' + unit;
+}
 function esc(s) {
   return String(s).replace(/[&<>"']/g, function(c) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; });
 }
@@ -938,7 +958,7 @@ function renderBanner() {
   }
   // Shortfalls name the meal that runs out, because an earlier meal in the plan uses the same food.
   var lines = n.short.map(function(s) {
-      return s.name + ': ' + s.meal + ' needs ' + fmtQty(s.need, s.unit) + ', ' + fmtQty(s.have, s.unit) + ' left after earlier meals';
+      return s.name + ': ' + s.meal + ' needs ' + kitchenQty(s.need, s.unit) + ', ' + kitchenQty(s.have, s.unit) + ' left after earlier meals';
     }).concat(n.stale.map(function(s) {
       return s.name + ' will be past its estimated window by ' + s.meal;
     })).concat(n.missing.length ? ['Not in your kitchen: ' + listOf(n.missing.map(function(m) { return m.name.toLowerCase(); }), 6)] : []);
@@ -1409,7 +1429,7 @@ function nutritionHTML(r) {
 function scaledNote(line) {
   var a = amountFor(line);
   if (a === null || Math.abs(a - line.qty) < 1e-6) return '';
-  return ' <span class="scaled">→ ' + esc(fmtQty(a, line.unit)) + '</span>';
+  return ' <span class="scaled">→ ' + esc(kitchenQty(a, line.unit)) + '</span>';
 }
 // What the recipe's amounts are scaled to, in plain words, under the ingredients.
 function scaleHint(r) {
