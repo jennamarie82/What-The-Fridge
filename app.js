@@ -1200,10 +1200,21 @@ function nameList(names) {
 // reasons it actually is.
 var NEAR_MISS_MAX = 2;   // beyond this it stops being a near miss and becomes a shopping list
 
-function planAround(entryId) {
+function planAround(entryId, checked) {
   var e = entryById(entryId);
   if (!e) return;
   var name = ingName(e.ing).toLowerCase();
+
+  // Food already past the long end of its estimated window is not planned on a tap: putting it in
+  // a meal would quietly tell Ren it is fine to eat, a claim the app never makes (T3). Show the
+  // basis and let Ren decide, having looked at it.
+  var f = freshness(e);
+  if (!checked && f.known && f.max < 0) {
+    showToast('Your ' + name + ' is past its estimated window (' + basisLine(e) + '). ' +
+      'Only plan it if you’ve checked it yourself.',
+      { label:'Plan it anyway', ms:10000, fn:function() { planAround(entryId, true); } });
+    return;
+  }
 
   var uses = recipes.filter(function(r) { return recipeUses(r, e.ing); });
   if (!uses.length) { showToast('No approved recipe uses ' + name + ' yet.'); return; }
@@ -2046,7 +2057,7 @@ function showToast(msg, action) {
   }
   toast.classList.add('show');
   clearTimeout(toast._t);
-  toast._t = setTimeout(function() { toast.classList.remove('show'); }, action ? 5000 : 2600);
+  toast._t = setTimeout(function() { toast.classList.remove('show'); }, (action && action.ms) || (action ? 5000 : 2600));
 }
 
 function toggleAlloc() {
