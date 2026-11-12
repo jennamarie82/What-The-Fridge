@@ -1105,6 +1105,21 @@ footer {
 .receipt-nodate .rn-q { font-size:13px; font-weight:700; }
 .receipt-nodate .rn-s { font-size:11px; color:var(--ink-soft); line-height:1.5; margin:var(--s2) 0 var(--s4); }
 
+/* ─── Snap your shelves: one photo per place food is kept ─── */
+.shelf-areas { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--s4); margin:var(--s6) 0 var(--s4); }
+.shelf-area {
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; text-align:center;
+  min-height:88px; padding:var(--s6) var(--s4); background:var(--white);
+  border:2px dashed var(--border); border-radius:var(--r12); cursor:pointer;
+}
+.shelf-area:hover, .shelf-area:active { border-color:var(--leaf); }
+.shelf-area b { font-size:15px; }
+.shelf-area span { font-size:11.5px; color:var(--ink-soft); line-height:1.35; }
+.shelf-area.done { border-style:solid; border-color:var(--leaf); }
+.shelf-area.done span { color:var(--leaf); font-weight:700; }
+.ri-amount { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); margin-top:4px; }
+.ri-amount input { width:76px; padding:3px 6px; font:inherit; font-size:13px; color:var(--ink); border:1px solid var(--border); border-radius:6px; background:var(--white); }
+
 /* ─── logging several losses at once ─── */
 .zone-line.batch-cta { cursor:pointer; }
 .zone-line.batch-cta .zl-sub { color:var(--leaf); }
@@ -1151,3 +1166,9 @@ footer {
 .w-bar { height:8px; border-radius:6px; background:var(--leaf-light); overflow:hidden; }
 .w-bar-fill { height:100%; background:var(--amber); }
 .w-split .w-cap { font-size:12px; color:var(--ink-soft); line-height:1.6; margin-top:var(--s4); }
+
+/* The 30-day window under the rescue ladder. A cumulative total stops meaning anything; this
+   keeps the number informative, and stays honest about a quiet month. */
+.window-line { font-size:11px; color:var(--ink-soft); margin-top:var(--s4); text-align:center; }
+.window-line b { color:var(--leaf); font-size:13px; }
+.window-line .win-best { color:var(--leaf); font-weight:700; }
