@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-12 (stricter receipt matching)';
+var APP_VERSION = '2026-11-12 (where food is going)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -1818,6 +1818,67 @@ function openSub(which) {
       '<div class="note-card">Whether a reminder ships in version 1 is still an open question in the spec (blindspot #5). This screen is here to test whether people would want one at all.</div>';
   }
 
+  if (which === 'waste') {
+    title = 'Where food is going';
+    var w = wasteStats();
+    if (!w.total) {
+      body = '<p class="sub-intro">Nothing logged as thrown out yet.</p>' +
+        '<div class="note-card">When something does go, mark it <b>Threw it out</b> in the Pantry — or use ' +
+        '<b>Log several at once</b> under Needs attention. This page then shows which foods keep getting away ' +
+        'and why, which is the part worth knowing before the next shop.</div>';
+    } else {
+      var dir = w.prev30 === 0 ? '' : w.last30 < w.prev30 ? ' <span class="w-better">down from ' + w.prev30 + '</span>'
+              : w.last30 > w.prev30 ? ' <span class="w-worse">up from ' + w.prev30 + '</span>'
+              : ' &middot; same as the 30 before';
+      body =
+        '<p class="sub-intro">Everything here is what you told the app went bad. It is a record to act on, ' +
+        'not a score — nothing on this page counts against you.</p>' +
+
+        '<div class="w-head"><div class="w-big">' + w.last30 + '</div>' +
+          '<div class="w-cap">thrown out in the last 30 days' + dir + '</div>' +
+          '<div class="w-cap">against <b>' + w.rescued30 + '</b> ingredients used in time</div></div>';
+
+      // Repeat offenders first: the one thing on this page that changes what Ren buys next week.
+      var repeats = w.ings.filter(function(x) { return x.n > 1; });
+      body += '<div class="section-label">Keeps getting away</div>';
+      body += repeats.length
+        ? '<div class="w-list">' + repeats.slice(0, 6).map(function(x) {
+            return '<div class="w-row"><span class="w-name">' + esc(ingName(x.key)) + '</span>' +
+              '<span class="w-n">' + x.n + ' times</span></div>';
+          }).join('') + '</div>'
+        : '<div class="note-card">Nothing has gone twice yet. No pattern to fix — just bad luck so far.</div>';
+
+      if (w.reasons.length) {
+        body += '<div class="section-label">Why</div><div class="w-list">' +
+          w.reasons.slice(0, 5).map(function(r) {
+            return '<div class="w-row"><span class="w-name">' + esc(wasteReasonLabel(r.key)) + '</span>' +
+              '<span class="w-n">' + r.n + '</span></div>';
+          }).join('') +
+          (w.unsaid ? '<div class="w-row quiet"><span class="w-name">Not said</span><span class="w-n">' + w.unsaid + '</span></div>' : '') +
+          '</div>';
+      }
+
+      // The honest half. If most of what was lost was never in a plan, the planner missed it.
+      if (w.planned + w.unplanned) {
+        var share = Math.round(w.unplanned / (w.planned + w.unplanned) * 100);
+        body += '<div class="section-label">Whose miss</div>' +
+          '<div class="w-split"><div class="w-bar"><div class="w-bar-fill" style="width:' + share + '%;"></div></div>' +
+            '<div class="w-cap"><b>' + w.unplanned + '</b> of ' + (w.planned + w.unplanned) +
+            ' were never in a plan — the planner never found a meal for them. ' +
+            '<b>' + w.planned + '</b> were on the plan and didn’t get cooked.</div></div>';
+      }
+
+      if (w.dated) {
+        body += '<div class="section-label">How late</div><div class="w-list">' +
+          '<div class="w-row"><span class="w-name">Still inside its window</span><span class="w-n">' + w.late.same + '</span></div>' +
+          '<div class="w-row"><span class="w-name">A day or three past</span><span class="w-n">' + w.late.few + '</span></div>' +
+          '<div class="w-row"><span class="w-name">More than three days past</span><span class="w-n">' + w.late.week + '</span></div>' +
+          '</div><p class="field-hint">Things going by a day are a planning problem. Things going by a week are a ' +
+          'forgetting problem, and the two need different fixes.</p>';
+      }
+    }
+  }
+
   if (which === 'about') {
     title = 'About What the Fridge';
     body =
@@ -2126,6 +2187,13 @@ function renderAll() {
   if (da) {
     var n = activeDietLabels().length;
     da.innerHTML = (n ? n + ' active ' : '') + '&rsaquo;';
+  }
+  var wa = document.getElementById('wasteArrow');
+  if (wa) {
+    var w30 = wasteLog.filter(function(x) {
+      return x.date > todayKey(addDays(new Date(), -30));
+    }).length;
+    wa.innerHTML = (w30 ? w30 + ' this month ' : '') + '&rsaquo;';
   }
   saveState();
 }
@@ -2646,6 +2714,48 @@ var WASTE_REASONS = [
   ['plans',   'Plans changed'],
   ['disliked','Nobody wanted it']
 ];
+// ─── where food is going ───
+// A monitoring view, not a scoreboard. There is no ladder and no badge here on purpose: the log
+// only fills up if Ren keeps recording bad news, and the moment that costs her something she
+// stops. So this is ordered by what she can do something about at the next shop, and it says
+// plainly which share was the planner's miss rather than hers.
+function wasteReasonLabel(key) {
+  for (var i = 0; i < WASTE_REASONS.length; i++) { if (WASTE_REASONS[i][0] === key) return WASTE_REASONS[i][1]; }
+  return 'Not said';
+}
+
+function wasteStats() {
+  var within = function(daysBack, offset) {
+    var from = todayKey(addDays(new Date(), -(daysBack + (offset || 0))));
+    var to   = todayKey(addDays(new Date(), -(offset || 0)));
+    return wasteLog.filter(function(w) { return w.date > from && w.date <= to; });
+  };
+  var byIng = {}, byReason = {}, planned = 0, unplanned = 0, late = { same:0, few:0, week:0 }, dated = 0;
+  wasteLog.forEach(function(w) {
+    byIng[w.ing] = (byIng[w.ing] || 0) + 1;
+    byReason[w.reason || ''] = (byReason[w.reason || ''] || 0) + 1;
+    if (w.wasPlanned === true) planned++; else if (w.wasPlanned === false) unplanned++;
+    if (typeof w.daysPast === 'number') {
+      dated++;
+      if (w.daysPast <= 0) late.same++; else if (w.daysPast <= 3) late.few++; else late.week++;
+    }
+  });
+  var rank = function(counts) {
+    return Object.keys(counts).map(function(k) { return { key:k, n:counts[k] }; })
+      .sort(function(a, b) { return b.n - a.n; });
+  };
+  return {
+    total: wasteLog.length,
+    last30: within(30).length, prev30: within(30, 30).length,
+    ings: rank(byIng), reasons: rank(byReason).filter(function(r) { return r.key; }),
+    unsaid: byReason[''] || 0,
+    planned: planned, unplanned: unplanned,
+    late: late, dated: dated,
+    // Shares rescuedIn() with the Profile's 30-day window, so both pages always agree.
+    rescued30: rescuedIn(30)
+  };
+}
+
 function askWasteReason(e) {
   var holder = document.getElementById('wasteReasons');
   if (!holder) { showToast('Logged the ' + ingName(e.ing).toLowerCase() + '.'); return; }
