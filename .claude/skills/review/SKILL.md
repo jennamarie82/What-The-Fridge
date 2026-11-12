@@ -44,7 +44,16 @@ Two traps when testing:
 
 ### 1. The spec's stop-work conditions
 
-These are in `CLAUDE.md` and they are not style preferences. Work stops if the app:
+**Read `CLAUDE.md` in the repository root before relying on the list below.** It is the
+governing document and it changes; what follows is a summary written against version 1.11 and
+could be out of date. Where the two disagree, the spec wins and this file needs updating.
+
+Note that the spec references `knowledge/`, `governance/` and `deliverables/` paths that mostly
+live in the team's project folder rather than the repository — only `CLAUDE.md` and
+`knowledge/Combined_Recipe_Database.md` are here. A dangling reference in the spec is not a bug
+in the code.
+
+Work stops if the app:
 
 - **invents a quantity, purchase date or expiry.** A missing value stays missing. Receipts
   with no printed date pass `null`, not today. Grep any new `todayKey()` fallback on a date
