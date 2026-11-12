@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-12 (where food is going)';
+var APP_VERSION = '2026-11-12 (app-test fixes T1-T8)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -3355,6 +3355,8 @@ function parseReceiptText(text) {
     if (/^[-=_*#.]+$/.test(line) || /^\d+$/.test(line)) return;
     // Skip lines that are only a price
     if (/^\$?\d+\.\d{2}$/.test(line)) return;
+    // Skip the date line: it is read separately (readReceiptDate) and isn't food
+    if (/^\d{1,4}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(line)) return;
 
     var lower = line.toLowerCase();
     var isNonFood = /^(sub\s*total|total|tax|change|cash|credit|debit|visa|master|amex|card|balance|savings|thank|receipt|store|tel|phone|date|time|#|cashier|terminal|transaction|trans|ref|member|loyalty|points|discount|coupon|you saved|welcome|come again)/i.test(lower);
