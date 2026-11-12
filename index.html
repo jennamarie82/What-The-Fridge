@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css?v=20261112">
+<link rel="stylesheet" href="styles.css?v=20261112c">
 </head>
 <body>
 
@@ -195,6 +195,10 @@
   <div class="add-sheet-backdrop" id="addSheet" onclick="if (event.target === this) closeAddSheet()">
     <div class="add-sheet" role="dialog" aria-label="Add food">
       <div class="add-sheet-title">Add food</div>
+      <button class="add-option" onclick="closeAddSheet(); openShelves('Pantry');">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M5 10h14"/><path d="M8 6v1.5M8 13v3"/></svg>
+        <span><b>Snap your shelves</b><small>Photograph your fridge, freezer or cupboard. You tick each item Claude finds.</small></span>
+      </button>
       <label class="add-option" for="fabReceiptFile">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
         <span><b>Scan a receipt</b><small>Opens the camera. You check each item before it's added.</small></span>
@@ -235,7 +239,7 @@
 <footer>
   What the Fridge &middot; BUS 860 Group 3 &middot; Phase A build &middot; plan around your own food, or look around with a sample kitchen.<br>
   Recipes from <i>Combined_Recipe_Database.md</i> (the approved recipes, amounts scaled to your household).<br>
-  Your plan, pantry and settings are saved in this browser only &mdash; only a receipt photo you scan is sent out, to Claude, to read it.<br>
+  Your plan, pantry and settings are saved in this browser only &mdash; only a receipt or shelf photo you take is sent out, to Claude, to read it.<br>
   <span id="appVersion"></span><br>
   <span style="display:inline-block;margin-top:10px;">
     Demo controls (not part of the app):
@@ -247,6 +251,6 @@
 
 <!-- ?v= makes every phone fetch the new files after a release; change it with APP_VERSION in app.js. -->
 <script src="recipes.js?v=20261029"></script>
-<script src="app.js?v=20261112b"></script>
+<script src="app.js?v=20261112c"></script>
 </body>
 </html>
