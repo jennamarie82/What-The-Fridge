@@ -3610,7 +3610,7 @@ function receiptDateHTML(show) {
   return '<div class="receipt-nodate">' +
     '<div class="rn-q">Purchase date: ' + esc(fmtKey(date)) + (note.by === 'you' ? ' (you set it)' : ' (read from the receipt)') + '</div>' +
     '<div class="rn-s">' + (note.other
-      ? 'The receipt says <b>' + esc(note.raw) + '</b>, which could also mean ' + esc(fmtKey(note.other)) + '. Change it if that’s the right one.'
+      ? 'The receipt says <b>' + esc(note.raw) + '</b>, which could also mean ' + esc(fmtKey(note.other)) + '. If that’s when you shopped, change it here.'
       : 'Freshness estimates count from this date. Change it if it’s wrong.') + '</div>' +
     '<input class="field" type="date" max="' + todayKey() + '" value="' + date + '" onchange="setReceiptDate(this.value)">' +
   '</div>';
