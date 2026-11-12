@@ -1600,17 +1600,28 @@ function acceptMeal(idx) {
   entry.unmeasured = unmeasuredIn(r);
   entry.status = 'accepted';
   entry.cookedOn = todayKey();
+  // Crossing a milestone used to happen in silence — Ren only found out if she happened to open
+  // Profile later. The reaction belongs at the moment she earns it, which is here. The number is
+  // already computed for the log; it just was never said out loud.
+  var beforeTotal = cookLog.reduce(function(s, c) { return s + (c.rescued || 0); }, 0);
   cookLog.push({ date:entry.cookedOn, recipe:r.id, rescued:used.rescued });
+  var afterTotal = beforeTotal + (used.rescued || 0);
+  var crossed = null;                     // the highest rung this meal passed, if any
+  rescueSteps(afterTotal).forEach(function(s) {
+    if (beforeTotal < s && afterTotal >= s) { crossed = s; }
+  });
 
   closeDetail();
   renderAll();
   var undoIdx = idx;
-  showToast(
-    entry.unmeasured.length
-      ? '✅ Cooked. ' + entry.unmeasured.join(', ') + ' — check amount in Pantry.'
-      : '✅ Cooked — ingredients deducted.',
-    { label:'Undo', fn:function(){ undoAccept(undoIdx); } }
-  );
+  var base = entry.unmeasured.length
+    ? '✅ Cooked. ' + entry.unmeasured.join(', ') + ' — check amount in Pantry.'
+    : '✅ Cooked — ingredients deducted.';
+  if (crossed) {
+    base = (crossed === 1 ? '🥬 First rescue! ' : '🥬 That’s ' + crossed + ' rescued! ') +
+      (used.rescued === 1 ? 'One ingredient' : used.rescued + ' ingredients') + ' used in time.';
+  }
+  showToast(base, { label:'Undo', fn:function(){ undoAccept(undoIdx); } });
 }
 
 // Ingredients a meal used that couldn't be drawn down because no quantity is on record.
@@ -2118,13 +2129,73 @@ function cookStreak() {
   while (days[todayKey(d)]) { n++; d = addDays(d, -1); }
   return n;
 }
-function ladderHTML(value, steps, fmt) {
+function ladderHTML(value, steps, fmt, dates) {
   var next = null;
   var rungs = steps.map(function(s) {
     var cls = value >= s ? 'done' : (next === null ? (next = s, 'next') : '');
-    return '<div class="rung ' + cls + '">' + fmt(s) + '</div>';
+    var when = dates && dates[s] ? '<span class="rung-when">' + esc(fmtKey(dates[s])) + '</span>' : '';
+    return '<div class="rung ' + cls + '">' + fmt(s) + when + '</div>';
   }).join('');
   return { rungs:rungs, next:next };
+}
+
+// ─── food-rescued milestones ───
+// The ladder used to stop at 100 and say "Every milestone reached", which at a measured 4.4
+// ingredients a cooked meal is about four and a half weeks in — the motivator went flat exactly
+// when someone had proved they were sticking with it. Adding a few more rungs only moves that
+// cliff, so past the fixed list it rolls on in steps of 250 and there is always a next one.
+var RESCUE_STEPS = [1, 10, 25, 50, 100, 200, 350, 500];
+var RESCUE_ROLL = 250;
+
+function rescueSteps(value) {
+  var steps = RESCUE_STEPS.slice(), last = steps[steps.length - 1];
+  while (value >= last) { last += RESCUE_ROLL; steps.push(last); }
+  return steps;
+}
+
+// A phone fits about five rungs. Early on that is the whole ladder; later it becomes a window
+// that keeps the last couple reached in view alongside what is coming.
+function ladderWindow(steps, value) {
+  var nextIdx = steps.length - 1;
+  for (var i = 0; i < steps.length; i++) { if (value < steps[i]) { nextIdx = i; break; } }
+  var start = Math.max(0, Math.min(nextIdx - 2, steps.length - 5));
+  return steps.slice(start, start + 5);
+}
+
+// When each milestone was passed, read back out of cookLog. No new field: every cooked meal
+// already records its date and how many ingredients it used in time, so this works for logs
+// written long before the ladder existed.
+function milestoneDates(steps) {
+  var out = {}, run = 0, i = 0;
+  cookLog.slice().sort(function(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
+    .forEach(function(c) {
+      run += (c.rescued || 0);
+      while (i < steps.length && run >= steps[i]) { out[steps[i]] = c.date; i++; }
+    });
+  return out;
+}
+
+function rescueStepLabel(s) { return s === 1 ? '1st' : s; }
+
+// The dates on the rungs are facts; the pace between them is the part worth saying out loud.
+// "Reached 50 on Oct 28" is a date. "25 to 50 took nine days, quicker than the fourteen before"
+// is the same data telling Ren she is getting better at this.
+//
+// Only speaks when the gap narrowed. A slower stretch is not a failure worth a line about it —
+// the dates are on the rungs either way, so nothing is being hidden, and a nudge that scolds is
+// the thing this whole screen is meant not to be.
+function rescuePace(steps, dates) {
+  var hit = steps.filter(function(s) { return dates[s]; });
+  if (hit.length < 3) return '';
+  var a = hit[hit.length - 3], b = hit[hit.length - 2], c = hit[hit.length - 1];
+  var dBefore = daysBetween(dates[a], dates[b]), dRecent = daysBetween(dates[b], dates[c]);
+  if (dBefore <= 0 || dRecent <= 0) return '';
+  // Compare rates, not elapsed days. The rungs get further apart as they climb — 50 to 100 is
+  // twice the distance of 25 to 50 — so a stretch taking longer in days can still be faster
+  // going. Comparing raw days would have called a genuine speed-up a slow-down.
+  var before = (b - a) / dBefore, recent = (c - b) / dRecent;
+  if (recent <= before) return '';
+  return b + ' to ' + c + ' came faster than the stretch before it. You’re getting quicker at this.';
 }
 function renderProfile() {
   var head = document.getElementById('profileHead');
@@ -2157,16 +2228,30 @@ function renderProfile() {
       (lost ? '<div class="led-hint">' + esc(wasteHint()) + '</div>' : '');
   }
 
-  var r = ladderHTML(rescued, [10, 25, 50, 100], function(s) { return s; });
+  // One list of thresholds, derived once. It used to be written out three times — the ladder
+  // call and two parallel arrays for the progress bar — so any change had to be made in all
+  // three or the bar quietly disagreed with the rungs.
+  var allSteps = rescueSteps(rescued);
+  var rSteps = ladderWindow(allSteps, rescued);
+  var rDates = milestoneDates(allSteps);
+  var r = ladderHTML(rescued, rSteps, rescueStepLabel, rDates);
   var st = ladderHTML(streak, [7, 14, 30, 60, 180], function(s) { return s < 30 ? (s / 7) + ' wk' : (s / 30) + ' mo'; });
-  var rPrev = r.next === null ? 100 : [0, 10, 25, 50][[10, 25, 50, 100].indexOf(r.next)];
+
+  var prevStep = function(steps, next) {
+    var p = 0;
+    for (var i = 0; i < steps.length; i++) { if (steps[i] === next) break; p = steps[i]; }
+    return p;
+  };
+  var rPrev = prevStep(allSteps, r.next);
   var sPrev = st.next === null ? 180 : [0, 7, 14, 30, 60][[7, 14, 30, 60, 180].indexOf(st.next)];
   var rPct = r.next === null ? 100 : Math.round((rescued - rPrev) / (r.next - rPrev) * 100);
   var sPct = st.next === null ? 100 : Math.round((streak - sPrev) / (st.next - sPrev) * 100);
 
   var rWit = !cooked ? 'Cook something from the plan and this starts counting every ingredient you use before its window closes.'
+    : !rescued ? 'Nothing rescued yet — the first ingredient you use inside its window starts the count.'
     : rescued < 10 ? rescued + ' ingredient' + (rescued === 1 ? '' : 's') + ' used while still in their prime. The crisper drawer thanks you.'
-    : 'That\'s ' + rescued + ' things that didn\'t end up as a science experiment at the back of the fridge.';
+    : rescuePace(allSteps, rDates) ||
+      'That\'s ' + rescued + ' things that didn\'t end up as a science experiment at the back of the fridge.';
   var sWit = !streak ? (cooked ? 'No meal logged today or yesterday. The streak is resting, not gone forever.' : 'Mark a meal cooked to start a streak.')
     : streak < 7 ? streak + ' day' + (streak === 1 ? '' : 's') + ' in a row. Momentum smells like garlic.'
     : streak + ' days straight. The takeout menus are starting to feel ignored.';
@@ -2174,8 +2259,9 @@ function renderProfile() {
   document.getElementById('profileRewards').innerHTML =
     '<div class="section-label">Food rescued</div>' +
     '<div class="reward-card"><div class="reward-head"><div class="reward-icon coin">🥬</div><div>' +
-      '<div class="t">' + (r.next === null ? 'Every milestone reached' : 'Next milestone: ' + r.next + ' ingredients') + '</div>' +
-      '<div class="s">' + rescued + ' so far' + (r.next === null ? '' : ' &middot; ' + (r.next - rescued) + ' to go') + '</div></div></div>' +
+      '<div class="t">' + (r.next === 1 ? 'Your first rescue' : 'Next milestone: ' + r.next + ' ingredients') + '</div>' +
+      '<div class="s">' + (r.next === 1 ? 'Cook anything from the plan to start'
+        : rescued + ' so far &middot; ' + (r.next - rescued) + ' to go') + '</div></div></div>' +
       '<div class="progress-track"><div class="progress-fill leaf" style="width:' + rPct + '%;"></div></div>' +
       '<div class="ladder">' + r.rungs + '</div><p class="witty">' + rWit + '</p></div>' +
     '<div class="section-label">Cooking streak</div>' +

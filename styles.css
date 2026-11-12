@@ -1123,3 +1123,8 @@ footer {
 .batch-reasons { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:var(--s4); }
 .batch-reasons .btn { width:auto; margin-top:0; flex:0 0 auto; }
 .waste-sheet .btn[disabled] { opacity:.45; pointer-events:none; }
+
+/* The date a rescue milestone was passed, under its rung. Small — the number is the headline,
+   the date is what gives it a sense of pace. */
+.rung-when { display:block; font-size:9px; font-weight:600; opacity:.75; margin-top:2px; }
+.rung { line-height:1.25; }
