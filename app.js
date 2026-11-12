@@ -828,6 +828,11 @@ var chipSvgs = {
   now:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 7v6"/><path d="M12 17h.01"/></svg>',
   unknown:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.3 9.2a2.8 2.8 0 1 1 3.6 2.7c-.7.2-1 .8-1 1.5v.4"/><path d="M12 17.5h.01"/></svg>'
 };
+// A toggle that a screen reader announces by name and state ("Vegetarian, switch, on"). The
+// switches were bare buttons with no text, so they read as just "button" (T7).
+function switchAttrs(on, label) {
+  return ' role="switch" aria-checked="' + (on ? 'true' : 'false') + '" aria-label="' + esc(label) + '"';
+}
 function chipHTML(cls, text) { return '<span class="chip ' + cls + '">' + (chipSvgs[cls] || '') + ' ' + text + '</span>'; }
 
 // ═══════════════ RECIPE PREFERENCES ═══════════════
@@ -1845,7 +1850,7 @@ function openSub(which) {
     body = '<p class="sub-intro">Applied to the household, not a single meal. Turning one on immediately swaps any planned meal that breaks it.</p><div>' +
       d.map(function(x) {
         return '<div class="toggle-row"><div><div class="tr-name">' + x[1] + '</div><div class="tr-sub">' + x[2] + '</div></div>' +
-          '<button class="switch' + (settings.dietary[x[0]] ? ' on' : '') + '" onclick="toggleDiet(\'' + x[0] + '\')"></button></div>';
+          '<button class="switch' + (settings.dietary[x[0]] ? ' on' : '') + '"' + switchAttrs(settings.dietary[x[0]], x[1]) + ' onclick="toggleDiet(\'' + x[0] + '\')"></button></div>';
       }).join('') + '</div>' +
       '<p class="nutri-note" style="margin-top:12px;">' +
         (active.length ? 'Active: ' + active.join(', ') + '. ' : 'No restrictions set. ') +
@@ -1866,7 +1871,7 @@ function openSub(which) {
     body = '<p class="sub-intro">The cooked-meal nudge is the one that keeps inventory honest — without it, the pantry drifts from reality.</p><div>' +
       n.map(function(x) {
         return '<div class="toggle-row"><div><div class="tr-name">' + x[1] + '</div><div class="tr-sub">' + x[2] + '</div></div>' +
-          '<button class="switch' + (settings.notify[x[0]] ? ' on' : '') + '" onclick="toggleNotify(\'' + x[0] + '\')"></button></div>';
+          '<button class="switch' + (settings.notify[x[0]] ? ' on' : '') + '"' + switchAttrs(settings.notify[x[0]], x[1]) + ' onclick="toggleNotify(\'' + x[0] + '\')"></button></div>';
       }).join('') + '</div>' +
       '<div class="note-card">Whether a reminder ships in version 1 is still an open question in the spec (blindspot #5). This screen is here to test whether people would want one at all.</div>';
   }
@@ -2210,6 +2215,33 @@ function simulateMidnight() {
   renderAll();
   showToast('Simulated midnight — the plan rolled forward.');
 }
+
+// ═══════════════ KEYBOARD AND SCREEN-READER ACCESS ═══════════════
+// Most rows that act like buttons (Profile menu, pantry rows, Back, the photo buttons) are divs or
+// labels with a click handler, so a keyboard couldn't reach them and a screen reader didn't say
+// they could be pressed (T7). Each is given a button role and a tab stop as it appears, and Enter
+// or Space presses it. Real <button>s already work and are left alone; the add-food backdrop only
+// closes the sheet, so it isn't one.
+function markClickables() {
+  var els = document.querySelectorAll('[onclick]:not(button):not(a):not(input):not(select):not(textarea):not(.add-sheet-backdrop), ' +
+    'label[for].add-option, label[for].shelf-area, label[for].receipt-label');
+  for (var i = 0; i < els.length; i++) {
+    var el = els[i];
+    if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+  }
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  var el = e.target;
+  if (!el || !el.getAttribute || el.getAttribute('role') !== 'button' || el.tagName === 'BUTTON') return;
+  e.preventDefault();
+  el.click();
+});
+if (window.MutationObserver) {
+  new MutationObserver(markClickables).observe(document.body, { childList:true, subtree:true });
+}
+markClickables();
 
 // ═══════════════ INIT ═══════════════
 function renderDietStrip() {
@@ -3844,13 +3876,13 @@ function mealPrefsHTML(part) {
   if (part === 'meals') {
     return '<div>' + MEAL_TYPES.map(function(t) {
         return '<div class="toggle-row"><div class="tr-name">' + t.charAt(0).toUpperCase() + t.slice(1) + '</div>' +
-          '<button class="switch' + (mealOn(t) ? ' on' : '') + '" onclick="setMealOn(\'' + t + '\')" aria-label="Plan ' + t + '"></button></div>';
+          '<button class="switch' + (mealOn(t) ? ' on' : '') + '"' + switchAttrs(mealOn(t), 'Plan ' + t) + ' onclick="setMealOn(\'' + t + '\')"></button></div>';
       }).join('') + '</div>' +
       (mealOn('lunch') && mealOn('dinner')
         ? '<div class="field-label">Do you eat leftovers?</div>' +
           '<div class="toggle-row"><div><div class="tr-name">Dinner leftovers for the next day\'s lunch</div>' +
             '<div class="tr-sub">Dinners are made for twice the household, so lunch is already made.</div></div>' +
-            '<button class="switch' + (settings.leftovers ? ' on' : '') + '" onclick="setLeftovers()" aria-label="Eat leftovers"></button></div>'
+            '<button class="switch' + (settings.leftovers ? ' on' : '') + '"' + switchAttrs(settings.leftovers, 'Dinner leftovers for the next day’s lunch') + ' onclick="setLeftovers()"></button></div>'
         : '');
   }
   return MEAL_TYPES.filter(mealOn).map(function(t) {
@@ -3925,14 +3957,14 @@ function renderSetup() {
       '<h2>Who\'s eating?</h2>' +
       '<p class="setup-lede">How many people you\'re cooking for.</p>' +
       '<div class="stepper">' +
-        '<button class="step-btn" onclick="settings.household=Math.max(1,settings.household-1);renderSetup()"' + (settings.household <= 1 ? ' disabled' : '') + '>&minus;</button>' +
+        '<button class="step-btn" aria-label="One fewer person" onclick="settings.household=Math.max(1,settings.household-1);renderSetup()"' + (settings.household <= 1 ? ' disabled' : '') + '>&minus;</button>' +
         '<div><div class="val">' + settings.household + '</div><div class="lbl">' + (settings.household === 1 ? 'person' : 'people') + '</div></div>' +
-        '<button class="step-btn" onclick="settings.household=Math.min(8,settings.household+1);renderSetup()"' + (settings.household >= 8 ? ' disabled' : '') + '>+</button>' +
+        '<button class="step-btn" aria-label="One more person" onclick="settings.household=Math.min(8,settings.household+1);renderSetup()"' + (settings.household >= 8 ? ' disabled' : '') + '>+</button>' +
       '</div>' +
       '<div class="field-label">Anything off the menu?</div>' +
       '<div>' + d.map(function(x) {
         return '<div class="toggle-row"><div class="tr-name">' + x[1] + '</div>' +
-          '<button class="switch' + (settings.dietary[x[0]] ? ' on' : '') + '" onclick="settings.dietary.' + x[0] + '=!settings.dietary.' + x[0] + ';renderSetup()"></button></div>';
+          '<button class="switch' + (settings.dietary[x[0]] ? ' on' : '') + '"' + switchAttrs(settings.dietary[x[0]], x[1]) + ' onclick="settings.dietary.' + x[0] + '=!settings.dietary.' + x[0] + ';renderSetup()"></button></div>';
       }).join('') + '</div>' +
       '<p class="field-hint">These filter recipes by the tags in the recipe file. They are <b>not</b> allergy-safe, since nothing checks individual ingredients or labels.</p>' +
       '<div class="actions"><button class="btn primary" onclick="setupStep=3;renderSetup()">Next</button>' +
