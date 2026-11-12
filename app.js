@@ -1844,13 +1844,6 @@ function openSub(which) {
         '</svg>' +
         'Open feedback survey' +
       '</a>' +
-      '<div style="margin-top:var(--s8);padding-top:var(--s6);border-top:1px solid var(--border);">' +
-        '<p class="sub-intro" style="margin-bottom:var(--s4);">Or email us directly:</p>' +
-        '<a class="btn ghost" href="mailto:wtf.bus860.group3@gmail.com?subject=What%20the%20Fridge%20Feedback" ' +
-          'style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;justify-content:center;width:100%;">' +
-          'Send email feedback' +
-        '</a>' +
-      '</div>' +
       '<div class="note-card" style="margin-top:var(--s6);">' +
         '<strong>What we\'re looking for</strong><br>' +
         '&bull; How easy is it to add food and plan meals?<br>' +
