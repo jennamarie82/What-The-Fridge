@@ -697,6 +697,10 @@ function pickRecipe(type, dayIdx, reserved, exclude, anyTime) {
   var best = null;
   recipes.forEach(function(r) {
     if (!eligible(r, type) || exclude.indexOf(r.id) > -1) return;
+    // An overnight recipe can't be ready today, whatever else fits. It used to be only marked
+    // down, so when nothing else was fully covered Swap still offered this morning an overnight
+    // French toast bake (T5).
+    if (dayIdx === 0 && /overnight/i.test(r.time || '')) return;
     if (!anyTime && !fitsTime(r, dayIdx)) return;
     var s = scoreRecipe(r, dayIdx, reserved);
     if (!best || s.score > best.s.score) best = { r:r, s:s };
@@ -786,11 +790,21 @@ function syncPlanShape() {
     if (e && e.ownLunch) plan[j].ownLunch = true;
   });
 }
+// Says what is still missing rather than "already fits": re-planning can leave gaps when nothing in
+// the approved files is fully covered, and calling that a fit was untrue (T5).
 function replanNow() {
   var n = planKitchen(true);
   closeDetail();
   renderAll();
-  showToast(n ? 'Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ' around your kitchen. The rest still work.' : 'Your plan already fits your kitchen.');
+  var needs = planNeeds(), gaps = needs.missing.length + needs.short.length + needs.stale.length;
+  var gapText = gaps + ' ingredient' + (gaps > 1 ? 's' : '') + ' you don’t have enough of';
+  if (n) {
+    showToast('Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ' around your kitchen.' +
+      (gaps ? ' The plan still needs ' + gapText + ': see the list on the Plan tab.' : ' The rest still work.'));
+  } else {
+    showToast(gaps ? 'Nothing in the approved recipes fits better. The plan still needs ' + gapText + ': see the list on the Plan tab.'
+                   : 'Your plan already fits your kitchen.');
+  }
 }
 
 // ═══════════════ RECIPE IMAGERY ═══════════════
