@@ -430,10 +430,16 @@ function convert(q, from, to) {
 }
 
 // How much is KNOWN to be on hand in `unit`, less anything `reserved` for other meals
-// ({ ingId: [{qty, unit}] }). Entries with no quantity, or in a unit that can't be converted,
-// make the answer `uncertain` rather than being guessed at.
+// ({ ingId: [{qty, unit}] }). Two kinds of doubt, kept apart because they point opposite ways:
+//   uncertain  a pantry entry has no quantity, or one in a unit that can't be converted, so there
+//              may be MORE on hand than `known`.
+//   lessThan   another meal set some aside in a unit that can't be converted (cups of egg whites
+//              against eggs counted each), so there is LESS left than `known`.
+// They used to share one flag, and that hid real shortfalls: one meal's egg whites in cups made
+// every later egg check "check you have enough" while the plan booked 12.5 eggs against 6 (T1,
+// error 47). Doubt that can only mean less must never soften a shortfall the numbers already show.
 function stockOf(ingId, unit, reserved) {
-  var known = 0, uncertain = false, any = false;
+  var known = 0, uncertain = false, lessThan = false, any = false;
   entriesFor(ingId).forEach(function(e) {
     if (!inStock(e)) return;
     any = true;
@@ -443,9 +449,9 @@ function stockOf(ingId, unit, reserved) {
   });
   ((reserved && reserved[ingId]) || []).forEach(function(r) {
     var c = convert(r.qty, r.unit, unit);
-    if (c === null) uncertain = true; else known -= c;
+    if (c === null) lessThan = true; else known -= c;
   });
-  return { any:any, known:round2(Math.max(0, known)), uncertain:uncertain };
+  return { any:any, known:round2(Math.max(0, known)), uncertain:uncertain, lessThan:lessThan };
 }
 
 function lineIds(line) { return line.any || line.all || [line.id]; }
@@ -473,7 +479,10 @@ function recipeScale(r) {
 var COVER_RANK = { missing:0, short:1, check:2, ok:3 };
 function coverStatus(s, amount) {
   if (!s.any) return 'missing';
-  if (amount === null || s.known >= amount - 1e-9) return 'ok';
+  if (amount === null) return 'ok';
+  // Enough on the numbers: fine, unless another meal took an uncountable share of it.
+  if (s.known >= amount - 1e-9) return s.lessThan ? 'check' : 'ok';
+  // Not enough on the numbers: only stock of unknown size could make up the gap.
   return s.uncertain ? 'check' : 'short';
 }
 function coverage(line, amount, reserved) {
