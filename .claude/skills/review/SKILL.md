@@ -45,8 +45,9 @@ Two traps when testing:
 ### 1. The spec's stop-work conditions
 
 **Read `CLAUDE.md` in the repository root before relying on the list below.** It is the
-governing document and it changes; what follows is a summary written against version 1.11 and
-could be out of date. Where the two disagree, the spec wins and this file needs updating.
+governing document and it changes; what follows is a summary written against version 1.11,
+brought up to version 1.16 for accounts, and could be out of date. Where the two disagree, the
+spec wins and this file needs updating.
 
 Note that the spec references `knowledge/`, `governance/` and `deliverables/` paths that mostly
 live in the team's project folder rather than the repository — only `CLAUDE.md` and
@@ -62,6 +63,13 @@ Work stops if the app:
   and nowhere else — not a web search, not the model's memory, not an invented variant.
 - **says a plan was approved when Ren has not confirmed it.**
 - **states or implies it checked an ingredient's condition.**
+- **shows or changes one account's saved data for another person.** Accounts (`account.js`,
+  `supabase/setup.sql`) rely on row-level security: every policy checks `auth.uid() = user_id`,
+  and `delete_my_account()` acts only on `auth.uid()`, never on an id it is passed. Also reject
+  anything that uploads a device's kitchen to an account before Ren chooses to.
+- **exposes a secret key.** Only the public anon key belongs in `account-config.js`. A Supabase
+  `service_role` / `sb_secret_` key, or the Anthropic API key, anywhere in the repository is a
+  stop. (Decode an `eyJ…` key's middle part: its `role` must be `anon`.)
 
 ### 2. Priority, never condition
 
