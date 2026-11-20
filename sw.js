@@ -5,9 +5,11 @@
 // Bump VERSION to clear old caches after a large change.
 // Network requests skip the browser's own HTTP cache ('no-cache' asks GitHub whether the file
 // changed), so a phone that kept an old copy still gets the new one on the next open.
-var VERSION = 'wtf-v3';
+var VERSION = 'wtf-v4';
+// The Supabase library comes from a CDN on another site, which this worker leaves alone: offline,
+// it simply doesn't load and the app carries on saving in this browser (account.js).
 function fresh(req) { return fetch(new Request(req.url, { cache:'no-cache', credentials:'same-origin' })); }
-var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'recipes.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+var SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'recipes.js', 'account.js', 'account-config.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function(e) {
   e.waitUntil(caches.open(VERSION).then(function(c) { return c.addAll(SHELL); }));

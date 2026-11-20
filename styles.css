@@ -1230,3 +1230,10 @@ footer {
 .window-line { font-size:11px; color:var(--ink-soft); margin-top:var(--s4); text-align:center; }
 .window-line b { color:var(--leaf); font-size:13px; }
 .window-line .win-best { color:var(--leaf); font-weight:700; }
+
+/* ─── Account (account.js) ─── */
+.ac-msg { color:var(--ink); font-weight:600; }
+.ac-choice { border-left:4px solid var(--leaf); margin-top:var(--s4); }
+.ac-danger { border-left:4px solid var(--tomato); margin-top:var(--s6); }
+.btn.ac-delete { background:#A63D24; color:#fff; }            /* 5.4:1 on white, like the "now" chip */
+.btn.ac-delete-link { background:none; color:#A63D24; text-decoration:underline; }

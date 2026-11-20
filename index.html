@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css?v=20261120a">
+<link rel="stylesheet" href="styles.css?v=20261120b">
 </head>
 <body>
 
@@ -189,6 +189,8 @@
 
         <div class="section-label">Your data</div>
         <div>
+          <!-- Shown only when accounts are set up (account-config.js); see account.js. -->
+          <div class="profile-menu-item" id="accountRow" style="display:none;" onclick="openSub('account')"><span>Account</span><span class="arrow" id="accountArrow">Sign in &rsaquo;</span></div>
           <div class="profile-menu-item" onclick="loadSampleKitchen()"><span>Load the sample kitchen</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="startOver()"><span>Start over</span><span class="arrow">&rsaquo;</span></div>
         </div>
@@ -199,7 +201,7 @@
             <div class="profile-menu-item" onclick="simulateMidnight()"><span>Simulate midnight</span><span class="arrow">&rsaquo;</span></div>
           </div>
         </div>
-        <p class="pantry-note">Saved in this browser only &mdash; nothing leaves your phone except a receipt or shelf photo you choose to send.</p>
+        <p class="pantry-note" id="storageNote">Saved in this browser only &mdash; nothing leaves your phone except a receipt or shelf photo you choose to send.</p>
       </div>
     </div>
 
@@ -257,7 +259,7 @@
 
 <footer>
   What the Fridge &middot; BUS 860 Group 3 &middot; plan around your own food, or look around with a sample kitchen.<br>
-  Your plan, pantry and settings are saved in this browser only &mdash; only a receipt or shelf photo you take is sent out, to Claude, to read it.<br>
+  Your plan, pantry and settings are saved in this browser, and in your account if you sign in (Supabase, Canada). A receipt or shelf photo you take is sent to Claude to read it, and never stored.<br>
   <span id="appVersion"></span><br>
   <span style="display:inline-block;margin-top:10px;">
     Demo controls (not part of the app):
@@ -269,6 +271,11 @@
 
 <!-- ?v= makes every phone fetch the new files after a release; change it with APP_VERSION in app.js. -->
 <script src="recipes.js?v=20261119b"></script>
-<script src="app.js?v=20261120a"></script>
+<script src="app.js?v=20261120b"></script>
+<!-- Accounts (optional): the Supabase library, the project's public settings, then the account code.
+     If the library can't load (offline), the app works as before, saved in this browser. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+<script src="account-config.js?v=20261120b"></script>
+<script src="account.js?v=20261120b"></script>
 </body>
 </html>
