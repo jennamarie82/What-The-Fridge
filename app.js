@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-20 (accounts)';
+var APP_VERSION = '2026-11-20 (edit scanned items)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -4542,10 +4542,19 @@ function renderReceiptReview() {
           '<div class="ri-body">' +
             '<div><span class="ri-name">' + esc(item.ingName) + '</span><span class="ri-conf ' + confClass + '">' + confLabel + '</span>' +
               (shelves && item.sure === false ? '<span class="ri-conf probable">not sure it’s there</span>' : '') + '</div>' +
-            '<div class="ri-raw">' + (shelves ? 'Claude saw: ' : '') + esc(item.raw) + '</div>' +
-            (shelves ? '<label class="ri-amount">Amount <input type="number" min="0" step="any" inputmode="decimal" ' +
-              'value="' + (item.qty || '') + '" placeholder="?" onchange="setReceiptQty(' + idx + ',this.value)"> ' +
-              esc(item.unit || 'ea') + '</label>' : '') +
+            '<div class="ri-raw">' + (item.added ? 'Added by you' : (shelves ? 'Claude saw: ' : 'On the receipt: ') + esc(item.raw)) + '</div>' +
+            // Everything a scan got wrong can be put right here before anything is saved: the food
+            // itself, how much, and where it's kept.
+            '<div class="ri-edit">' +
+              '<label class="ri-amount">Amount <input type="number" min="0" step="any" inputmode="decimal" ' +
+                'aria-label="Amount of ' + esc(item.ingName) + '" ' +
+                'value="' + (item.qty || '') + '" placeholder="?" onchange="setReceiptQty(' + idx + ',this.value)"></label>' +
+              '<select class="ri-unit" aria-label="Unit for ' + esc(item.ingName) + '" onchange="setReceiptUnit(' + idx + ',this.value)">' +
+                UNITS.map(function(u) { return '<option value="' + u + '"' + ((item.unit || 'ea') === u ? ' selected' : '') + '>' + u + '</option>'; }).join('') +
+              '</select>' +
+              '<button class="btn-pick" onclick="openIngPicker(' + idx + ')">Change food</button>' +
+            '</div>' +
+            ingPickerHTML(idx) +
             '<div class="receipt-zone-pick">' +
               ZONES.map(function(z) {
                 return '<button class="' + (item.zone === z.key ? 'active' : '') + '" onclick="setReceiptZone(' + idx + ',\'' + z.key + '\')">' + z.label + '</button>';
@@ -4563,28 +4572,31 @@ function renderReceiptReview() {
     others.forEach(function(item) {
       var idx = receiptItems.indexOf(item);
       if (item.confidence === 'non_food') {
+        // Read as not food, which can be wrong ("PC BLUE MENU" is a brand, but so is the food).
         html +=
           '<div class="receipt-item greyed">' +
             '<div class="ri-body"><div class="ri-raw">' + esc(item.raw) + '</div>' +
-            '<div style="font-size:11px;color:var(--ink-soft);">non-food</div></div>' +
+            '<div style="font-size:11px;color:var(--ink-soft);">non-food · ' +
+              '<button class="btn-link" onclick="openIngPicker(' + idx + ')">It’s food: pick it</button></div>' +
+            ingPickerHTML(idx) + '</div>' +
           '</div>';
       } else {
         // Unmatched food line — let user pick the right ingredient
         html +=
           '<div class="receipt-item unmatched">' +
             '<div class="ri-body">' +
-              '<div class="ri-raw">' + esc(item.raw) + '</div>' +
-              '<div style="font-size:11px;color:var(--amber);margin-bottom:4px;">not matched</div>' +
+              '<div class="ri-raw">' + (item.added ? 'Something the scan missed' : esc(item.raw)) + '</div>' +
+              '<div style="font-size:11px;color:var(--amber);margin-bottom:4px;">' + (item.added ? 'choose the food' : 'not matched') + '</div>' +
               '<button class="btn-pick" onclick="openIngPicker(' + idx + ')">Pick ingredient &rarr;</button>' +
-              '<div class="ing-picker" id="ingPicker' + idx + '" style="display:none;">' +
-                '<input class="field" placeholder="Search ingredients…" oninput="filterIngPicker(' + idx + ',this.value)" style="margin:4px 0;">' +
-                '<div class="ing-picker-list" id="ingPickerList' + idx + '"></div>' +
-              '</div>' +
+              ingPickerHTML(idx) +
             '</div>' +
           '</div>';
       }
     });
   }
+
+  // A scan can miss food entirely (behind something else, or a line it couldn't read).
+  html += '<div class="actions"><button class="btn ghost small" onclick="addMissedItem()">+ Add something it missed</button></div>';
 
   if (matched.length) {
     var selected = receiptItems.filter(function(r) { return r.include; }).length;
@@ -4622,6 +4634,7 @@ function toggleReceiptItem(idx, checked) {
 
 function setReceiptZone(idx, zone) {
   receiptItems[idx].zone = zone;
+  receiptItems[idx].zoneSet = true;       // Ren chose it, so changing the food won't move it
   renderReceiptReview();
 }
 
@@ -4662,7 +4675,34 @@ function resetReceipt() {
   if (photoMode === 'shelves') openShelves(receiptBack); else openReceipt(receiptBack);
 }
 
-// ── Receipt correction: ingredient picker for unmatched lines ──
+// ── Receipt and shelf-photo correction ──
+// One food picker per review line: for an unmatched line, a "not food" line that is food, and a
+// matched line that matched the wrong food. Closed until asked for.
+function ingPickerHTML(idx) {
+  return '<div class="ing-picker" id="ingPicker' + idx + '" style="display:none;">' +
+    '<input class="field" placeholder="Search foods…" aria-label="Search foods" oninput="filterIngPicker(' + idx + ',this.value)" style="margin:4px 0;">' +
+    '<div class="ing-picker-list" id="ingPickerList' + idx + '"></div>' +
+  '</div>';
+}
+function setReceiptUnit(idx, unit) {
+  var item = receiptItems[idx];
+  if (!item || UNITS.indexOf(unit) === -1) return;
+  item.unit = unit;
+}
+// A line for food the scan missed: it starts unmatched, with its food picker open. It carries
+// the receipt's date, or the shelf photo's place, like the lines around it.
+function addMissedItem() {
+  var shelves = photoMode === 'shelves';
+  var lastArea = null;
+  Object.keys(shelfCounts).forEach(function(k) { lastArea = k; });
+  receiptItems.push({
+    raw: '', added: true, ing: null, ingName: null, confidence: 'unrecognized',
+    zone: shelves && lastArea ? lastArea : 'fridge', include: false, qty: null, unit: null,
+    date: !shelves && receiptItems.length ? receiptItems[0].date : null, sure: true
+  });
+  renderReceiptReview();
+  openIngPicker(receiptItems.length - 1);
+}
 function openIngPicker(idx) {
   var el = document.getElementById('ingPicker' + idx);
   if (!el) return;
@@ -4685,6 +4725,12 @@ function filterIngPicker(idx, query) {
     if (!q) return true;
     return ing.name.toLowerCase().indexOf(q) > -1 || ing.id.indexOf(q) > -1;
   });
+  // Alphabetical, with foods that start with what was typed first ("milk" before "coconut milk").
+  results.sort(function(a, b) {
+    var an = a.name.toLowerCase(), bn = b.name.toLowerCase();
+    var as = q && an.indexOf(q) === 0 ? 0 : 1, bs = q && bn.indexOf(q) === 0 ? 0 : 1;
+    return as - bs || (an < bn ? -1 : an > bn ? 1 : 0);
+  });
   // Show at most 30 results to keep the list manageable
   var shown = results.slice(0, 30);
   listEl.innerHTML = shown.map(function(ing) {
@@ -4695,13 +4741,17 @@ function filterIngPicker(idx, query) {
 }
 
 function assignReceiptIng(idx, ingId) {
-  var ing = ingById(ingId);
-  if (!ing) return;
-  receiptItems[idx].ing = ingId;
-  receiptItems[idx].ingName = ing.name;
-  receiptItems[idx].confidence = 'manual_match';
-  receiptItems[idx].include = true;
-  receiptItems[idx].zone = ing.zone || 'fridge';
+  var ing = ingById(ingId), item = receiptItems[idx];
+  if (!ing || !item) return;
+  var wasUnplaced = !item.ing;
+  item.ing = ingId;
+  item.ingName = ing.name;
+  item.confidence = 'manual_match';
+  item.include = true;
+  item.sure = true;                       // Ren has looked at it
+  // A shelf photo already says where the food is; a receipt line takes the food's usual place,
+  // unless Ren already chose one.
+  if (photoMode !== 'shelves' && (wasUnplaced || !item.zoneSet)) item.zone = ing.zone || 'fridge';
   renderReceiptReview();
 }
 
