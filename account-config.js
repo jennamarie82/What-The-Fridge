@@ -10,6 +10,6 @@
 // NEVER put the "service_role" / "secret" key here or anywhere in this repository (CLAUDE.md,
 // Must never).
 window.WTF_SUPABASE = {
-  url: '',
-  anonKey: ''
+  url: 'https://tabqvmecliykpfsnthho.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhYnF2bWVjbGl5a3Bmc250aGhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxMzQwMTMsImV4cCI6MjExMDcxMDAxM30.LuEFmEH1lPLNvOD2rJxrSlLhyYUHYxtwA42gwr3-an8'
 };
