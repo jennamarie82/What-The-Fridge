@@ -637,12 +637,16 @@ function restoreTaken(taken) {
     if (e && e.qty !== null) { e.qty = round2(e.qty + t.qty); }
   });
 }
-// Uses up a whole meal. Returns what was taken plus how many lines were used inside their window.
+// Uses up a whole meal. Returns what was taken plus how many lines were rescued: used in the last
+// RESCUE_DAYS days of their window. It used to count anything inside its window, so rice bought
+// last month and eggs bought yesterday counted alike, and after 24 meals Profile said "76 used
+// before they turned" (feedback 5). A rescue is food that was close to the end.
+var RESCUE_DAYS = 2;
 function deductRecipe(r) {
   var taken = [], rescued = 0;
   visibleLines(r).forEach(function(line) {
     var u = urgentEntryFor(line);
-    if (u) { var f = freshness(u); if (f.known && f.max >= 0) rescued++; }
+    if (u) { var f = freshness(u); if (f.known && f.max >= 0 && f.max <= RESCUE_DAYS) rescued++; }
     taken = taken.concat(deductLine(line));
   });
   return { taken:taken, rescued:rescued };
@@ -1694,7 +1698,7 @@ function ingredientRowsHTML(r, idx) {
     var chip = { ok:[f.cls, f.text], check:['soon', 'check amount'], short:['now', 'short'] }[c.status];
     var note = '';
     if (activeEntry(entry) && turnsBefore(line, Math.floor(idx / 3))) {
-      chip = ['now', 'turned by then'];
+      chip = ['now', 'past window by then'];
       note = ' · <b>past its estimated window before this meal\'s day, so swap or re-plan</b>';
     }
     if (c.status === 'short') {
@@ -2003,8 +2007,8 @@ function renderChanges() {
   if (!el) return;
   if (!lastChange || !lastChange.lines.length) { el.innerHTML = ''; return; }
   var canUndo = lastChange.undo && stateSig() === lastChange.sig;
-  el.innerHTML = '<div class="change-card"><div class="ch-head"><strong>What changed</strong>' +
-      '<span>Because ' + esc(lastChange.why) + ':</span></div>' +
+  el.innerHTML = '<div class="change-card"><div class="ch-head"><strong>' + esc(lastChange.title || 'What changed') + '</strong>' +
+      (lastChange.why ? '<span>Because ' + esc(lastChange.why) + ':</span>' : '') + '</div>' +
     '<ul class="ch-list">' + lastChange.lines.map(function(l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' +
     '<div class="ch-acts">' +
       (canUndo ? '<button class="btn ghost small" onclick="undoLastChange()">Undo</button>' : '') +
@@ -2064,7 +2068,8 @@ function acceptMeal(idx, confirmed) {
     : '✅ Cooked — ingredients deducted.';
   if (crossed) {
     base = (crossed === 1 ? '🥬 First rescue! ' : '🥬 That’s ' + crossed + ' rescued! ') +
-      (used.rescued === 1 ? 'One ingredient' : used.rescued + ' ingredients') + ' used in time.';
+      (used.rescued === 1 ? 'One ingredient' : used.rescued + ' ingredients') + ' used in the last days of ' +
+      (used.rescued === 1 ? 'its' : 'their') + ' window.';
   }
   showToast(base, { label:'Undo', fn:function(){ undoAccept(undoIdx); } });
 }
@@ -2281,7 +2286,7 @@ function openSub(which) {
 
         '<div class="w-head"><div class="w-big">' + w.last30 + '</div>' +
           '<div class="w-cap">thrown out in the last 30 days' + dir + '</div>' +
-          '<div class="w-cap">against <b>' + w.rescued30 + '</b> ingredients used in time</div></div>';
+          '<div class="w-cap">against <b>' + w.rescued30 + '</b> rescued just in time</div></div>';
 
       // Repeat offenders first: the one thing on this page that changes what Ren buys next week.
       var repeats = w.ings.filter(function(x) { return x.n > 1; });
@@ -2530,39 +2535,62 @@ function renderReconcile() {
     '</div>' + rows + '</div>';
 }
 
+// The plan for today was built before yesterday was settled, so a late "Cooked it" could take food
+// today's meals had set aside, and nothing said so (feedback 5). Now the answer is settled first and
+// the plan is fitted around it: any meal still to cook that the answer left short is replaced, if a
+// covered alternative exists, and the receipt names it. Meals Ren chose herself are left for her to
+// decide; the banner and the card say what they're short of.
+function gapCount(v) { return v ? v.missing.length + v.short.length + v.stale.length : 0; }
 function reconcile(i, outcome) {
   var u = unreconciled[i];
   if (!u) { return; }
-  if (outcome === 'cooked') {
-    var r = recipeById(u.recipe);
-    if (r) {
-      var used = deductRecipe(r);
-      cookLog.push({ date:u.date || todayKey(), recipe:r.id, rescued:used.rescued });
-    }
+  var r = recipeById(u.recipe), name = r ? r.name : 'that meal';
+  var why = outcome === 'cooked' ? 'you cooked ' + name + ' on ' + u.label : 'you didn’t cook ' + name + ' on ' + u.label;
+  var res = track(why, function() { settleAnswer(u, i, outcome, r); });
+  showToast((outcome === 'cooked' ? '✅ Logged — ingredients deducted from your pantry.' : 'Logged — nothing deducted.') + changeCount(res),
+    { label:'Undo', fn:res.undo });
+}
+function settleAnswer(u, i, outcome, r) {
+  if (outcome === 'cooked' && r) {
+    var before = planNeeds().byIdx;
+    var used = deductRecipe(r);
+    cookLog.push({ date:u.date || todayKey(), recipe:r.id, rescued:used.rescued });
+    var after = planNeeds().byIdx;
+    plan.forEach(function(e, idx) {
+      if (!activeEntry(e) || e.chosen || gapCount(after[idx]) <= gapCount(before[idx])) return;
+      var day = Math.floor(idx / 3), reserved = reservationsExcept(idx);
+      var others = plan.map(function(x, j) { return j === idx || !isMealEntry(x) ? null : x.recipe; }).filter(Boolean);
+      var pick = pickRecipe(MEAL_TYPES[idx % 3], day, reserved, others.concat([e.recipe]));
+      if (pick && fullyCovered(pick, reserved, day)) { e.recipe = pick.id; delete e.tried; }
+    });
   }
   // Last night's dinner didn't happen, so there are no leftovers for today's lunch: drop the note,
-  // and the lunch gets a meal of its own on the next render (syncPlanShape).
+  // and the lunch gets a meal of its own (syncPlanShape, run by track).
   if (outcome !== 'cooked' && lastNight && u.type === 'dinner' && u.recipe === lastNight.recipe && u.date === lastNight.date) {
     lastNight = null;
   }
   unreconciled.splice(i, 1);
-  renderAll();
-  showToast(outcome === 'cooked'
-    ? '\u2705 Logged — ingredients deducted from your pantry.'
-    : 'Logged — nothing deducted.');
 }
 
 // ═══════════════ ROLLING DAYS ═══════════════
 // Always today plus the next two. At midnight the first day drops off and a new
 // third day is built from the approved files.
-function rollDay(departingDate) {
+// `recap` (optional) tallies what happened to the departing day's meals, for the day summary.
+function rollDay(departingDate, recap) {
   // Reconcile before dropping. A meal still 'pending' at midnight is queued as a
   // question rather than silently discarded — dropping it would leave its
   // ingredients in the pantry after they were eaten, drifting inventory in the
   // optimistic direction one day at a time.
   // departingDate is passed when catching up on days the app was closed.
   var departing = departingDate || dateFor(0);
+  var gone = [];
   plan.slice(0, 3).forEach(function(entry, i) {
+    if (recap && isMealEntry(entry)) {
+      if (entry.status === 'accepted') recap.cooked++;
+      else if (entry.status === 'skipped') recap.skipped++;
+      else if (!entry.dietBlocked) recap.toConfirm++;
+    }
+    if (isMealEntry(entry)) gone.push(entry.recipe);
     queueUnreconciled(entry, MEAL_TYPES[i], departing);
   });
   // Keep a note of the departing dinner so today's lunch can still be its leftovers. A dinner that
@@ -2573,7 +2601,10 @@ function rollDay(departingDate) {
   // The new third day is planned around what the two days already shown set aside. Those two
   // days are left as they are: changing meals someone has already seen, overnight, would surprise.
   var res = reservationsExcept(-1);
-  var used = plan.filter(isMealEntry).map(function(e){ return e.recipe; });
+  // Yesterday's meals and any still waiting on "did you cook it?" are kept off the new day: the same
+  // meal used to sit in the question and on the new plan at once (feedback 5).
+  var used = plan.filter(isMealEntry).map(function(e){ return e.recipe; })
+    .concat(gone, unreconciled.map(function(u) { return u.recipe; }));
   MEAL_TYPES.forEach(function(type) {
     if (!mealOn(type)) { plan.push({ off:true, status:'off' }); return; }
     if (type === 'lunch' && leftoversOn() && usableDinner(plan[5])) {     // yesterday's (day 2's) dinner
@@ -2594,23 +2625,56 @@ function rollDay(departingDate) {
   dayOffset++;
 }
 
+// ─── the day summary ───
+// The day used to open with one toast, "New day — the plan rolled forward", or with nothing at all,
+// so each morning Ren had to work out what had happened overnight (feedback 5). Now it opens with a
+// summary in the What changed card: how yesterday went, what still needs an answer (the questions
+// sit right below it), the day that was added, and any meal changed to fit a weekday limit.
+function newRecap() { return { cooked:0, skipped:0, toConfirm:0, days:0 }; }
+function dayReceipt(recap, timeLines) {
+  var parts = [];
+  if (recap.cooked)    parts.push(recap.cooked + ' cooked');
+  if (recap.skipped)   parts.push(recap.skipped + ' skipped');
+  if (recap.toConfirm) parts.push(recap.toConfirm + ' to confirm below');
+  var lines = [(recap.days > 1 ? 'The last ' + recap.days + ' days' : 'Yesterday') + ': ' + (parts.length ? parts.join(', ') : 'nothing logged') + '.'];
+  var added = plan.slice(6, 9).filter(isMealEntry).map(function(e) { return recipeById(e.recipe).name; });
+  if (added.length) lines.push(dayLabel(2) + '’s meals were added: ' + listOf(added, 3) + '.');
+  lines = lines.concat(timeLines || []);
+  lastChange = { title:'It’s ' + dateFor(0).toLocaleDateString(undefined, { weekday:'long' }), why:'', kind:'day', lines:lines, undo:null, sig:null };
+}
+// enforceTimes() with each replaced meal named, for the day summary.
+function enforceTimesNamed() {
+  var before = plan.map(entryLabel), lines = [];
+  enforceTimes();
+  plan.forEach(function(e, i) {
+    var now = entryLabel(e);
+    if (now && now !== before[i]) {
+      lines.push(slotName(i) + ': ' + now + ' (was ' + before[i] + '), to fit your weekday ' + MEAL_TYPES[i % 3] + ' time');
+      e.changed = { from:before[i], why:'it didn’t fit your weekday ' + MEAL_TYPES[i % 3] + ' time', kind:'day' };
+    }
+  });
+  return lines;
+}
+
 function scheduleMidnight() {
   var now = new Date();
   var next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2);
   setTimeout(function() {
-    if (catchUp() > 0) {
-      renderAll();
-      showToast('New day — the plan rolled forward.');
-    }
+    // The day summary waits on the Plan tab; whatever Ren has open at midnight is left alone.
+    if (catchUp() > 0) { renderAll(); }
     scheduleMidnight();
   }, next - now);
 }
 
-// Prototype-only control, outside the phone frame.
+// Testing tool (About > Testing tools, and the laptop footer). It rolls the plan but not the dates.
 function simulateMidnight() {
-  rollDay();
+  var recap = newRecap();
+  recap.days = 1;
+  rollDay(null, recap);
+  dayReceipt(recap, []);
+  switchTab('planTab');
   renderAll();
-  showToast('Simulated midnight — the plan rolled forward.');
+  showToast('Simulated midnight — the plan rolled forward a day.');
 }
 
 // ═══════════════ KEYBOARD AND SCREEN-READER ACCESS ═══════════════
@@ -2815,7 +2879,7 @@ function renderProfile() {
   document.getElementById('profileStats').innerHTML =
     '<div class="profile-stat"><div class="num">' + cooked + '</div><div class="label">Meals<br>cooked</div></div>' +
     '<div class="profile-stat"><div class="num">' + days30 + '</div><div class="label">Days cooked<br>this month</div></div>' +
-    '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Used before<br>they turned</div></div>';
+    '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Rescued<br>just in time</div></div>';
 
   // The ledger line. Deliberately a ratio and not a fourth stat tile or a milestone ladder: a
   // count that only climbs is dispiriting, and the way to "win" a low-waste badge is to stop
@@ -2825,7 +2889,7 @@ function renderProfile() {
   var ledger = document.getElementById('profileLedger');
   if (ledger) {
     ledger.innerHTML = !cooked && !lost ? '' :
-      '<span class="led-good">' + rescued + ' used in time</span>' +
+      '<span class="led-good">' + rescued + ' rescued</span>' +
       '<span class="led-dot">·</span>' +
       '<span class="led-lost">' + lost + ' got away</span>' +
       (lost ? '<div class="led-hint">' + esc(wasteHint()) + '</div>' : '');
@@ -2853,9 +2917,10 @@ function renderProfile() {
   var rPct = r.next === null ? 100 : Math.round((rescued - rPrev) / (r.next - rPrev) * 100);
   var sPct = st.next === null ? 100 : Math.round((days30 - sPrev) / (st.next - sPrev) * 100);
 
-  var rWit = !cooked ? 'Cook something from the plan and this starts counting every ingredient you use before its window closes.'
-    : !rescued ? 'Nothing rescued yet — the first ingredient you use inside its window starts the count.'
-    : rescued < 10 ? rescued + ' ingredient' + (rescued === 1 ? '' : 's') + ' used while still in their prime. The crisper drawer thanks you.'
+  // A rescue is food used in the last two days of its window (RESCUE_DAYS), so the words say that.
+  var rWit = !cooked ? 'Cook something from the plan and this counts every ingredient you use in the last two days of its window.'
+    : !rescued ? 'Nothing rescued yet — use something in the last two days of its window to start the count.'
+    : rescued < 10 ? rescued + ' ingredient' + (rescued === 1 ? '' : 's') + ' used with a day or two to spare. The crisper drawer thanks you.'
     : rescuePace(allSteps, rDates) ||
       'That\'s ' + rescued + ' things that didn\'t end up as a science experiment at the back of the fridge.';
   // The cumulative total stops carrying information somewhere past a few hundred — 340 and 360
@@ -4454,19 +4519,23 @@ function loadState() {
 function catchUp() {
   var missed = daysBetween(lastSeen, todayKey());
   if (missed > 0) {
-    var start = parseKey(lastSeen);
-    for (var i = 0; i < Math.min(missed, 3); i++) { rollDay(addDays(start, i)); }
-    enforceTimes();   // days rolled in during catch-up were planned against the wrong weekday
+    var start = parseKey(lastSeen), recap = newRecap();
+    recap.days = Math.min(missed, 3);
+    for (var i = 0; i < recap.days; i++) { rollDay(addDays(start, i), recap); }
+    // Days rolled in during catch-up were planned against the wrong weekday.
+    dayReceipt(recap, enforceTimesNamed());
   }
   lastSeen = todayKey();
   return Math.max(missed, 0);
 }
 
-// A home-screen app is usually resumed, not reloaded, so check the date on return too.
+// A home-screen app is usually resumed, not reloaded, so check the date on return too. The day
+// summary sits at the top of the Plan tab, so that's where Ren lands.
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible' && catchUp() > 0) {
+    // Land on the summary, unless a form is open: a half-added item shouldn't be thrown away.
+    if (!document.getElementById('subScreen').classList.contains('open')) { closeDetail(); switchTab('planTab'); }
     renderAll();
-    showToast('New day — the plan rolled forward.');
   }
 });
 
