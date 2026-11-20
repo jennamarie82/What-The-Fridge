@@ -163,7 +163,7 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
 }
 .banner .tick svg { width:14px; height:14px; }
 .banner .text strong { display:block; font-size:13px; color:var(--ink); }
-.banner .text span { font-size:11px; color:var(--ink-soft); }
+.banner .text span { font-size:12px; line-height:1.45; color:var(--ink-soft); }
 
 /* ─── section label ─── */
 .section-label {
@@ -314,6 +314,8 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 .ingredient-row:last-child { border-bottom:none; }
 .ingredient-name { font-size:13px; font-weight:600; }
 .ingredient-basis { font-size:11px; color:var(--ink-soft); margin-top:2px; }
+/* A stand-in from tools/substitutions.csv, said on the line it replaces (feedback 6C). */
+.ingredient-sub { font-size:12px; font-weight:600; color:#8A5B00; margin-top:3px; line-height:1.4; }
 
 .missing-callout {
   background:var(--amber-soft);
@@ -571,7 +573,10 @@ input:focus-visible, select:focus-visible, a:focus-visible {
   color:var(--ink-soft); padding:var(--s6) 0 var(--s2); border-bottom:1px solid var(--border);
 }
 /* The one-tap rescue, on at-risk items only. Sits under the basis so the row stays scannable. */
-.zone-line .use-it { margin-top:6px; padding:3px 10px; font-size:11px; }
+.zone-line .use-it { margin-top:6px; padding:3px 10px; font-size:12px; }
+/* What to do about a Needs-attention item: cook it, freeze it, or check it (feedback 4). */
+.zone-line .zl-todo { font-size:12px; font-weight:600; color:var(--ink); margin-top:4px; line-height:1.4; }
+.zone-line .zl-acts { display:flex; gap:6px; flex-wrap:wrap; }
 .zone-line .zl-qty { font-weight:700; font-size:13px; white-space:nowrap; }
 .zone-line.out .zl-name, .zone-line.out .zl-qty { color:var(--ink-soft); text-decoration:line-through; }
 
@@ -604,8 +609,35 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 }
 
 /* ─── shortfall banner variant ─── */
-.banner.short { background:var(--amber-soft); }
-.banner.short .tick { background:var(--amber); }
+/* Three banner states, told apart by headline first and colour second (feedback 2):
+   covered = leaf, probably covered = amber, short = tomato. */
+.banner.short { background:var(--tomato-soft); }
+.banner.short .tick { background:var(--tomato); }
+.banner.check .tick { background:var(--amber); }
+.banner-acts { display:flex; gap:var(--s4); flex-wrap:wrap; }
+/* What to pick up (feedback 6B): one food per row, what it's for underneath. */
+.shop-row { display:flex; flex-direction:column; gap:2px; padding:10px 14px; border-bottom:1px solid var(--border); }
+.shop-row:last-child { border-bottom:none; }
+.shop-row b { font-size:14px; color:var(--ink); }
+.shop-row span { font-size:12px; color:var(--ink-soft); line-height:1.4; }
+
+/* ─── what changed: the receipt for a change the app made to the plan (feedback 1) ─── */
+.change-card {
+  background:var(--white); border:1.5px solid var(--leaf);
+  border-radius:var(--r); padding:var(--s6) var(--s8); margin-bottom:var(--s8);
+}
+.ch-head strong { display:block; font-size:14px; color:var(--ink); }
+.ch-head span { display:block; font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.ch-list { margin:var(--s4) 0 0; padding-left:18px; font-size:13px; line-height:1.45; color:var(--ink); }
+.ch-list li { margin-bottom:4px; }
+.ch-acts { display:flex; gap:var(--s4); justify-content:flex-end; }
+.ch-acts .btn.small { margin-top:var(--s4); }
+.state-badge.changed { color:#8A5B00; }
+.meal-info .meal-why.changed { color:#8A5B00; opacity:1; font-weight:600; }
+.change-note {
+  background:var(--amber-soft); color:#6B4700; border-radius:var(--r);
+  padding:var(--s6) var(--s8); margin-bottom:var(--s6); font-size:13px; line-height:1.45; font-weight:600;
+}
 
 /* ─── unconfirmed meals carried past the midnight roll ─── */
 .rec-card {

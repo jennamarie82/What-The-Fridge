@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-12 (app-test fixes T1-T8)';
+var APP_VERSION = '2026-11-19 (feedback 1, 2, 4, 5, 6 and 8)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -8,7 +8,8 @@ var settings = {
   since: null,                    // YYYY-MM-DD the household was set up; null until setup is finished
   household: 2,
   dietary: { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false },
-  notify:  { cooked:true, expiry:true, planReady:false },
+  noStaples: {},                  // staples the household doesn't keep: { id:true } (Profile > Staples you keep)
+  testTools: false,               // About > Testing tools: shows Simulate midnight in Profile
   // From the setup questionnaire (Profile > Meals & cooking to change):
   meals:     { breakfast:true, lunch:true, dinner:true },   // which meals to plan
   leftovers: false,                                          // dinner covers the next day's lunch
@@ -19,6 +20,7 @@ function fillMealSettings(s) {
   if (!s.meals) s.meals = { breakfast:true, lunch:true, dinner:true };
   if (s.leftovers === undefined) s.leftovers = false;
   if (!s.times) s.times = { breakfast:20, lunch:30, dinner:null };
+  if (!s.noStaples) s.noStaples = {};
   return s;
 }
 
@@ -173,20 +175,27 @@ function violatesDiet(recipe) {
   return (recipe.tags || []).some(function(t) { return blocked.indexOf(t) > -1; });
 }
 
-// What each ingredient contains, for deciding which OPTIONAL lines a restriction drops.
-// (Required lines are already covered by the recipe's own tags from the database.)
+// What each ingredient contains, for deciding which OPTIONAL lines a restriction drops, and which
+// pantry food a restriction keeps out of every recipe (see entriesFor). Required lines are already
+// covered by the recipe's own tags from the database. The pantry-only foods that stand in for a
+// recipe food (frozen salmon for salmon, oat milk for milk) are listed by what they are themselves:
+// frozen salmon is fish, oat milk is not dairy.
 var CONTAINS = {
   meat: ['chicken-breast','chicken-thighs','chicken-drumsticks','ground-chicken','chicken-wings','cooked-chicken','chicken',
          'ground-turkey','turkey-sausage','deli-turkey','cooked-turkey','turkey-breast','canadian-bacon','bacon','pancetta','ham',
          'pepperoni','salami','hot-dogs','sausage','smoked-sausage','ground-pork','pork-chops','pork','ribs','ground-beef',
          'corned-beef','roast-beef','beef-roast','beef-steak','ground-lamb','lamb','veal','smoked-salmon','salmon','tuna-steak',
          'canned-tuna','white-fish','shrimp','scallops','mussels','clams','crab','lobster','anchovies','fish-sauce','oyster-sauce',
-         'chicken-broth','beef-broth','seafood-stock','cream-of-chicken'],
+         'chicken-broth','beef-broth','seafood-stock','cream-of-chicken',
+         'frozen-chicken-breast','frozen-shrimp','frozen-fish-fillets','frozen-salmon','canned-salmon','chicken-sausage','pork-tenderloin'],
   dairy: ['butter','buttermilk','sour-cream','cream-cheese','heavy-cream','greek-yogurt','yogurt','milk','parmesan','feta',
           'ricotta','cottage-cheese','goat-cheese','blue-cheese','queso-fresco','mozzarella','provolone','american-cheese',
-          'swiss','monterey-jack','cheddar','cheese','paneer','tortellini'],
-  nuts:  ['peanut-butter','peanuts','almonds','walnuts','pecans','cashews'],
-  pork:  ['canadian-bacon','bacon','pancetta','ham','pepperoni','salami','hot-dogs','sausage','ground-pork','pork-chops','pork','ribs']
+          'swiss','monterey-jack','cheddar','cheese','paneer','tortellini',
+          'half-and-half','evaporated-milk','cream-of-chicken','pesto'],
+  nuts:  ['peanut-butter','peanuts','almonds','walnuts','pecans','cashews',
+          'pistachios','pine-nuts','almond-butter','almond-milk','pesto'],
+  pork:  ['canadian-bacon','bacon','pancetta','ham','pepperoni','salami','hot-dogs','sausage','ground-pork','pork-chops','pork','ribs',
+          'pork-tenderloin']
 };
 function ingBlocked(id, blocked) {
   return blocked.some(function(b) {
@@ -194,9 +203,33 @@ function ingBlocked(id, blocked) {
     return list && list.indexOf(id) > -1;
   });
 }
-// A recipe's ingredient lines as they apply to this household: an optional line whose every
-// choice is ruled out is dropped, and choices that are ruled out are taken off the line.
+// The household setting that rules this food out ("Dairy-free"), or '' when none does.
+function dietRuleFor(id) {
+  for (var k in DIET_RULES) {
+    if (settings.dietary[k] && ingBlocked(id, DIET_RULES[k].blocks)) return DIET_RULES[k].label;
+  }
+  return '';
+}
+// A recipe's ingredient lines as they apply to this household and kitchen: an optional line whose
+// every choice is ruled out is dropped, choices that are ruled out are taken off the line, and the
+// one stand-in the recipe may use (standInFor) replaces the line it stands in for. Everything that
+// plans, checks, sets aside or deducts food reads lines through here.
 function visibleLines(recipe) {
+  syncStaples();
+  var lines = dietLines(recipe), s = standInFor(recipe, lines);
+  if (!s) return lines;
+  return lines.reduce(function(out, line) {
+    if (line !== s.line) { out.push(line); return out; }
+    if (s.staple) return out;                       // the stand-in is a staple, assumed on hand
+    var copy = {}; for (var k in line) copy[k] = line[k];
+    delete copy.any; delete copy.all;
+    copy.id = s.row.use;
+    copy.sub = { forId:s.forId, use:s.row.use, note:s.row.note || '' };
+    out.push(copy);
+    return out;
+  }, []);
+}
+function dietLines(recipe) {
   var blocked = activeBlocks();
   if (!blocked.length) return recipe.ing;
   var out = [];
@@ -215,24 +248,74 @@ function visibleLines(recipe) {
   return out;
 }
 
+// ─── stand-ins (feedback 6C) ───
+// Matching used to be exact, so a bag of rice didn't cover "cooked rice" and tomatoes didn't cover
+// cherry tomatoes; a first-timer with 13 everyday foods could cook no lunch or dinner. A stand-in
+// comes only from tools/substitutions.csv, never from the app's own judgement, and it is said out
+// loud on the meal. The rules are the table's own:
+//   3  a row that takes away a dietary property ("-DF": tofu to paneer) is never offered to a
+//      household with that setting, and a stand-in the settings rule out is never used;
+//   4  offered only when the food asked for isn't in the kitchen and the stand-in is (or is a
+//      staple the household keeps);
+//   5  one per meal: two stand-ins in one dish stops being the recipe.
+// And the recipe has to be the kind of dish the row names (its contexts, from the build), because
+// banana for berries is right on toast and wrong in a vinaigrette. Optional lines never get one: a
+// missing extra is simply left out.
+var SUBS = window.WTF_SUBS || [], SUBS_FOR = {};
+SUBS.forEach(function(s) { (SUBS_FOR[s.for] = SUBS_FOR[s.for] || []).push(s); });
+var DIET_CODES = { V:'vegetarian', DF:'dairyFree', NF:'nutFree', PF:'porkFree' };
+function onHand(id) { return entriesFor(id).some(inStock); }
+function standInFor(recipe, lines) {
+  if (!SUBS.length || !recipe.ctx || !recipe.ctx.length) return null;
+  lines = lines || dietLines(recipe);
+  var named = {};
+  recipe.all.forEach(function(l) { if (!l.staple) lineIds(l).forEach(function(id) { named[id] = true; }); });
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.optional || line.all) continue;
+    var ids = lineIds(line);
+    if (ids.some(onHand)) continue;
+    for (var j = 0; j < ids.length; j++) {
+      var rows = SUBS_FOR[ids[j]] || [];
+      for (var k = 0; k < rows.length; k++) {
+        var row = rows[k];
+        if (named[row.use]) continue;                                   // already in the dish
+        if (!row.ctx.some(function(c) { return recipe.ctx.indexOf(c) > -1; })) continue;
+        if (row.diet && row.diet.charAt(0) === '-' && settings.dietary[DIET_CODES[row.diet.slice(1)]]) continue;
+        if (dietRuleFor(row.use)) continue;
+        if (assumedStaple(row.use)) return { line:line, row:row, forId:ids[j], staple:true };
+        if (onHand(row.use)) return { line:line, row:row, forId:ids[j] };
+      }
+    }
+  }
+  return null;
+}
+
 // ═══════════════ RECIPE CATALOG ═══════════════
-// All 300 recipes from the approved source, knowledge/Combined_Recipe_Database.md, via recipes.js
+// Every recipe from the approved source, knowledge/Combined_Recipe_Database.md, via recipes.js
 // (generated by tools/build-recipes.ps1). `id` is the slug of the title and doubles as the photo name.
 // Each ingredient line keeps the database's own wording (`text`) and names the food it uses from
 // the shared ingredient list (`id`, or `any` when the recipe offers a choice). Staple lines (salt,
 // oil, spices...) are kept for display but never planned around: they're assumed on hand.
 // Amounts are as written; amountFor() scales them to the household from each recipe's estimated
 // servings (tools/servings.csv), so each line keeps a link to its recipe (`r`).
-var recipes = (window.WTF_RECIPES || []).map(function(src) {
+//
+// Which staples are assumed is the household's call (Profile > Staples you keep, feedback 6D): a
+// staple Ren says she doesn't keep is planned around like any other food. So a recipe's lines are
+// worked out again whenever that list changes (syncStaples).
+function assumedStaple(id) {
+  var i = ingById(id);
+  return !!(i && i.staple && !(settings.noStaples && settings.noStaples[id]));
+}
+function setLines(r, src) {
   var lines = [];
   src.ing.forEach(function(l) {
     var ids = l.items || [];
     if (!ids.length) return;
     // A staple line, or a choice where one of the options is a staple ("vinegar or lemon juice"),
     // is covered by the staples assumed on hand.
-    var isStaple = function(id) { var i = ingById(id); return !!(i && i.staple); };
-    var staple = ids.every(isStaple) || (l.alt && ids.some(isStaple));
-    var foods = ids.filter(function(id) { var i = ingById(id); return i && !i.staple; });
+    var staple = ids.every(assumedStaple) || (l.alt && ids.some(assumedStaple));
+    var foods = ids.filter(function(id) { return ingById(id) && !assumedStaple(id); });
     var line = { text:l.text, optional:!!l.optional, staple:staple };
     if (!staple) {
       // `alt` is the build's own flag, set only where a line was split on "or". Without it a
@@ -247,12 +330,30 @@ var recipes = (window.WTF_RECIPES || []).map(function(src) {
     }
     lines.push(line);
   });
-  var r = { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
-            tags:src.tags || [], all:lines, ing:lines.filter(function(l) { return !l.staple; }), steps:src.steps || [],
-            nut:src.nut || null };
+  r.all = lines;
+  r.ing = lines.filter(function(l) { return !l.staple; });
   lines.forEach(function(l) { l.r = r; });
+}
+var recipes = (window.WTF_RECIPES || []).map(function(src) {
+  var r = { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
+            tags:src.tags || [], ctx:src.ctx || [], steps:src.steps || [], nut:src.nut || null, src:src };
+  setLines(r, src);
   return r;
 });
+// Re-reads every recipe's lines when the household's staples list has been replaced (a reload, an
+// Undo, Start over) or changed. Cheap: an identity check, and a rebuild only when it differs.
+var stapleRef = null;
+function syncStaples(force) {
+  if (!settings.noStaples) settings.noStaples = {};
+  if (!force && settings.noStaples === stapleRef) return;
+  stapleRef = settings.noStaples;
+  recipes.forEach(function(r) { setLines(r, r.src); });
+}
+
+// Counts the app states about itself come from the data, never from a sentence typed once: About
+// said "300 approved recipes" after there were 579, and setup offered a sample kitchen of "about
+// 35 everyday foods" that held 102.
+function recipeCount(type) { return recipes.filter(function(r) { return !type || r.type === type; }).length; }
 
 // ═══════════════ PLAN ═══════════════
 // Three days x breakfast / lunch / dinner, built from the kitchen by the planner below.
@@ -363,7 +464,6 @@ function zoneLabel(z) { for (var i=0;i<ZONES.length;i++) { if (ZONES[i].key === 
 //   1. a printed use-by date the user typed wins outright;
 //   2. otherwise purchase date + the norm's window for the storage spot it's in;
 //   3. anything else is unknown, with the reason, and never assumed fresh.
-// Norms are ranges ("3–7 days"), so the chip goes by the short end and "past window" by the long end.
 function freshness(e) {
   var today = todayKey();
   var ing = ingById(e.ing);
@@ -373,20 +473,37 @@ function freshness(e) {
   }
   if (!e.bought) { return { known:false, cls:'unknown', text:'no date', via:'nodate' }; }
   var norm = ing && ing.norm ? NORMS[ing.norm] : null;
-  if (!norm)             { return { known:false, cls:'unknown', text:'unknown', via:'nonorm' }; }
+  if (!norm)             { return { known:false, cls:'unknown', text:'no estimate', via:'nonorm' }; }
   if (norm.printed)      { return { known:false, cls:'unknown', text:'check date', via:'needsprinted', norm:norm }; }
   var win = norm[e.zone];
-  if (!win)              { return { known:false, cls:'unknown', text:'unknown', via:'nozone', norm:norm }; }
+  if (!win)              { return { known:false, cls:'unknown', text:'no estimate', via:'nozone', norm:norm }; }
   var age = daysBetween(e.bought, today);
   return status({ known:true, min:win[0] - age, max:win[1] - age, via:'norm', norm:norm });
 }
+// Norms are ranges ("3–7 days"), and the chip goes by the LATE end. It used to go by the early end,
+// so spinach bought three days ago with a 3–7 day window said "use today" though up to four days
+// were left, and 21 of the sample kitchen's 102 foods said "use today" at once (feedback 4). When
+// everything is urgent nothing is. Red is now only for the last day or two of a window, and the
+// words are about when to use it, never about the food's condition.
 function status(f) {
-  f.left = f.min;
-  if (f.max < 0)       { f.cls = 'now';  f.text = 'past window'; }
-  else if (f.min <= 0) { f.cls = 'now';  f.text = 'use today'; }
-  else if (f.min <= 3) { f.cls = 'soon'; f.text = f.min + (f.min === 1 ? ' day' : ' days'); }
-  else                 { f.cls = 'ok';   f.text = 'fine'; }
+  if (f.max < 0)        { f.cls = 'now';  f.text = 'past window'; }
+  else if (f.max === 0) { f.cls = 'now';  f.text = 'use today'; }
+  else if (f.max === 1) { f.cls = 'now';  f.text = 'use by tomorrow'; }
+  else if (f.max <= 4)  { f.cls = 'soon'; f.text = 'use within ' + f.max + ' days'; }
+  else                  { f.cls = 'ok';   f.text = 'no rush'; }
   return f;
+}
+// The same estimate seen from the day a meal is planned for. A chip on Saturday's dinner said "use
+// today" on Thursday, about food the plan uses on Saturday (feedback 4). For a later day it names
+// the day the window ends instead, which reads the same whichever day the plan is opened.
+function freshnessOn(e, day) {
+  var f = freshness(e);
+  if (!day || !f.known) return f;
+  var g = { known:true, min:f.min, max:f.max, via:f.via, norm:f.norm };
+  if (f.max < day)            { g.cls = 'now';  g.text = 'past window by then'; }
+  else if (f.max <= day + 1)  { g.cls = 'soon'; g.text = 'window ends ' + (f.max === 1 ? 'tomorrow' : dayShort(f.max)); }
+  else                        { g.cls = 'ok';   g.text = 'in window'; }
+  return g;
 }
 // A norm's wording for the storage spot the food is actually in: "Leafy greens: 3–7 days
 // refrigerated; 10–12 months frozen" reads as just the refrigerated part for a fridge item.
@@ -410,11 +527,14 @@ function basisLine(e) {
     return (bought ? bought + ' · ' : '') + 'use-by date you entered: ' + fmtKey(e.expires);
   }
   if (f.via === 'nodate') { return 'No purchase date on record, so no freshness estimate.'; }
+  // No guide for this food (or for where it's kept): say so and stop. It used to end "Add the
+  // printed date for an estimate", which asked Ren to fix a gap in our data, and loose herbs
+  // have no printed date to add (feedback 4).
   if (f.via === 'nonorm') {
-    return bought + ' · the shelf-life norms have no entry for ' + name.toLowerCase() + '. Add the printed date for an estimate.';
+    return bought + ' · we have no shelf-life guide for ' + name.toLowerCase() + ', so no estimate.';
   }
   if (f.via === 'nozone') {
-    return bought + ' · the norms give no window for ' + name.toLowerCase() + ' kept in the ' + zoneLabel(e.zone).toLowerCase() + '. Add the printed date for an estimate.';
+    return bought + ' · we have no shelf-life guide for ' + name.toLowerCase() + ' kept in the ' + zoneLabel(e.zone).toLowerCase() + ', so no estimate.';
   }
   if (f.via === 'needsprinted') {
     return bought + ' · ' + f.norm.basis + '. That counts from the printed date, so add it for an estimate.';
@@ -423,21 +543,36 @@ function basisLine(e) {
   return bought + ' · ' + normBasis(f.norm, e.zone) + ' · estimated use-by ' +
     (todayKey(from) === todayKey(to) ? fmtDate(from) : fmtDate(from) + '–' + fmtDate(to));
 }
-// Soonest-to-turn first; unknowns last, since nothing is known about them.
+// Soonest window end first (the late end, as the chips read), then the early end; unknowns last,
+// since nothing is known about them.
 function byUrgency(a, b) {
   var fa = freshness(a), fb = freshness(b);
   if (!fa.known && !fb.known) return 0;
   if (!fa.known) return 1;
   if (!fb.known) return -1;
-  return fa.min - fb.min;
+  return (fa.max - fb.max) || (fa.min - fb.min);
+}
+// Whether a pantry item belongs under Needs attention: a window ending within four days (red or
+// amber), or fridge and freezer food Ren could date and hasn't. Food we have no shelf-life guide
+// for is left out: there is nothing to act on, and asking for a date can't fill our gap.
+function needsAttention(e) {
+  if (!inStock(e)) return false;
+  var f = freshness(e);
+  if (f.known) return f.max <= 4;
+  return (f.via === 'nodate' || f.via === 'needsprinted') && e.zone !== 'cupboard';
 }
 
 // ═══════════════ STOCK ═══════════════
 // What the kitchen holds of one ingredient, across every pantry entry for it.
 // A variety counts toward the recipe food it stands in for: penne is Dry pasta to a recipe,
 // frozen strawberries are Strawberries (`counts` in the ingredient list).
+// Food the household's dietary settings rule out never counts, so it is never set aside, planned
+// around or deducted. A recipe can pass Dairy-free because a line reads "milk (dairy or
+// plant-based)"; the cow's milk in the fridge used to cover that line all the same.
 function entriesFor(ingId) {
+  var blocked = activeBlocks();
   return pantry.filter(function(p) {
+    if (blocked.length && ingBlocked(p.ing, blocked)) return false;
     if (p.ing === ingId) return true;
     var i = ingIndex[p.ing];
     return !!(i && i.counts === ingId);
@@ -484,7 +619,12 @@ function stockOf(ingId, unit, reserved) {
 }
 
 function lineIds(line) { return line.any || line.all || [line.id]; }
-function lineName(line) { return lineIds(line).map(ingName).join(line.all ? ' and ' : ' or '); }
+// A food as this household needs it: "Dairy-free milk" where the setting rules out the plain one.
+function foodName(id) {
+  var rule = dietRuleFor(id);
+  return rule ? rule + ' ' + ingName(id).toLowerCase() : ingName(id);
+}
+function lineName(line) { return lineIds(line).map(foodName).join(line.all ? ' and ' : ' or '); }
 // How much of a line this household's meal needs: the recipe's amount scaled from its estimated
 // servings to the household, doubled for a dinner that also makes the next day's lunch.
 // Everything that checks, sets aside or deducts food goes through here.
@@ -579,12 +719,16 @@ function restoreTaken(taken) {
     if (e && e.qty !== null) { e.qty = round2(e.qty + t.qty); }
   });
 }
-// Uses up a whole meal. Returns what was taken plus how many lines were used inside their window.
+// Uses up a whole meal. Returns what was taken plus how many lines were rescued: used in the last
+// RESCUE_DAYS days of their window. It used to count anything inside its window, so rice bought
+// last month and eggs bought yesterday counted alike, and after 24 meals Profile said "76 used
+// before they turned" (feedback 5). A rescue is food that was close to the end.
+var RESCUE_DAYS = 2;
 function deductRecipe(r) {
   var taken = [], rescued = 0;
   visibleLines(r).forEach(function(line) {
     var u = urgentEntryFor(line);
-    if (u) { var f = freshness(u); if (f.known && f.max >= 0) rescued++; }
+    if (u) { var f = freshness(u); if (f.known && f.max >= 0 && f.max <= RESCUE_DAYS) rescued++; }
     taken = taken.concat(deductLine(line));
   });
   return { taken:taken, rescued:rescued };
@@ -626,27 +770,36 @@ function reservationsBefore(idx) {
 
 // ─── requirements & feasibility ───
 // Walks the pending meals in order, setting food aside as it goes, and reports what's missing,
-// what runs short because an earlier meal needs it too, and what can't be counted.
+// what runs short because an earlier meal needs it too, and what can't be counted. `byIdx` holds
+// the same verdict for each meal, so a card can never say something the banner contradicts: a card
+// read "Nothing missing." while the banner listed that meal's chicken as short (feedback 2).
 function planNeeds() {
-  var res = {}, out = { short:[], missing:[], check:[], stale:[] }, seen = {};
+  var res = {}, out = { short:[], missing:[], check:[], stale:[], byIdx:{} }, seen = {};
   function add(list, key, item) { if (!seen[key]) { seen[key] = true; list.push(item); } }
   plan.forEach(function(entry, idx) {
     if (!activeEntry(entry)) return;
     var r = recipeById(entry.recipe);
     if (!r) return;
+    var day = Math.floor(idx / 3), mine = out.byIdx[idx] = { missing:[], short:[], stale:[], check:[] };
     visibleLines(r).forEach(function(line) {
       if (line.optional) return;
       var amount = amountFor(line);
       var c = coverage(line, amount, res);
-      var meal = dayLabel(Math.floor(idx / 3)).toLowerCase() + ' ' + r.type;
-      if (c.status === 'missing') add(out.missing, 'm:' + lineName(line), { name:lineName(line) });
-      else if (turnsBefore(line, Math.floor(idx / 3))) add(out.stale, 't:' + c.id + idx, { name:ingName(c.id), meal:meal });
-      else if (c.status === 'short') add(out.short, 's:' + c.id, { name:ingName(c.id), need:amount, have:c.stock.known, unit:line.unit, meal:meal });
-      else if (c.status === 'check') add(out.check, 'c:' + c.id, { name:ingName(c.id) });
+      var meal = (day < 2 ? dayLabel(day).toLowerCase() : dayLabel(day)) + ' ' + r.type;   // "Saturday", not "saturday"
+      if (c.status === 'missing') { mine.missing.push(lineName(line)); add(out.missing, 'm:' + lineName(line), { name:lineName(line) }); }
+      else if (turnsBefore(line, day)) { mine.stale.push(ingName(c.id)); add(out.stale, 't:' + c.id + idx, { name:ingName(c.id), meal:meal }); }
+      else if (c.status === 'short') { mine.short.push(ingName(c.id)); add(out.short, 's:' + c.id, { name:ingName(c.id), need:amount, have:c.stock.known, unit:line.unit, meal:meal }); }
+      else if (c.status === 'check') { mine.check.push(ingName(c.id)); add(out.check, 'c:' + c.id, { name:ingName(c.id) }); }
     });
     reserveRecipe(r, res);
   });
   return out;
+}
+// The foods a plan is short of, each named once however many meals or reasons it comes up under.
+function shortFoods(n) {
+  var names = [];
+  n.missing.concat(n.short, n.stale).forEach(function(x) { if (names.indexOf(x.name) === -1) names.push(x.name); });
+  return names;
 }
 function optionalMissing() {
   var names = [];
@@ -663,7 +816,7 @@ function optionalMissing() {
 }
 
 // ═══════════════ PLANNER ═══════════════
-// Fills the plan one slot at a time from all 300 approved recipes, setting food aside as it goes.
+// Fills the plan one slot at a time from every approved recipe, setting food aside as it goes.
 // Hard rules (never broken): a dietary restriction, a "not for us", and no recipe twice in the plan.
 // Weekday time limits (below) come next: only if nothing quick enough fits is a slower meal used.
 // Then, in order of weight: no missing or short ingredients; food closest to the end of its
@@ -813,18 +966,18 @@ function syncPlanShape() {
 // Says what is still missing rather than "already fits": re-planning can leave gaps when nothing in
 // the approved files is fully covered, and calling that a fit was untrue (T5).
 function replanNow() {
-  var n = planKitchen(true);
   closeDetail();
-  renderAll();
-  var needs = planNeeds(), gaps = needs.missing.length + needs.short.length + needs.stale.length;
-  var gapText = gaps + ' ingredient' + (gaps > 1 ? 's' : '') + ' you don’t have enough of';
-  if (n) {
-    showToast('Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ' around your kitchen.' +
-      (gaps ? ' The plan still needs ' + gapText + ': see the list on the Plan tab.' : ' The rest still work.'));
-  } else {
-    showToast(gaps ? 'Nothing in the approved recipes fits better. The plan still needs ' + gapText + ': see the list on the Plan tab.'
-                   : 'Your plan already fits your kitchen.');
-  }
+  var n = 0;
+  // The receipt names each meal it replaced: "Re-planned 2 meals" didn't say which (feedback 1).
+  var res = track('you re-planned around your kitchen', function() { n = planKitchen(true); });
+  // When nothing fits better it says so and names what to pick up, rather than pointing elsewhere
+  // (feedback 2).
+  var needs = planNeeds(), foods = shortFoods(needs).map(function(s) { return s.toLowerCase(); });
+  var still = foods.length ? ' Still short of ' + listOf(foods, 4) + '.'
+            : needs.check.length ? ' Every meal is covered, apart from amounts to check.' : ' Every meal is now covered.';
+  showToast((n ? 'Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ': see What changed.'
+               : foods.length ? 'No other recipe fits better.' : 'Your plan already works with your kitchen.') + still,
+    n ? { label:'Undo', ms:8000, fn:res.undo } : { label:'OK', ms:8000, fn:function() {} });
 }
 
 // ═══════════════ RECIPE IMAGERY ═══════════════
@@ -874,27 +1027,35 @@ function ratingBarHTML(id) {
 }
 function rateMeal(id, kind) {
   var p = getPref(id), msg;
+  if (kind === 'down' && p.vote !== 'down') {
+    // A disliked recipe is replaced rather than leaving a hole in the day. The message names the
+    // replacement: "Replaced with X" used to be overwritten at once by "Swapping it out", so Ren
+    // never saw what took the meal's place, and it showed even when nothing was swapped. The vote
+    // is cast inside the swap's receipt, so Undo takes back both.
+    var idx = -1;
+    for (var i=0;i<plan.length;i++) { if (isMealEntry(plan[i]) && plan[i].recipe === id && plan[i].status === 'pending') { idx = i; break; } }
+    closeDetail();
+    var name = (recipeById(id) || { name:'it' }).name;
+    var swapped = idx > -1 ? swapMeal(idx, 'you marked ' + name + ' “Not for us”', function() { p.vote = 'down'; }) : null;
+    if (swapped) {
+      showToast('👎 Not for us — replaced with ' + swapped.r.name + '. We won\'t suggest ' + name + ' again.',
+        { label:'Undo', fn:swapped.undo });
+    } else {
+      p.vote = 'down';
+      renderAll();
+      showToast('👎 Noted — we won\'t suggest ' + name + ' again.');
+    }
+    return;
+  }
   if (kind === 'fav') {
     p.fav = !p.fav;
     msg = p.fav ? '❤️ Favourited — this one comes back around more often.' : 'Un-favourited. Back to the regular rotation.';
   } else {
     p.vote = (p.vote === kind) ? null : kind;
-    if (p.vote === 'up')        { msg = '👍 Noted — more like this.'; }
-    else if (p.vote === 'down') { msg = '👎 Swapping it out — we won\'t suggest this again.'; }
-    else                        { msg = 'Rating cleared.'; }
+    msg = p.vote === 'up' ? '👍 Noted — more like this.' : 'Rating cleared.';
   }
   var bar = document.getElementById('ratingBar');
   if (bar) { bar.outerHTML = ratingBarHTML(id); }
-
-  if (p.vote === 'down') {
-    // A disliked recipe is replaced rather than leaving a hole in the day.
-    var idx = -1;
-    for (var i=0;i<plan.length;i++) { if (isMealEntry(plan[i]) && plan[i].recipe === id && plan[i].status === 'pending') { idx = i; break; } }
-    closeDetail();
-    if (idx > -1) { swapMeal(idx, true); }
-    showToast(msg);
-    return;
-  }
   renderAll();
   showToast(msg);
 }
@@ -937,62 +1098,105 @@ function renderBanner() {
     return;
   }
 
+  // Three states, and the headline never promises what the small print takes back (feedback 2).
+  // "No grocery trip required" used to sit above "Check you have enough mango, bread, carrots,
+  // lettuce and 6 more": an amount the app can't compare is not an amount it has checked.
+  //   covered   every meal still to cook is covered, amounts included
+  //   check     nothing is missing, but some amounts can't be compared, so "probably"
+  //   short     something is missing, runs short, or will be past its window by its meal
   var n = planNeeds();
   var pendingCount = plan.filter(activeEntry).length;
-  var gaps = n.short.length + n.missing.length + n.stale.length;
-  var check = n.check.length ? ' Check you have enough ' + listOf(n.check.map(function(c){ return c.name.toLowerCase(); }), 4) +
-                               ': the amount isn\'t recorded in a unit we can compare.' : '';
-  var changed = planSig !== kitchenSig();
-  var replan = (gaps || changed) && pendingCount
-    ? '<button class="btn ghost small" onclick="replanNow()">' + (changed ? 'Your kitchen changed: re-plan' : 'Re-plan around my kitchen') + '</button>' : '';
+  var foods = shortFoods(n);
+  var checks = n.check.map(function(c) { return c.name.toLowerCase(); });
+  var opt = optionalMissing();
+  var extras = opt.length ? ' Optional extras you don\'t have: ' + listOf(opt, 4) + '.' : '';
+  // Re-planning can only replace meals the kitchen doesn't cover, so it's offered only when there
+  // are some. It used to appear as "Your kitchen changed: re-plan" after a thumbs-down or a cooked
+  // meal, over a plan that was already covered, with nothing for it to do.
+  var replan = foods.length && pendingCount
+    ? '<div class="banner-acts"><button class="btn primary small" onclick="openSub(\'shop\')">What to pick up</button>' +
+      '<button class="btn ghost small" onclick="replanNow()">Re-plan</button></div>' : '';
 
-  if (gaps === 0) {
-    var opt = optionalMissing();
-    el.className = 'banner' + (n.check.length ? ' check' : '');
+  if (!foods.length && !checks.length) {
+    el.className = 'banner';
     el.innerHTML = '<span class="tick">' + TICK_SVG + '</span>' +
-      '<div class="text"><strong>No grocery trip required</strong><span>' +
-        (pendingCount ? pendingCount + ' meal' + (pendingCount > 1 ? 's' : '') + ' still to cook, covered by what you have.' : 'Every meal in this plan is logged. Nice work.') +
-        esc(check) + (opt.length ? ' Optional extras you don\'t have: ' + esc(listOf(opt, 4)) + '.' : '') +
-      '</span>' + replan + '</div>';
+      '<div class="text"><strong>No grocery trip needed</strong><span>' +
+        esc((pendingCount ? pendingCount + ' meal' + (pendingCount > 1 ? 's' : '') + ' still to cook, all covered by what you have.'
+                          : 'Every meal in this plan is logged. Nice work.') + extras) +
+      '</span></div>';
+    return;
+  }
+  if (!foods.length) {
+    el.className = 'banner check';
+    el.innerHTML = '<span class="tick">' + BANG_SVG + '</span>' +
+      '<div class="text"><strong>Probably covered: check ' + checks.length + ' amount' + (checks.length > 1 ? 's' : '') + '</strong><span>' +
+        esc('Everything is in your kitchen. Check you have enough ' + listOf(checks, 4) + ': your amounts are in units we ' +
+            'can\'t compare with the recipes.' + extras) +
+      '</span></div>';
     return;
   }
   // Shortfalls name the meal that runs out, because an earlier meal in the plan uses the same food.
+  // At most two are spelled out: at a household of five the sample kitchen ran to seventeen,
+  // one after another in small grey type. Each meal's card says what that meal is short of.
+  var missingLine = n.missing.length ? ['Not in your kitchen: ' + listOf(n.missing.map(function(m) { return m.name.toLowerCase(); }), 6)] : [];
   var lines = n.short.map(function(s) {
       return s.name + ': ' + s.meal + ' needs ' + kitchenQty(s.need, s.unit) + ', ' + kitchenQty(s.have, s.unit) + ' left after earlier meals';
     }).concat(n.stale.map(function(s) {
       return s.name + ' will be past its estimated window by ' + s.meal;
-    })).concat(n.missing.length ? ['Not in your kitchen: ' + listOf(n.missing.map(function(m) { return m.name.toLowerCase(); }), 6)] : []);
+    }));
+  var more = lines.length > 2 ? lines.length - 2 : 0;
+  lines = missingLine.concat(lines.slice(0, 2));
   el.className = 'banner short';
   el.innerHTML = '<span class="tick">' + BANG_SVG + '</span>' +
-    '<div class="text"><strong>' + gaps + ' gap' + (gaps > 1 ? 's' : '') + ' in this plan</strong>' +
-    '<span>' + esc(lines.join(' · ')) + '. Swap a meal, re-plan, or shop for the gap.' + esc(check) + '</span>' + replan + '</div>';
+    '<div class="text"><strong>Short of ' + foods.length + ' food' + (foods.length > 1 ? 's' : '') + '</strong>' +
+    '<span>' + esc(lines.join(' · ') + (more ? ' · and ' + more + ' more, shown on each meal' : '') +
+      '. Swap or re-plan those meals, or pick up what\'s missing.' +
+      (checks.length ? ' Also check ' + checks.length + ' amount' + (checks.length > 1 ? 's' : '') + ', shown on each meal.' : '')) + '</span>' + replan + '</div>';
 }
 function listOf(items, max) {
-  return items.length <= max ? items.join(', ') : items.slice(0, max).join(', ') + ' and ' + (items.length - max) + ' more';
+  if (items.length <= 1) return items.join('');
+  if (items.length <= max) return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+  return items.slice(0, max).join(', ') + ' and ' + (items.length - max) + ' more';
 }
 
-function mealChips(recipe) {
-  // Surface the most urgent ingredient this recipe uses, and the first thing it's missing.
-  var out = [], urgent = null, missing = null;
+// A meal card's chips: first its verdict, worked out exactly as the banner's (planNeeds), then the
+// ingredient closest to the end of its window, seen from the meal's own day. The card used to judge
+// "missing" on its own, ignoring amounts and what earlier meals set aside, so it could read
+// "all in window" and "Nothing missing." beside a banner listing that meal's chicken as short. And
+// "all in window" appeared when nothing in the meal had a date at all (feedback 2).
+function mealChips(recipe, day, verdict) {
+  var out = [];
+  function names(list) { return listOf(list.map(function(s) { return s.toLowerCase(); }), 1); }
+  if (verdict) {
+    if (verdict.missing.length) out.push({ cls:'now', text:'needs ' + names(verdict.missing) });
+    if (verdict.short.length)   out.push({ cls:'now', text:'short of ' + names(verdict.short) });
+    if (verdict.stale.length)   out.push({ cls:'now', text:names(verdict.stale) + ' past window by then' });
+    if (verdict.check.length)   out.push({ cls:'soon', text:'check ' + names(verdict.check) });
+    if (!out.length)            out.push({ cls:'ok', text:'nothing missing' });
+  }
+  var s = standInFor(recipe);
+  if (s) out.push({ cls:'soon', text:ingName(s.row.use).toLowerCase() + ' for ' + ingName(s.forId).toLowerCase() });
+  var urgent = null;
   visibleLines(recipe).forEach(function(line) {
     var e = urgentEntryFor(line);
-    if (!e) { if (!line.optional && !missing) missing = line; return; }
+    if (!e) return;
     var f = freshness(e);
-    if (f.known && (!urgent || f.min < urgent.f.min)) { urgent = { e:e, f:f }; }
+    if (f.known && (!urgent || f.max < urgent.f.max)) { urgent = { e:e, f:f }; }
   });
-  if (urgent && urgent.f.min <= 3) {
-    out.push({ cls:urgent.f.cls, text:'uses ' + ingName(urgent.e.ing).toLowerCase() + ' · ' + urgent.f.text });
-  } else if (!missing) {
-    out.push({ cls:'ok', text:'all in window' });
+  var on = urgent ? freshnessOn(urgent.e, day || 0) : null;
+  if (on && on.cls !== 'ok' && !(verdict && verdict.stale.length)) {
+    out.push({ cls:on.cls, text:'uses ' + ingName(urgent.e.ing).toLowerCase() + ' · ' + on.text });
   }
-  if (missing) { out.push({ cls:'now', text:'needs ' + lineName(missing).toLowerCase() }); }
   return out;
 }
+// Whether a meal's verdict has anything wrong with it.
+function verdictClear(v) { return !!v && !v.missing.length && !v.short.length && !v.stale.length && !v.check.length; }
 
 function renderMeals() {
   var container = document.getElementById('mealCards');
   container.innerHTML = '';
   var spot = (currentDay === 1) ? nextMealSlot() : -1;
+  var needs = planNeeds();
 
   MEAL_TYPES.forEach(function(type, slot) {
     var idx = planIndex(currentDay, type);
@@ -1012,11 +1216,20 @@ function renderMeals() {
     card.setAttribute('tabindex', '0');
     card.onclick = function() { openDetail(idx); };
 
-    var chips = left ? chipHTML('ok', 'nothing to cook') : mealChips(r).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
+    // A cooked or skipped meal carries its badge and no chips: they were worked out from today's
+    // pantry, after the meal took its food, so a cooked dinner used to say "needs chicken".
+    var verdict = needs.byIdx[idx];
+    var chips = left ? chipHTML('ok', 'nothing to cook')
+      : (entry.status !== 'pending' || entry.dietBlocked) ? ''
+      : mealChips(r, Math.floor(idx / 3), verdict).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
     // Why this meal is on the plan, on the card itself. Only while it's still Ren's to decide:
-    // once cooked or skipped the reason is history, not something to act on.
-    var why = (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3));
+    // once cooked or skipped the reason is history, not something to act on. A meal the app changed
+    // says what it was and why instead, until Ren opens it (feedback 1).
+    var ch = entry.changed && entry.status === 'pending' ? entry.changed : null;
+    var why = ch ? changedLine(ch)
+      : (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3), 'card', verdict);
     var badge = '';
+    if (ch)                          { badge = '<span class="state-badge changed">changed</span>'; }
     if (entry.status === 'accepted') { badge = '<span class="state-badge cooked">✓ ' + (left ? 'eaten' : 'cooked') + '</span>'; }
     if (entry.status === 'skipped')  { badge = '<span class="state-badge skipped">skipped</span>'; }
     if (entry.dietBlocked)           { badge = '<span class="state-badge blocked">⚠ doesn\'t fit</span>'; }
@@ -1031,7 +1244,7 @@ function renderMeals() {
       '<div class="meal-info">' +
         '<h4>' + r.name + '</h4>' +
         '<p class="meta">' + (left ? 'Lunch · leftovers from last night\'s dinner' : Type + ' · ' + r.time) + '</p>' +
-        (why ? '<p class="meal-why">' + esc(why) + '</p>' : '') +
+        (why ? '<p class="meal-why' + (ch ? ' changed' : '') + '">' + esc(why) + '</p>' : '') +
         '<div class="chip-row">' + chips + '</div>' +
       '</div>';
 
@@ -1083,24 +1296,21 @@ function renderPantry() {
     return;
   }
 
-  // Needs attention: anything near or past its window, plus fridge and freezer food whose
-  // freshness can't be estimated — it might be fine, but nobody can say.
-  var attention = pantry.filter(function(e) {
-    if (!inStock(e)) return false;
-    var f = freshness(e);
-    return f.known ? f.min <= 3 : e.zone !== 'cupboard';
-  }).sort(byUrgency);
+  // Needs attention: anything within four days of the end of its window, plus fridge and freezer
+  // food Ren could date and hasn't (see needsAttention).
+  var attention = pantry.filter(needsAttention).sort(byUrgency);
 
   // Needs attention is a zone row like the three storage zones, so the tab reads as one list
   // instead of a flat block sitting above a set of rows.
   //
   // It closes like them too, which took some deciding. The spec wants the freshness flag
   // "prominent enough that skipping it takes a deliberate action", and opening by default looked
-  // like the safe reading — until it was measured: the sample kitchen puts 59 items in here, so
-  // open-by-default just rebuilds the wall this change exists to remove, and a wall of 59 rows is
+  // like the safe reading — until it was measured: the sample kitchen put 59 items in here, so
+  // open-by-default just rebuilt the wall this change exists to remove, and a wall of 59 rows is
   // skimmed, not read. What has to be unmissable is the signal, not the detail. So the row itself
-  // carries the worst chip in its own colour — "21 use today" — and that is what Ren has to
-  // deliberately ignore. The per-item basis is one tap away.
+  // carries the worst chip in its own colour, and that is what Ren has to deliberately ignore.
+  // The per-item basis is one tap away. (Judging by the late end of each window, feedback 4,
+  // brought the sample kitchen's list down from 59 items.)
   var attOpen = openZones.attention;
 
   // Three groups, because they ask three different things of Ren.
@@ -1113,18 +1323,35 @@ function renderPantry() {
   //
   // It matters more now that an undated receipt no longer invents today's date: items legitimately
   // arrive with nothing on record, and this is where Ren closes that gap.
-  var planned = plannedIngredientIds();
+  var plannedOn = plannedDays();
   var dated   = attention.filter(function(e) { return freshness(e).known; });
   var undated = attention.filter(function(e) { return !freshness(e).known; });
-  var atRisk  = dated.filter(function(e) { return !planned[e.ing]; });
-  var covered = dated.filter(function(e) { return planned[e.ing]; });
+  var atRisk  = dated.filter(function(e) { return plannedOn[e.ing] === undefined; });
+  var covered = dated.filter(function(e) { return plannedOn[e.ing] !== undefined; });
 
+  // Each row says what to do about it, not only how close it is (feedback 4): cook it, freeze it,
+  // or check it. Never what condition it's in: the app has only read a date.
+  var todo = function(e) {
+    var f = freshness(e), day = plannedOn[e.ing];
+    if (f.max < 0) return 'Past its estimated window. Check it before you use it.';
+    if (day !== undefined) {
+      var when = day === 0 ? 'today' : day === 1 ? 'tomorrow' : 'on ' + dayLabel(day);
+      return f.max < day ? 'Your plan uses it ' + when + ', after its window ends: swap or re-plan that meal.'
+                         : 'Your plan uses it ' + when + '.';
+    }
+    if (dietRuleFor(e.ing)) return 'Your ' + dietRuleFor(e.ing) + ' setting keeps it out of meals.';
+    return (f.max <= 1 ? 'Use it tonight' : 'Use it in a meal soon') + (canFreeze(e) ? ', or freeze it.' : '.');
+  };
   var row = function(e, act) {
-    var f = freshness(e);
+    var f = freshness(e), ruled = !!dietRuleFor(e.ing);
     return '<div class="zone-line" onclick="event.stopPropagation();openEditItem(\'' + e.id + '\')">' +
       '<div><div class="zl-name">' + esc(ingName(e.ing)) + '</div>' +
       '<div class="zl-sub">' + esc(zoneLabel(e.zone).toLowerCase() + ' · ' + basisLine(e)) + '</div>' +
-      (act ? '<button class="btn ghost small use-it" onclick="event.stopPropagation();planAround(\'' + e.id + '\')">Use it in a meal</button>' : '') +
+      (f.known ? '<div class="zl-todo">' + esc(todo(e)) + '</div>' : '') +
+      (act && f.max >= 0 && !ruled ? '<div class="zl-acts">' +
+        '<button class="btn ghost small use-it" onclick="event.stopPropagation();planAround(\'' + e.id + '\')">Use it in a meal</button>' +
+        (canFreeze(e) ? '<button class="btn ghost small use-it" onclick="event.stopPropagation();freezeItem(\'' + e.id + '\')">Freeze it</button>' : '') +
+      '</div>' : '') +
       '</div>' +
       '<div class="zl-right"><div class="zl-qty">' + entryQty(e) + '</div>' + chipHTML(f.cls, f.text) + '</div>' +
     '</div>';
@@ -1150,7 +1377,8 @@ function renderPantry() {
   // The collapsed row carries whatever is most worth acting on. Food about to turn that nothing
   // is planning to use comes first; with none of that, a gap in the record is the next most
   // useful thing to say. "All in your plan" is only honest once both are clear.
-  var headChip = atRisk.length  ? chipHTML('now', atRisk.length + ' not in your plan')
+  var worst = atRisk.some(function(e) { return freshness(e).cls === 'now'; }) ? 'now' : 'soon';
+  var headChip = atRisk.length  ? chipHTML(worst, atRisk.length + ' not in your plan')
                : undated.length ? chipHTML('unknown', undated.length + ' need a date')
                : dated.length   ? chipHTML('ok', 'all in your plan') : '';
 
@@ -1169,7 +1397,8 @@ function renderPantry() {
   var inStockCount = pantry.filter(inStock).length;
   if (inStockCount > 0 && inStockCount <= 5) {
     notices.innerHTML = '<div class="empty-card" style="margin-top:var(--s4);"><strong>Supplies running low</strong>' +
-      '<span>Only ' + inStockCount + ' item' + (inStockCount === 1 ? '' : 's') + ' left. Add your food items with the <b>+</b> button or scan a receipt.</span></div>';
+      '<span>Only ' + inStockCount + ' item' + (inStockCount === 1 ? '' : 's') + ' left. Add your food items with the <b>+</b> button or scan a receipt.</span>' +
+      '<button class="btn ghost small" onclick="openSub(\'shop\')">What to pick up</button></div>';
   }
 
   zones.innerHTML = ZONES.map(function(z) {
@@ -1205,6 +1434,44 @@ function plannedIngredientIds() {
   });
   return out;
 }
+// The first day (0 = today) a meal still to cook uses each ingredient, for "Your plan uses it
+// tomorrow" under Needs attention.
+function plannedDays() {
+  var out = {};
+  plan.forEach(function(e, idx) {
+    if (!activeEntry(e)) return;
+    var r = recipeById(e.recipe), day = Math.floor(idx / 3);
+    if (!r) return;
+    visibleLines(r).forEach(function(l) {
+      lineIds(l).forEach(function(id) {
+        if (out[id] === undefined || day < out[id]) out[id] = day;
+        var i = ingIndex[id];
+        // A variety in the pantry (frozen salmon) is used by a line that names the food it counts as.
+        INGREDIENTS.forEach(function(v) { if (v.counts === id && (out[v.id] === undefined || day < out[v.id])) out[v.id] = day; });
+        if (i && i.counts && (out[i.counts] === undefined || day < out[i.counts])) out[i.counts] = day;
+      });
+    });
+  });
+  return out;
+}
+
+// Freezing is the other way to keep food in time, and the norms hold a freezer window for most
+// fridge foods. Offered only inside the window: freezing doesn't take food back into it.
+function canFreeze(e) {
+  if (e.zone !== 'fridge') return false;
+  var f = freshness(e), ing = ingById(e.ing), norm = ing && ing.norm ? NORMS[ing.norm] : null;
+  return f.known && f.max >= 0 && !!(norm && norm.freezer && !norm.printed);
+}
+function freezeItem(entryId) {
+  var e = entryById(entryId);
+  if (!e || !canFreeze(e)) return;
+  e.zone = 'freezer';
+  renderAll();
+  var f = freshness(e), name = ingName(e.ing).toLowerCase();
+  showToast('Moved the ' + name + ' to the freezer.' + (f.known && f.via === 'norm' ? ' ' + normBasis(f.norm, 'freezer') + '.' : ''),
+    { label:'Undo', fn:function() { e.zone = 'fridge'; renderAll(); showToast('The ' + name + ' is back in the fridge.'); } });
+}
+
 function recipeUses(r, ingId) {
   return visibleLines(r).some(function(l) { return lineIds(l).indexOf(ingId) > -1; });
 }
@@ -1239,7 +1506,11 @@ function nameList(names) {
 // reasons it actually is.
 var NEAR_MISS_MAX = 2;   // beyond this it stops being a near miss and becomes a shopping list
 
-function planAround(entryId, checked) {
+// It also replaced meals Ren had picked herself: one tap replaced tonight's dinner, and a second
+// tap, for another food, replaced that one too (feedback 1). Meals the planner chose are used
+// first now; a meal Ren chose (by Swap, by "Use it in a meal", or by cooking her own lunch) is only
+// replaced after she says so (`replaceChosen`).
+function planAround(entryId, checked, replaceChosen) {
   var e = entryById(entryId);
   if (!e) return;
   var name = ingName(e.ing).toLowerCase();
@@ -1255,32 +1526,48 @@ function planAround(entryId, checked) {
     return;
   }
 
+  var rule = dietRuleFor(e.ing);
+  if (rule) { showToast('Your ' + rule + ' setting rules out ' + name + ', so the plan won’t use it.'); return; }
   var uses = recipes.filter(function(r) { return recipeUses(r, e.ing); });
-  if (!uses.length) { showToast('No approved recipe uses ' + name + ' yet.'); return; }
+  if (!uses.length) { showToast('None of our recipes use ' + name + ' yet.'); return; }
   if (plannedIngredientIds()[e.ing]) { showToast('Your plan already uses your ' + name + '.'); return; }
 
   var best = null, nearest = null, fitAny = false;
-  plan.forEach(function(slot, idx) {
-    if (!isMealEntry(slot) || slot.status !== 'pending' || slot.dietBlocked) return;
-    var type = MEAL_TYPES[idx % 3], day = Math.floor(idx / 3);
-    var others = plan.map(function(x, i) { return i === idx ? null : x.recipe; }).filter(Boolean);
-    var reserved = reservationsExcept(idx);
-    uses.forEach(function(r) {
-      if (r.type !== type || !eligible(r, type) || others.indexOf(r.id) > -1) return;
-      if (!fitsTime(r, day)) return;
-      fitAny = true;
-      var s = scoreRecipe(r, day, reserved), gaps = missingFor(r, day, reserved);
-      var cand = { idx:idx, r:r, score:s.score, day:day, gaps:gaps };
-      if (!gaps.length) {
-        if (!best || s.score > best.score) best = cand;
-      } else if (!nearest || gaps.length < nearest.gaps.length ||
-                 (gaps.length === nearest.gaps.length && s.score > nearest.score)) {
-        nearest = cand;
-      }
+  function search(allowChosen) {
+    best = null; nearest = null;
+    plan.forEach(function(slot, idx) {
+      if (!isMealEntry(slot) || slot.status !== 'pending' || slot.dietBlocked) return;
+      if (slot.chosen && !allowChosen) return;
+      var type = MEAL_TYPES[idx % 3], day = Math.floor(idx / 3);
+      var others = plan.map(function(x, i) { return i === idx ? null : x.recipe; }).filter(Boolean);
+      var reserved = reservationsExcept(idx);
+      uses.forEach(function(r) {
+        if (r.type !== type || !eligible(r, type) || others.indexOf(r.id) > -1) return;
+        if (!fitsTime(r, day)) return;
+        fitAny = true;
+        var s = scoreRecipe(r, day, reserved), gaps = missingFor(r, day, reserved);
+        var cand = { idx:idx, r:r, score:s.score, day:day, gaps:gaps };
+        if (!gaps.length) {
+          if (!best || s.score > best.score) best = cand;
+        } else if (!nearest || gaps.length < nearest.gaps.length ||
+                   (gaps.length === nearest.gaps.length && s.score > nearest.score)) {
+          nearest = cand;
+        }
+      });
     });
-  });
+    return best || (nearest && nearest.gaps.length <= NEAR_MISS_MAX ? nearest : null);
+  }
 
-  var pick = best || (nearest && nearest.gaps.length <= NEAR_MISS_MAX ? nearest : null);
+  var pick = search(false);
+  if (!pick) {
+    pick = search(true);
+    if (pick && !replaceChosen) {
+      showToast('The best fit would replace ' + slotName(pick.idx, true) + ', ' + recipeById(plan[pick.idx].recipe).name +
+        ', which you picked. Replace it with ' + pick.r.name + '?',
+        { label:'Replace it', ms:10000, fn:function() { planAround(entryId, true, true); } });
+      return;
+    }
+  }
   if (!pick) {
     if (nearest) {
       showToast(uses.length + ' recipe' + (uses.length === 1 ? '' : 's') + ' use ' + name +
@@ -1293,20 +1580,19 @@ function planAround(entryId, checked) {
     return;
   }
 
-  var slot = plan[pick.idx], was = recipeById(slot.recipe);
-  slot.recipe = pick.r.id;
-  slot.status = 'pending';
-  delete slot.tried;                     // a fresh rotation from the new meal
-  renderAll();
-  showToast(DAY_WORDS[pick.day] + ' ' + MEAL_TYPES[pick.idx % 3] + ' is now ' + pick.r.name +
-    ', which uses your ' + name + '.' +
+  // Ren is on the Pantry tab, away from the meal this replaces, so the receipt names it too and
+  // the card stays marked until she opens it.
+  var slot = plan[pick.idx];
+  var res = track('you asked to use your ' + name, function() {
+    slot.recipe = pick.r.id;
+    slot.status = 'pending';
+    slot.chosen = true;
+    delete slot.tried;                   // a fresh rotation from the new meal
+  }, { acted:pick.idx, include:true });
+  showToast(slotName(pick.idx) + ' is now ' + pick.r.name + ', which uses your ' + name + '.' +
     (pick.gaps.length ? ' You’ll need ' + nameList(pick.gaps) + '.' : ''),
-    { label:'Undo', fn:function() {
-      slot.recipe = was.id; delete slot.tried; renderAll();
-      showToast('Put ' + was.name + ' back.');
-    } });
+    { label:'Undo', fn:res.undo });
 }
-var DAY_WORDS = ['Today’s', 'Tomorrow’s', 'Day 3’s'];
 
 var openZones = { attention:false, fridge:false, freezer:false, cupboard:false };
 function toggleZone(key) { openZones[key] = !openZones[key]; renderPantry(); }
@@ -1393,11 +1679,37 @@ function filterPantrySearch() {
 // ═══════════════ DETAIL VIEW ═══════════════
 var detailIndex = null;
 
+// What the household's dietary settings change in this recipe, said just above the steps. The
+// ingredient list already leaves out what a setting rules out, but the steps are the recipe's own
+// words and can't be rewritten, so they still say "top with feta" or "whisk in the milk".
+function dietNoteHTML(r) {
+  var blocked = activeBlocks();
+  if (!blocked.length) return '';
+  var says = [];
+  function add(s) { if (says.indexOf(s) === -1) says.push(s); }
+  r.ing.forEach(function(line) {
+    var ids = lineIds(line);
+    var bad = ids.filter(function(id) { return ingBlocked(id, blocked); });
+    if (!bad.length) return;
+    var badNames = nameList(bad.map(ingName));
+    if (line.optional) { add('Leave out the ' + badNames + ' where the steps mention ' + (bad.length > 1 ? 'them' : 'it') + '.'); return; }
+    var ok = ids.filter(function(id) { return bad.indexOf(id) === -1; });
+    if (ok.length) { add('Use the ' + nameList(ok.map(ingName)) + ' rather than the ' + badNames + '.'); return; }
+    bad.forEach(function(id) {
+      add('Use ' + foodName(id).toLowerCase() + ' where the recipe says ' + ingName(id).toLowerCase() + '.');
+    });
+  });
+  if (!says.length) return '';
+  return '<div class="note-card diet-note"><b>Your ' + esc(activeDietLabels().join(' and ')) + ' setting</b><br>' +
+    esc(says.join(' ')) + '</div>';
+}
+
 // The numbered steps, exactly as the approved database writes them. Tap a step to tick it off
 // while cooking (not saved: it resets when the screen closes).
 function methodHTML(r) {
   if (!r.steps.length) return '';
-  return '<div class="section-label">How to make it <span class="method-tip">tap a step when it\'s done</span></div>' +
+  return dietNoteHTML(r) + standInNoteHTML(r) +
+    '<div class="section-label">How to make it <span class="method-tip">tap a step when it\'s done</span></div>' +
     '<ol class="method">' + r.steps.map(function(s, i) {
       return '<li onclick="this.classList.toggle(\'done\')"><span class="step-n">' + (i + 1) + '</span><span>' + esc(s) + '</span></li>';
     }).join('') + '</ol>';
@@ -1419,10 +1731,9 @@ function nutritionHTML(r) {
         cell('Fibre', n.fibre, 'g') + cell('Sodium', n.sodium, 'mg') +
       '</div>' +
     '</div>' +
-    '<p class="field-hint">Estimated for about ' + n.serves + ' serving' + (n.serves > 1 ? 's' : '') +
-      ', from the ingredient amounts and typical food-composition values. The recipe file doesn\'t state servings or nutrition. ' +
-      'Optional ingredients and anything without an amount aren\'t counted' +
-      (n.cover < 100 ? ' (' + n.cover + '% of this recipe\'s ingredient lines were)' : '') + '.</p>';
+    '<p class="field-hint">Our estimate, from the ingredient amounts and typical values, with the recipe making about ' +
+      n.serves + ' serving' + (n.serves > 1 ? 's' : '') + '. Optional ingredients and anything without an amount aren\'t counted' +
+      (n.cover < 100 ? ' (' + n.cover + '% of the ingredients were)' : '') + '.</p>';
 }
 
 // The amount this household's plan uses, beside the recipe's own wording, when scaling changes it.
@@ -1432,13 +1743,15 @@ function scaledNote(line) {
   return ' <span class="scaled">→ ' + esc(kitchenQty(a, line.unit)) + '</span>';
 }
 // What the recipe's amounts are scaled to, in plain words, under the ingredients.
+// The one caveat about freshness on this screen sits here, beside the dates it qualifies.
 function scaleHint(r) {
-  if (!r.nut || !r.nut.serves) return 'Amounts as the recipe file writes them.';
+  var fresh = ' Freshness dates are estimates from when you bought each food, not a check of the food itself.';
+  if (!r.nut || !r.nut.serves) return 'Amounts as the recipe writes them.' + fresh;
   var people = settings.household, n = servingsFor(r);
   var who = people + ' ' + (people === 1 ? 'person' : 'people') + (n > people ? ', plus tomorrow\'s leftovers lunch' : '');
-  return 'The recipe file\'s amounts make about ' + r.nut.serves + ' serving' + (r.nut.serves > 1 ? 's' : '') + ' (our estimate). ' +
-    (Math.abs(n - r.nut.serves) < 1e-6 ? 'That fits your household of ' + who + ', so they\'re used as written.'
-      : 'Your plan scales them for ' + who + ' (shown with →), and that\'s what the kitchen check and Cooked it use.');
+  return 'The recipe makes about ' + r.nut.serves + ' serving' + (r.nut.serves > 1 ? 's' : '') + ' (our estimate). ' +
+    (Math.abs(n - r.nut.serves) < 1e-6 ? 'That fits your household of ' + who + ', so amounts are as written.'
+      : 'Amounts are scaled for ' + who + ' (shown with →), and that\'s what the kitchen check and Cooked it use.') + fresh;
 }
 
 // One row per line of the recipe, in the recipe's own words, with what the kitchen has for it.
@@ -1446,13 +1759,19 @@ function scaleHint(r) {
 function ingredientRowsHTML(r, idx) {
   var entry = plan[idx];
   var reserved = activeEntry(entry) ? reservationsBefore(idx) : null;
-  var visible = {};
+  var visible = {}, s = standInFor(r);
   visibleLines(r).forEach(function(l) { visible[l.text] = l; });
   var html = '', missing = [];
   r.all.forEach(function(orig) {
     if (orig.staple) {
       html += '<div class="ingredient-row"><div><div class="ingredient-name">' + esc(orig.text) + '</div>' +
-        '<div class="ingredient-basis">Staple, assumed on hand</div></div></div>';
+        '<div class="ingredient-basis">Staple, assumed on hand (change which in Profile &rsaquo; Staples you keep)</div></div></div>';
+      return;
+    }
+    // A stand-in that is itself a staple takes the line off the shopping check altogether.
+    if (s && s.staple && s.line.text === orig.text) {
+      html += '<div class="ingredient-row"><div><div class="ingredient-name">' + esc(orig.text) + '</div>' +
+        '<div class="ingredient-basis">' + esc(standInText(s)) + '</div></div>' + chipHTML('soon', 'stand-in') + '</div>';
       return;
     }
     var line = visible[orig.text];
@@ -1467,24 +1786,39 @@ function ingredientRowsHTML(r, idx) {
         chipHTML(line.optional ? 'unknown' : 'now', line.optional ? 'skip it' : 'missing') + '</div>';
       return;
     }
-    var e = urgentEntryFor(line), f = freshness(e);
+    var e = urgentEntryFor(line), f = freshnessOn(e, Math.floor(idx / 3));
     var chip = { ok:[f.cls, f.text], check:['soon', 'check amount'], short:['now', 'short'] }[c.status];
     var note = '';
     if (activeEntry(entry) && turnsBefore(line, Math.floor(idx / 3))) {
-      chip = ['now', 'turned by then'];
+      chip = ['now', 'past window by then'];
       note = ' · <b>past its estimated window before this meal\'s day, so swap or re-plan</b>';
     }
     if (c.status === 'short') {
       note = ' · <b>' + fmtQty(c.stock.known, line.unit) + ' left' + (reserved && reserved[c.id] ? ' after earlier meals in the plan' : ' on hand') + '</b>';
     }
     if (c.status === 'check') { note = ' · <b>how much you have isn\'t recorded in a comparable unit, so check before cooking</b>'; }
+    var sub = line.sub ? '<div class="ingredient-sub">' + esc(standInText({ forId:line.sub.forId, row:{ use:line.sub.use, note:line.sub.note } })) + '</div>' : '';
     html += '<div class="ingredient-row"><div>' +
-        '<div class="ingredient-name">' + esc(line.text) + opt + scaledNote(line) + '</div>' +
+        '<div class="ingredient-name">' + esc(line.text) + opt + scaledNote(line) + '</div>' + sub +
         '<div class="ingredient-basis">' + esc(e && e.ing !== c.id ? ingName(e.ing) + ' (counts as ' + ingName(c.id).toLowerCase() + ')' : ingName(c.id)) +
           ': ' + esc(basisLine(e)) + note + '</div>' +
-      '</div>' + chipHTML(chip[0], chip[1]) + '</div>';
+      '</div>' + chipHTML(line.sub && c.status === 'ok' ? 'soon' : chip[0], line.sub && c.status === 'ok' ? 'stand-in' : chip[1]) + '</div>';
   });
   return { html:html, missing:missing };
+}
+// How a stand-in is said: the food asked for, what's used instead, where that comes from, and the
+// row's own note on doing it.
+function standInText(s) {
+  return 'No ' + ingName(s.forId).toLowerCase() + ', so this uses your ' + ingName(s.row.use).toLowerCase() +
+    (assumedStaple(s.row.use) ? ' (a staple)' : '') + ' instead, a stand-in from our list.' +
+    (s.row.note ? ' ' + s.row.note : '');
+}
+// Said again just above the steps, which still name the food the recipe asked for.
+function standInNoteHTML(r) {
+  var s = standInFor(r);
+  if (!s) return '';
+  return '<div class="note-card diet-note"><b>Stand-in: ' + esc(ingName(s.row.use).toLowerCase()) + ' for ' +
+    esc(ingName(s.forId).toLowerCase()) + '</b><br>' + esc(standInText(s)) + '</div>';
 }
 // A one-line reason the planner picked this meal, from the kitchen, never made up.
 //
@@ -1500,14 +1834,16 @@ function ingredientRowsHTML(r, idx) {
 // in the future tense and is avoided for the same reason: a stated spoilage date is the single
 // biggest driver of food being binned while it is still fine.
 //
-// `where` is 'detail' for the detail view, anything else for the card.
-function whyLine(r, dayIdx, where) {
-  var urgent = null, missing = false;
+// `where` is 'detail' for the detail view, anything else for the card. `verdict` is the meal's
+// entry in planNeeds().byIdx: "Nothing missing." is said only when that verdict is clear, so the
+// card, the meal screen and the banner agree (feedback 2).
+function whyLine(r, dayIdx, where, verdict) {
+  var urgent = null, missing = verdict ? !verdictClear(verdict) : false;
   visibleLines(r).forEach(function(line) {
     var e = urgentEntryFor(line);
-    if (!e) { if (!line.optional) missing = true; return; }
-    var f = freshness(e);
-    if (f.known && f.max >= 0 && f.min <= 3 && (!urgent || f.min < urgent.f.min)) urgent = { e:e, f:f };
+    if (!e) { if (!line.optional && !verdict) missing = true; return; }
+    var f = freshness(e), on = freshnessOn(e, dayIdx || 0);
+    if (f.known && f.max >= (dayIdx || 0) && on.cls !== 'ok' && (!urgent || f.max < urgent.f.max)) urgent = { e:e, f:f };
   });
 
   if (urgent) {
@@ -1534,10 +1870,20 @@ function whyLine(r, dayIdx, where) {
   if (!missing) {
     var lim = (typeof dayIdx === 'number') ? timeLimit(r.type, dayIdx) : null;
     if (lim && r.mins && r.mins <= lim) { return 'Quick enough for your ' + lim + '-minute ' + r.type + '.'; }
-    return 'Nothing missing.';
+    return where === 'detail' ? 'Nothing missing.' : '';   // the card's chip already says so
   }
   if (p.vote === 'up') return 'You liked this one before.';
   return '';
+}
+
+// A changed meal's note, shown once at the top of its screen; opening it counts as seeing it.
+function seenChangeHTML(entry) {
+  if (!entry.changed) return '';
+  var html = '<div class="change-note">' + esc(changedLine(entry.changed)) + '</div>';
+  delete entry.changed;
+  saveState();
+  renderMeals();                          // the card underneath drops its mark
+  return html;
 }
 
 function openDetail(idx) {
@@ -1554,10 +1900,9 @@ function openDetail(idx) {
   document.getElementById('detailBackLabel').textContent = dayLabel(day) + ' · ' + r.type;
 
   var rows = ingredientRowsHTML(r, idx);
-  var html = ratingBarHTML(r.id) +
+  var html = seenChangeHTML(entry) + ratingBarHTML(r.id) +
     '<div class="detail-facts">' +
       '<div class="detail-fact">⏱ ' + r.time + '</div>' +
-      '<div class="detail-fact">Recipe #' + r.n + '</div>' +
     '</div>' +
     '<div class="section-label" style="margin-top:0;">Ingredients &middot; from your kitchen</div>' +
     '<div class="ingredient-card">' + rows.html + '</div>' +
@@ -1571,7 +1916,7 @@ function openDetail(idx) {
 
   if (entry.dietBlocked) {
     html += '<div class="missing-callout"><b>Doesn\'t fit your dietary settings</b><span>' +
-      'Nothing for ' + r.type + ' in the approved recipe files fits ' +
+      'None of our ' + recipeCount(r.type) + ' ' + r.type + ' recipes fit ' +
       activeDietLabels().join(' + ') + '. Relax a restriction to fill this slot.</span></div>' +
       '<div class="actions"><button class="btn ghost" onclick="switchTab(\'profileTab\');openSub(\'dietary\');">Review dietary settings</button></div>';
   } else if (entry.status === 'accepted') {
@@ -1588,15 +1933,14 @@ function openDetail(idx) {
       '</div>' +
       '<p class="detail-note">Skipped. Nothing was deducted from your pantry.</p>';
   } else {
-    var why = whyLine(r, Math.floor(idx / 3), 'detail');
+    var why = whyLine(r, Math.floor(idx / 3), 'detail', planNeeds().byIdx[idx]);
     html += '<div class="actions">' +
         '<button class="btn primary" onclick="acceptMeal(' + idx + ')">Cooked it</button>' +
         '<button class="btn ghost" onclick="swapMeal(' + idx + ')">Swap</button>' +
         '<button class="btn quiet" onclick="skipMeal(' + idx + ')">Skip</button>' +
       '</div>' +
       '<p class="detail-note">' + (why ? esc(why) + '<br><br>' : '') +
-        '<b>Cooked it</b> takes what this recipe uses out of your pantry, so tap it once the meal is made. Swap and Skip take nothing. ' +
-        'Freshness windows are estimates from purchase dates and the norms in <i>shelf-life-norms.md</i>, not a check of the food itself.' +
+        '<b>Cooked it</b> takes what this recipe uses out of your pantry, so tap it once the meal is made. Swap and Skip take nothing.' +
       '</p>';
   }
   html += nutritionHTML(r);
@@ -1612,7 +1956,8 @@ function openLeftoverDetail(idx) {
   document.getElementById('detailHero').style.background = heroFor(r);
   document.getElementById('detailTitle').textContent = 'Leftovers: ' + r.name;
   document.getElementById('detailBackLabel').textContent = dayLabel(day) + ' · lunch';
-  var html = '<div class="detail-facts"><div class="detail-fact">Reheat</div><div class="detail-fact">From ' + esc(dayLabel(day - 1).toLowerCase()) + '\'s dinner</div></div>';
+  var html = seenChangeHTML(entry) +
+    '<div class="detail-facts"><div class="detail-fact">Reheat</div><div class="detail-fact">From ' + esc(dayLabel(day - 1).toLowerCase()) + '\'s dinner</div></div>';
   if (entry.status === 'accepted') {
     html += '<div class="actions"><button class="btn ghost" onclick="unskip(' + idx + ')">Undo</button></div>' +
       '<p class="detail-note">Marked eaten. Nothing was deducted: the ingredients were counted when the dinner was cooked.</p>';
@@ -1643,16 +1988,276 @@ function eatLeftovers(idx) {
 function cookLunchInstead(idx) {
   var others = plan.map(function(e, i) { return i !== idx && isMealEntry(e) ? e.recipe : null; }).filter(Boolean);
   var pick = pickRecipe('lunch', Math.floor(idx / 3), reservationsExcept(idx), others);
-  if (!pick) { showToast('No lunch in the approved files fits your settings.'); return; }
-  plan[idx] = { recipe:pick.id, status:'pending', ownLunch:true };
-  closeDetail(); renderAll();
-  showToast('Planned ' + pick.name + ' for lunch instead.');
+  if (!pick) { showToast('No lunch in our recipes fits your settings.'); return; }
+  closeDetail();
+  var res = track('you chose to cook ' + slotName(idx, true), function() {
+    plan[idx] = { recipe:pick.id, status:'pending', ownLunch:true, chosen:true };
+  }, { acted:idx });
+  showToast('Planned ' + pick.name + ' for lunch instead.' + changeCount(res), { label:'Undo', fn:res.undo });
 }
 
 function closeDetail() {
   document.getElementById('detailOverlay').classList.remove('open');
   detailIndex = null;
   if (currentTab !== 'profileTab') { document.getElementById('fab').style.display = 'flex'; }
+}
+
+// ═══════════════ WHAT CHANGED ═══════════════
+// The plan used to change underneath Ren (feedback 1). A new household size took a covered plan to
+// seven gaps with only "Household of 8 saved."; turning leftovers on, a new time limit or a skipped
+// dinner rewrote other days' meals with no word at all; and where there was a word it was a count
+// ("swapped 1 meal out", "Re-planned 2 meals") in a toast that lasted 2.6 seconds. To find out what
+// had moved, Ren had to re-read three days of cards.
+//
+// Now every action that can change the plan runs through track(), which compares the plan before
+// and after and leaves a receipt: each meal that changed, what it was, why, and the banner's verdict
+// when that moved. The receipt stays at the top of the Plan tab until Ren taps Got it, changed
+// meals carry a "changed" mark until opened, and Undo puts everything back while nothing else has
+// happened since.
+var lastChange = null;   // { why, kind, lines:[], undo, sig, before } — the receipt on the Plan tab
+
+function planDigest() {
+  return plan.map(function(e) { return !e ? '' : e.off ? 'off' : (e.leftover ? 'L:' : '') + e.recipe + (e.dietBlocked ? '!' : ''); });
+}
+// "Saturday’s lunch". `mid` is for the middle of a sentence: "today’s lunch", but still "Saturday’s".
+function slotName(idx, mid) {
+  var d = Math.floor(idx / 3);
+  var day = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : dayLabel(d);
+  return (mid && d < 2 ? day.toLowerCase() : day) + '’s ' + MEAL_TYPES[idx % 3];
+}
+function entryLabel(e) {
+  if (!e || e.off) return '';
+  var r = recipeById(e.recipe);
+  if (!r) return '';
+  if (e.dietBlocked) return 'empty (nothing fits your settings)';
+  return e.leftover ? 'leftovers of ' + r.name : r.name;
+}
+function bannerState() {
+  if (pantryEmpty()) return 'empty';
+  var n = planNeeds(), foods = shortFoods(n).length;
+  return foods ? 'short of ' + foods + ' food' + (foods > 1 ? 's' : '') : n.check.length ? 'probably covered' : 'covered';
+}
+// Everything an action can change, for Undo.
+function snapshotState() {
+  return JSON.stringify({ settings:settings, pantry:pantry, plan:plan, prefs:prefs, unreconciled:unreconciled,
+    cookLog:cookLog, wasteLog:wasteLog, lastNight:lastNight, planSig:planSig, planBuiltEmpty:planBuiltEmpty });
+}
+function restoreState(json) {
+  var s = JSON.parse(json);
+  settings = s.settings; pantry = s.pantry; plan = s.plan; prefs = s.prefs; unreconciled = s.unreconciled;
+  cookLog = s.cookLog; wasteLog = s.wasteLog; lastNight = s.lastNight; planSig = s.planSig; planBuiltEmpty = s.planBuiltEmpty;
+  syncStaples();
+}
+// What has to be unchanged for an Undo to be safe: if Ren has cooked, added food or changed a
+// setting since, putting the old state back would quietly undo that too.
+function stateSig() {
+  var votes = Object.keys(prefs).filter(function(k) { return prefs[k].vote || prefs[k].fav; })
+    .map(function(k) { return k + ':' + prefs[k].vote + ':' + prefs[k].fav; }).sort();
+  return JSON.stringify([settings, pantry, plan.map(function(e) { return e && [e.recipe, e.status, !!e.off, !!e.leftover, !!e.dietBlocked]; }),
+    unreconciled.length, cookLog.length, wasteLog.length, votes]);
+}
+
+// Runs `fn` (which changes the plan, settings or kitchen) and reports what it did.
+//   why       why the meals changed, as a clause: "you skipped Friday’s dinner", "Vegetarian is on"
+//   opts.acted     the slot Ren acted on directly; it isn't listed unless opts.include is set
+//   opts.kind      repeated changes of one kind (stepping the household 5, 6, 7, 8) merge into one
+//                  receipt measured from before the first, while nothing else happened in between;
+//                  opts.mergedWhy is the reason line once two different changes share a receipt
+// Returns { lines, undo } — `undo` puts everything back if nothing has changed since.
+function track(why, fn, opts) {
+  opts = opts || {};
+  var merge = opts.kind && lastChange && lastChange.kind === opts.kind && lastChange.before && stateSig() === lastChange.sig;
+  if (merge && opts.mergedWhy && lastChange.why !== why) why = opts.mergedWhy;   // several changes, one reason line
+  var before = merge ? lastChange.before : { digest:planDigest(), names:plan.map(entryLabel), state:bannerState(), snap:snapshotState() };
+  if (merge) plan.forEach(function(e) { if (e && e.changed && e.changed.kind === opts.kind) delete e.changed; });
+  fn();
+  syncPlanShape();
+  var lines = [];
+  planDigest().forEach(function(d, i) {
+    if (d === before.digest[i] || (i === opts.acted && !opts.include)) return;
+    var e = plan[i], now = entryLabel(e), was = before.names[i];
+    if (!now && !was) return;
+    lines.push(slotName(i) + ': ' + (now ? now : 'no longer planned') + (was ? ' (was ' + was + ')' : ''));
+    if (now) e.changed = { from:was, why:why, kind:opts.kind || null };
+  });
+  var state = bannerState();
+  if (state !== before.state && before.state !== 'empty' && state !== 'empty') {
+    lines.push('The plan was ' + before.state + '; it’s now ' + state + '.');
+  }
+  var sig = stateSig();                   // the plan is already in its final shape (syncPlanShape above)
+  if (lines.length) {
+    lastChange = { why:why, kind:opts.kind || null, lines:lines, undo:before.snap, before:before, sig:sig };
+  } else if (merge) {
+    lastChange = null;                    // stepped back to where it started: nothing to report
+  }
+  renderAll();
+  return { lines:lines, undo:function() { undoTo(before.snap, sig); } };
+}
+function undoTo(snap, sig) {
+  if (stateSig() !== sig) { showToast('Can’t undo that now: the plan or kitchen has changed since.'); return; }
+  restoreState(snap);
+  lastChange = null;
+  closeDetail();
+  renderAll();
+  var sub = document.getElementById('subScreen');
+  if (sub.classList.contains('open') && /^(household|meals|dietary)$/.test(sub.dataset.which)) openSub(sub.dataset.which);
+  showToast('Undone. Your plan is as it was.');
+}
+// "2 meals changed" for a toast, pointing at the receipt on the Plan tab.
+function changeCount(res) {
+  var n = res.lines.filter(function(l) { return l.indexOf('The plan was') !== 0; }).length;
+  return n ? ' ' + n + ' meal' + (n > 1 ? 's' : '') + ' changed.' : res.lines.length ? ' ' + res.lines[0] : '';
+}
+function seePlanAction(res) {
+  return res.lines.length ? { label:'See plan', ms:6000, fn:function() { switchTab('planTab'); } } : null;
+}
+
+function renderChanges() {
+  var el = document.getElementById('changes');
+  if (!el) return;
+  if (!lastChange || !lastChange.lines.length) { el.innerHTML = ''; return; }
+  var canUndo = lastChange.undo && stateSig() === lastChange.sig;
+  el.innerHTML = '<div class="change-card"><div class="ch-head"><strong>' + esc(lastChange.title || 'What changed') + '</strong>' +
+      (lastChange.why ? '<span>Because ' + esc(lastChange.why) + ':</span>' : '') + '</div>' +
+    '<ul class="ch-list">' + lastChange.lines.map(function(l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' +
+    '<div class="ch-acts">' +
+      (canUndo ? '<button class="btn ghost small" onclick="undoLastChange()">Undo</button>' : '') +
+      '<button class="btn primary small" onclick="dismissChanges()">Got it</button>' +
+    '</div></div>';
+}
+function undoLastChange() { if (lastChange && lastChange.undo) undoTo(lastChange.undo, lastChange.sig); }
+function dismissChanges() {
+  lastChange = null;
+  plan.forEach(function(e) { if (e) delete e.changed; });
+  renderAll();
+}
+// The line under a changed meal's name, until Ren opens it.
+function changedLine(ch) {
+  return (ch.from ? 'Was ' + ch.from + '. ' : '') + 'Changed because ' + ch.why + '.';
+}
+
+// ═══════════════ WHAT TO PICK UP (feedback 6B) ═══════════════
+// The promise only held for a stocked kitchen: with 13 everyday foods a first-timer could cook no
+// lunch or dinner, and the banner ended "shop for the gap" with no list. This is the list, in two
+// parts: what the plan on screen is short of, meal by meal; and the few foods that would make the
+// most other recipes cookable with what's already in the kitchen ("Buy these, unlock those").
+// Both come from the recipes and the kitchen record only. Nothing is ordered or sent anywhere.
+
+// What the current plan is short of, one row per food, with the meals that need it.
+function planShortList() {
+  var n = planNeeds(), rows = {}, order = [];
+  function add(name, idx, detail) {
+    if (!rows[name]) { rows[name] = { name:name, meals:[], detail:'' }; order.push(name); }
+    var m = slotName(+idx, true);
+    if (rows[name].meals.indexOf(m) === -1) rows[name].meals.push(m);
+    if (detail && !rows[name].detail) rows[name].detail = detail;
+  }
+  var shortBy = {};
+  n.short.forEach(function(s) {
+    var more = s.need - s.have;
+    if (more > 0) shortBy[s.name] = 'about ' + kitchenQty(more, s.unit) + ' more';
+  });
+  Object.keys(n.byIdx).sort(function(a, b) { return a - b; }).forEach(function(idx) {
+    var v = n.byIdx[idx];
+    v.missing.forEach(function(name) { add(name, idx, ''); });
+    v.short.forEach(function(name) { add(name, idx, shortBy[name] || 'more than you have'); });
+    v.stale.forEach(function(name) { add(name, idx, 'yours will be past its window by then'); });
+  });
+  return order.map(function(k) { return rows[k]; });
+}
+
+// The foods that would make the most recipes cookable, one at a time, each counted on top of the
+// ones before it. Only recipes this household could be offered count (its meals, its dietary
+// settings, nothing marked "Not for us"), with stand-ins and staples as the plan reads them.
+// Presence only: it doesn't know how much to buy, and says so.
+// The foods the plan on screen is missing outright, by id: the unlock list counts on top of them,
+// since they're on the list already.
+function planMissingIds() {
+  var ids = [];
+  plan.forEach(function(e) {
+    if (!activeEntry(e)) return;
+    visibleLines(recipeById(e.recipe)).forEach(function(l) {
+      if (l.optional) return;
+      if (l.all) { l.all.forEach(function(id) { if (!onHand(id) && ids.indexOf(id) === -1) ids.push(id); }); return; }
+      if (!lineIds(l).some(onHand) && ids.indexOf(lineIds(l)[0]) === -1) ids.push(lineIds(l)[0]);
+    });
+  });
+  return ids;
+}
+function unlockSuggestions(max, already) {
+  var types = MEAL_TYPES.filter(mealOn), gapsBy = [];
+  already = already || [];
+  recipes.forEach(function(r) {
+    if (types.indexOf(r.type) === -1 || !eligible(r, r.type)) return;
+    var gaps = [];
+    visibleLines(r).forEach(function(l) {
+      if (l.optional) return;
+      if (l.all) { l.all.forEach(function(id) { if (!onHand(id)) gaps.push([id]); }); return; }
+      if (!lineIds(l).some(onHand)) gaps.push(lineIds(l));
+    });
+    // Already on the list above, or cookable as soon as it's bought: not "more".
+    var open = gaps.filter(function(gap) { return !gap.some(function(id) { return already.indexOf(id) > -1; }); });
+    if (open.length && gaps.length <= max + already.length) gapsBy.push({ r:r, gaps:gaps });
+  });
+  var buyable = function(id) { var i = ingById(id); return !!i && !i.extra && !assumedStaple(id) && !dietRuleFor(id); };
+  var picked = already.slice(), out = [];
+  for (var k = 0; k < max; k++) {
+    var unlocks = {};
+    gapsBy.forEach(function(g) {
+      if (g.done) return;
+      var open = g.gaps.filter(function(gap) { return !gap.some(function(id) { return picked.indexOf(id) > -1; }); });
+      if (open.length !== 1) return;            // one more food has to finish it
+      open[0].filter(buyable).forEach(function(id) { (unlocks[id] = unlocks[id] || []).push(g); });
+    });
+    var best = null;
+    Object.keys(unlocks).forEach(function(id) {
+      if (!best || unlocks[id].length > unlocks[best].length ||
+          (unlocks[id].length === unlocks[best].length && (ING_USE[id] || 0) > (ING_USE[best] || 0))) best = id;
+    });
+    if (!best) break;
+    picked.push(best);
+    unlocks[best].forEach(function(g) { g.done = true; });
+    out.push({ id:best, recipes:unlocks[best].map(function(g) { return g.r; }) });
+  }
+  return out;
+}
+
+var shopCache = null;   // what the screen shows, kept for Copy list
+function shopHTML() {
+  var need = planShortList(), more = unlockSuggestions(5, planMissingIds());
+  shopCache = { need:need, more:more };
+  var html = '<p class="sub-intro">A short list, so the plan works with what you have. Only foods our recipes use. ' +
+    'Nothing is ordered or sent anywhere.</p>';
+  html += '<div class="section-label">For this plan</div>';
+  html += need.length ? '<div class="w-list">' + need.map(function(x) {
+      return '<div class="shop-row"><b>' + esc(x.name) + '</b><span>' + esc((x.detail ? x.detail + ' · ' : '') + 'for ' + listOf(x.meals, 3)) + '</span></div>';
+    }).join('') + '</div>'
+    : '<div class="note-card" style="margin-top:0;">Nothing. Every meal still to cook is covered' +
+      (planNeeds().check.length ? ', apart from amounts to check on the meals.' : '.') + '</div>';
+  html += '<div class="section-label">To unlock more meals</div>';
+  html += more.length ? '<div class="w-list">' + more.map(function(x, i) {
+      var names = x.recipes.map(function(r) { return r.name; });
+      return '<div class="shop-row"><b>' + (i ? '+ ' : '') + esc(ingName(x.id)) + '</b><span>' + x.recipes.length + ' more ' +
+        (x.recipes.length === 1 ? 'recipe' : 'recipes') + ' you could cook: ' + esc(listOf(names, 2)) + '</span></div>';
+    }).join('') + '</div>' +
+    '<p class="field-hint">Counted on top of everything above it, one food at a time, from the recipes that fit your settings. ' +
+      'It goes by what you have, not how much, so buy enough for the meal. Then tap Re-plan on the Plan tab.</p>'
+    : '<div class="note-card" style="margin-top:0;">No single food would make another recipe cookable yet. ' +
+      'Adding more of what you usually buy is the quickest way to more meals.</div>';
+  if (need.length || more.length) {
+    html += '<div class="actions"><button class="btn primary" onclick="copyShopList()">Copy list</button></div>';
+  }
+  return html;
+}
+function copyShopList() {
+  if (!shopCache) return;
+  var t = 'What the Fridge: to pick up\n';
+  if (shopCache.need.length) t += '\nFor this plan:\n' + shopCache.need.map(function(x) { return '- ' + x.name + (x.detail ? ' (' + x.detail + ')' : ''); }).join('\n') + '\n';
+  if (shopCache.more.length) t += '\nTo unlock more meals:\n' + shopCache.more.map(function(x) { return '- ' + ingName(x.id); }).join('\n') + '\n';
+  var done = function() { showToast('Copied. Paste it into a note or a message.'); };
+  try {
+    navigator.clipboard.writeText(t).then(done, function() { showToast('Couldn’t copy here. Select the list and copy it instead.'); });
+  } catch (e) { showToast('Couldn’t copy here. Select the list and copy it instead.'); }
 }
 
 // ═══════════════ ACCEPT / SWAP / SKIP ═══════════════
@@ -1697,7 +2302,8 @@ function acceptMeal(idx, confirmed) {
     : '✅ Cooked — ingredients deducted.';
   if (crossed) {
     base = (crossed === 1 ? '🥬 First rescue! ' : '🥬 That’s ' + crossed + ' rescued! ') +
-      (used.rescued === 1 ? 'One ingredient' : used.rescued + ' ingredients') + ' used in time.';
+      (used.rescued === 1 ? 'One ingredient' : used.rescued + ' ingredients') + ' used in the last days of ' +
+      (used.rescued === 1 ? 'its' : 'their') + ' window.';
   }
   showToast(base, { label:'Undo', fn:function(){ undoAccept(undoIdx); } });
 }
@@ -1729,17 +2335,17 @@ function undoAccept(idx) {
   showToast('Undone — ingredients are back in your pantry.');
 }
 
+// Skipping a dinner used to rewrite the next day's leftovers lunch with no word (feedback 1). The
+// receipt now names it, and Undo puts both back.
 function skipMeal(idx) {
-  plan[idx].status = 'skipped';
   closeDetail();
-  renderAll();
-  showToast('Skipped — nothing deducted.');
+  var res = track('you skipped ' + slotName(idx, true), function() { plan[idx].status = 'skipped'; }, { acted:idx });
+  showToast('Skipped — nothing deducted.' + changeCount(res), { label:'Undo', fn:res.undo });
 }
 function unskip(idx) {
-  plan[idx].status = 'pending';
   closeDetail();
-  renderAll();
-  showToast('Back on the plan.');
+  var res = track('you put ' + slotName(idx, true) + ' back', function() { plan[idx].status = 'pending'; }, { acted:idx });
+  showToast('Back on the plan.' + changeCount(res));
 }
 
 // Swap: the best other recipe of the same meal type for what's in the kitchen, after what the
@@ -1765,31 +2371,34 @@ function bestAlternative(idx, current) {
   return null;                     // the pool really does hold nothing else for this slot
 }
 
-function swapMeal(idx, silent) {
+// Returns { r: the recipe swapped in, undo }, or null. `why` is given when the swap comes from
+// somewhere else (a "Not for us"), so the receipt says so and the caller writes the toast.
+function swapMeal(idx, why, pre) {
   var entry = plan[idx];
-  if (entry.leftover) { cookLunchInstead(idx); return; }
+  if (entry.leftover) { cookLunchInstead(idx); return null; }
   var current = recipeById(entry.recipe);
   var pick = bestAlternative(idx, current);
 
   if (!pick) {
-    showToast('No other ' + current.type + ' in the approved files fits your settings.');
-    return;
+    showToast('No other ' + current.type + ' in our recipes fits your settings.');
+    return null;
   }
 
-  // Remember what this slot has shown, so the next Swap moves on. bestAlternative() clears the
-  // list itself when the pool runs out, so this only ever grows within one rotation.
-  entry.tried = (entry.tried || []).concat([current.id]);
-
-  entry.recipe = pick.id;
-  entry.status = 'pending';
-  delete entry.dietBlocked;
-
   closeDetail();
-  renderAll();
+  var res = track(why || 'you swapped ' + slotName(idx, true), function() {
+    if (pre) pre();
+    // Remember what this slot has shown, so the next Swap moves on. bestAlternative() clears the
+    // list itself when the pool runs out, so this only ever grows within one rotation.
+    entry.tried = (entry.tried || []).concat([current.id]);
+    entry.recipe = pick.id;
+    entry.status = 'pending';
+    entry.chosen = true;                 // Ren picked this one; see planAround()
+    delete entry.dietBlocked;
+  }, { acted:idx });
   // The reason stays on the card and in the detail view, where Ren can read it at her own pace.
-  // Repeating it here pushed the toast past 100 characters for a 2.6-second appearance, which is
-  // not long enough to read two clauses even when they fit.
-  showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name);
+  // Swap now has an Undo: one curious tap used to lose a meal Ren liked, with no way back to it.
+  if (!why) showToast('Swapped to ' + pick.name + '.' + changeCount(res), { label:'Undo', fn:res.undo });
+  return { r:pick, undo:res.undo };
 }
 
 // Applied whenever a dietary preference changes. Any pending meal that breaks a restriction is
@@ -1809,6 +2418,7 @@ function enforceDiet() {
       entry.recipe = pick.id;
       delete entry.dietBlocked;
       delete entry.tried;          // the planner chose this slot again; Swap starts fresh
+      delete entry.chosen;
     } else {
       entry.dietBlocked = true;
       stuck.push(r.type);
@@ -1828,7 +2438,7 @@ function enforceTimes() {
     if (!r || entry.status !== 'pending' || entry.dietBlocked || fitsTime(r, day)) return;
     var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
     var pick = pickRecipe(r.type, day, reservationsExcept(idx), others);
-    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; delete entry.tried; changed++; }
+    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; delete entry.tried; delete entry.chosen; changed++; }
   });
   return changed;
 }
@@ -1845,8 +2455,8 @@ function openSub(which) {
         '<div><div class="val">' + settings.household + '</div><div class="lbl">people</div></div>' +
         '<button class="step-btn" onclick="setHousehold(1)"' + (settings.household >= 8 ? ' disabled' : '') + '>+</button>' +
       '</div>' +
-      '<div class="note-card">Recipe amounts are scaled to this number, from each recipe\'s estimated servings (the recipe file doesn\'t state them). ' +
-      'The scaled amounts are what the plan checks against your kitchen and what Cooked it deducts.</div>';
+      '<div class="note-card">Recipe amounts are scaled to this number. The scaled amounts are what the plan checks against ' +
+      'your kitchen and what Cooked it takes out.</div>';
   }
 
   if (which === 'meals') {
@@ -1867,7 +2477,8 @@ function openSub(which) {
     var fits = MEAL_TYPES.map(function(t) {
       return recipes.filter(function(r){ return r.type === t && !violatesDiet(r); }).length + ' ' + t;
     }).join(' · ');
-    body = '<p class="sub-intro">Applied to the household, not a single meal. Turning one on immediately swaps any planned meal that breaks it.</p><div>' +
+    body = '<p class="sub-intro">Applied to the household, not a single meal. Turning one on swaps any planned meal that breaks it, ' +
+      'and food it rules out is never used in a meal. Meals already cooked are left as they are.</p><div>' +
       d.map(function(x) {
         return '<div class="toggle-row"><div><div class="tr-name">' + x[1] + '</div><div class="tr-sub">' + x[2] + '</div></div>' +
           '<button class="switch' + (settings.dietary[x[0]] ? ' on' : '') + '"' + switchAttrs(settings.dietary[x[0]], x[1]) + ' onclick="toggleDiet(\'' + x[0] + '\')"></button></div>';
@@ -1875,25 +2486,45 @@ function openSub(which) {
       '<p class="nutri-note" style="margin-top:12px;">' +
         (active.length ? 'Active: ' + active.join(', ') + '. ' : 'No restrictions set. ') +
         'Recipes that still fit: ' + fits + '.</p>' +
-      '<div class="note-card">These are hard filters, not preferences — a restricted recipe is never suggested, never surfaced by Swap, and never used to fill a new day. ' +
-      'Meals you have already marked cooked are left as they are.<br><br>' +
-      '<b>One caveat worth keeping in view:</b> filtering works on recipe-level tags, so it is only as good as those tags. For a real allergy that is not sufficient — ' +
-      'ingredient-level checking and label reading would be required before anyone relies on this.</div>';
+      '<div class="note-card"><b>Not for allergies.</b> These filters go by how each recipe is labelled. Nothing checks individual ' +
+      'ingredients or package labels, so don\'t rely on them for an allergy.</div>';
   }
 
+  if (which === 'shop') {
+    title = 'What to pick up';
+    body = shopHTML();
+  }
+
+  // Staples (feedback 6D). The recipes assume 36 staples are always in the kitchen, so a dish that
+  // needs butter never said so to a household without any. Each is now the household's to switch
+  // off; one that's off is planned around like any other food, and can be added to the pantry.
+  if (which === 'staples') {
+    title = 'Staples you keep';
+    var off = Object.keys(settings.noStaples || {}).length;
+    body = '<p class="sub-intro">Recipes assume these are always in your kitchen, so they never show up as missing. ' +
+      'Switch off anything you don\'t keep: the plan then treats it like any other food, and you can add it to your pantry.</p>' +
+      (off ? '<p class="nutri-note" style="margin-top:0;">' + off + ' switched off.</p>' : '') +
+      STAPLE_GROUPS.map(function(g) {
+        var ids = g[1].filter(function(id) { var i = ingById(id); return i && i.staple; });
+        if (!ids.length) return '';
+        return '<div class="field-label">' + g[0] + '</div><div>' + ids.map(function(id) {
+          var keep = !settings.noStaples[id];
+          return '<div class="toggle-row"><div class="tr-name">' + esc(ingName(id)) + '</div>' +
+            '<button class="switch' + (keep ? ' on' : '') + '"' + switchAttrs(keep, ingName(id)) + ' onclick="toggleStaple(\'' + id + '\')"></button></div>';
+        }).join('') + '</div>';
+      }).join('');
+  }
+
+  // The switches that used to be here did nothing: no reminder was ever sent. A setting that looks
+  // finished and changes nothing teaches people not to trust the ones that work, so this screen
+  // now says plainly what happens instead.
   if (which === 'notify') {
-    title = 'Notification reminders';
-    var n = [
-      ['cooked','Did you cook it?','An evening nudge to confirm what you actually made, so the pantry stays accurate'],
-      ['expiry','Use-it-soon alerts','A heads-up when something is near the end of its estimated window'],
-      ['planReady','New plan ready','A note when the next three-day plan is built']
-    ];
-    body = '<p class="sub-intro">The cooked-meal nudge is the one that keeps inventory honest — without it, the pantry drifts from reality.</p><div>' +
-      n.map(function(x) {
-        return '<div class="toggle-row"><div><div class="tr-name">' + x[1] + '</div><div class="tr-sub">' + x[2] + '</div></div>' +
-          '<button class="switch' + (settings.notify[x[0]] ? ' on' : '') + '"' + switchAttrs(settings.notify[x[0]], x[1]) + ' onclick="toggleNotify(\'' + x[0] + '\')"></button></div>';
-      }).join('') + '</div>' +
-      '<div class="note-card">Whether a reminder ships in version 1 is still an open question in the spec (blindspot #5). This screen is here to test whether people would want one at all.</div>';
+    title = 'Reminders';
+    body = '<p class="sub-intro">What the Fridge doesn\'t send reminders yet.</p>' +
+      '<div class="note-card" style="margin-top:0;"><strong>What it does instead</strong><br>' +
+        'Each time you open it, it asks about any meal from an earlier day you didn\'t mark cooked, so your pantry catches up. ' +
+        'Nothing is taken out of the pantry until you answer.</div>' +
+      '<div class="note-card">Would a reminder help? Say so in <b>Send feedback</b>.</div>';
   }
 
   if (which === 'waste') {
@@ -1914,7 +2545,7 @@ function openSub(which) {
 
         '<div class="w-head"><div class="w-big">' + w.last30 + '</div>' +
           '<div class="w-cap">thrown out in the last 30 days' + dir + '</div>' +
-          '<div class="w-cap">against <b>' + w.rescued30 + '</b> ingredients used in time</div></div>';
+          '<div class="w-cap">against <b>' + w.rescued30 + '</b> rescued just in time</div></div>';
 
       // Repeat offenders first: the one thing on this page that changes what Ren buys next week.
       var repeats = w.ings.filter(function(x) { return x.n > 1; });
@@ -1965,14 +2596,20 @@ function openSub(which) {
       'so nothing expires forgotten and you always know what\'s for dinner.</p>' +
       '<div class="note-card" style="margin-top:var(--s6);">' +
         '<strong>How it works</strong><br>' +
-        'Add your groceries to the Pantry (manually or by snapping a receipt). The planner picks from 300 approved recipes, ' +
-        'prioritising items closest to their freshness window. Mark meals cooked and the ingredients are deducted automatically.' +
+        'Add your groceries to the Pantry (manually or by snapping a receipt). The planner picks from our ' + recipes.length + ' recipes, ' +
+        'putting food closest to the end of its window first. Mark a meal cooked and its ingredients come out of the pantry.' +
       '</div>' +
       '<div class="note-card" style="margin-top:var(--s4);">' +
         '<strong>Privacy</strong><br>' +
         'Your food, plan and settings are saved in this browser only and never leave your device. ' +
         'The one exception: when you scan a receipt or photograph your shelves, the photo is sent to Claude (by Anthropic) to read it, and isn\'t stored by the app.' +
       '</div>' +
+      // Testing tools live behind a switch here rather than in the Profile menu, where "Simulate
+      // midnight" sat beside the household's real settings.
+      '<div class="toggle-row" style="margin-top:var(--s8);border-radius:var(--r);"><div><div class="tr-name">Testing tools</div>' +
+        '<div class="tr-sub">Adds Simulate midnight to Profile, to try the next day without waiting for it.</div></div>' +
+        '<button class="switch' + (settings.testTools ? ' on' : '') + '"' + switchAttrs(!!settings.testTools, 'Testing tools') +
+          ' onclick="settings.testTools=!settings.testTools;renderAll();openSub(\'about\')"></button></div>' +
       '<div style="margin-top:var(--s8);color:var(--ink-soft);font-size:13px;line-height:1.5;text-align:center;">' +
         'BUS 860 · Group 3<br>University of Alberta' +
         '<br><br>Version ' + APP_VERSION +
@@ -2035,7 +2672,8 @@ function openSub(which) {
       '<div id="receiptResults" style="display:none;"></div>';
   }
 
-  document.getElementById('subBackLabel').textContent = (which === 'receipt' || which === 'shelves') ? receiptBack : 'Profile';
+  document.getElementById('subBackLabel').textContent = (which === 'receipt' || which === 'shelves') ? receiptBack
+    : which === 'shop' ? (currentTab === 'pantryTab' ? 'Pantry' : 'Plan') : 'Profile';
   document.getElementById('subTitle').textContent = title;
   document.getElementById('subBody').innerHTML = body;
   document.getElementById('subScreen').classList.add('open');
@@ -2054,29 +2692,54 @@ function closeSub() {
   }
   if (currentTab !== 'profileTab') { document.getElementById('fab').style.display = 'flex'; }
 }
+// A new household size changes how much every meal needs, so the plan's cover can change though no
+// meal does: 5 to 8 took the sample plan from 1 gap to 7 with only "Household of 8 saved." The
+// receipt now says so (feedback 1). Steps in a row merge into one receipt, from the size before.
 function setHousehold(delta) {
-  settings.household = Math.min(8, Math.max(1, settings.household + delta));
-  document.getElementById('hhArrow').innerHTML = settings.household + ' &rsaquo;';
+  var n = Math.min(8, Math.max(1, settings.household + delta));
+  if (n === settings.household) return;
+  var res = track('your household is now ' + n, function() { settings.household = n; }, { kind:'household' });
   openSub('household');
-  renderAll();
-  showToast('Household of ' + settings.household + ' saved.');
+  showToast('Household of ' + n + ' saved.' + changeCount(res), seePlanAction(res));
+}
+// Water is the one staple not offered: nobody runs out of it.
+var STAPLE_GROUPS = [
+  ['Oils and fats', ['olive-oil', 'vegetable-oil', 'coconut-oil', 'sesame-oil', 'butter']],
+  ['Fresh', ['garlic', 'ginger']],
+  ['Spices and dried herbs', ['salt', 'black-pepper', 'garlic-powder', 'onion-powder', 'paprika', 'chili-powder', 'cumin',
+                              'cinnamon', 'red-pepper-flakes', 'oregano', 'thyme', 'italian-seasoning']],
+  ['Sauces and vinegars', ['soy-sauce', 'hot-sauce', 'dijon', 'white-vinegar', 'red-wine-vinegar', 'rice-vinegar', 'balsamic-glaze']],
+  ['Baking and sweet', ['flour', 'sugar', 'brown-sugar', 'honey', 'maple-syrup', 'baking-powder', 'baking-soda', 'cornstarch', 'vanilla']]
+];
+function toggleStaple(id) {
+  var keep = !!settings.noStaples[id], name = ingName(id).toLowerCase();
+  var res = track(keep ? 'you keep ' + name + ' again' : 'you don’t keep ' + name, function() {
+    var ns = {};
+    for (var k in settings.noStaples) ns[k] = settings.noStaples[k];
+    if (keep) delete ns[id]; else ns[id] = true;
+    settings.noStaples = ns;              // a new object, so syncStaples re-reads every recipe
+    syncStaples();
+  }, { kind:'staples', mergedWhy:'you changed which staples you keep' });
+  openSub('staples');
+  showToast((keep ? 'Assuming you have ' : 'No longer assuming you have ') + name + '.' + changeCount(res), seePlanAction(res));
 }
 function toggleDiet(key) {
-  settings.dietary[key] = !settings.dietary[key];
-  var result = enforceDiet();
+  var result = null, label = DIET_RULES[key].label, on = !settings.dietary[key];
+  var now = Object.keys(DIET_RULES).filter(function(k) { return k === key ? on : settings.dietary[k]; })
+    .map(function(k) { return DIET_RULES[k].label; });
+  // The meals swapped, by name, are in the receipt: the toast used to give only a count. Toggles
+  // in a row share one receipt, so its reason names every setting now on.
+  var res = track('you changed your dietary settings (now ' + (now.length ? now.join(' + ') : 'none') + ')', function() {
+    settings.dietary[key] = on;
+    result = enforceDiet();
+  }, { kind:'diet' });
   openSub('dietary');
-
-  var on = settings.dietary[key];
-  var label = DIET_RULES[key].label;
   if (result.stuck.length) {
-    showToast('⚠ No ' + result.stuck[0] + ' in the approved files fits — that slot needs attention.');
-  } else if (result.swapped.length) {
-    showToast(label + ' on — swapped ' + result.swapped.length + ' meal' + (result.swapped.length > 1 ? 's' : '') + ' out.');
+    showToast('⚠ No ' + listOf(result.stuck, 3) + ' in our recipes fits — see What changed.', seePlanAction(res));
   } else {
-    showToast(label + (on ? ' on — your plan already fits.' : ' off.'));
+    showToast(label + (on ? ' on.' : ' off.') + (changeCount(res) || (on ? ' Your plan already fits.' : '')), seePlanAction(res));
   }
 }
-function toggleNotify(key) { settings.notify[key]  = !settings.notify[key];  openSub('notify'); saveState(); }
 
 // ═══════════════ TABS / TOAST / ALLOCATION ═══════════════
 function switchTab(tabId) {
@@ -2153,39 +2816,62 @@ function renderReconcile() {
     '</div>' + rows + '</div>';
 }
 
+// The plan for today was built before yesterday was settled, so a late "Cooked it" could take food
+// today's meals had set aside, and nothing said so (feedback 5). Now the answer is settled first and
+// the plan is fitted around it: any meal still to cook that the answer left short is replaced, if a
+// covered alternative exists, and the receipt names it. Meals Ren chose herself are left for her to
+// decide; the banner and the card say what they're short of.
+function gapCount(v) { return v ? v.missing.length + v.short.length + v.stale.length : 0; }
 function reconcile(i, outcome) {
   var u = unreconciled[i];
   if (!u) { return; }
-  if (outcome === 'cooked') {
-    var r = recipeById(u.recipe);
-    if (r) {
-      var used = deductRecipe(r);
-      cookLog.push({ date:u.date || todayKey(), recipe:r.id, rescued:used.rescued });
-    }
+  var r = recipeById(u.recipe), name = r ? r.name : 'that meal';
+  var why = outcome === 'cooked' ? 'you cooked ' + name + ' on ' + u.label : 'you didn’t cook ' + name + ' on ' + u.label;
+  var res = track(why, function() { settleAnswer(u, i, outcome, r); });
+  showToast((outcome === 'cooked' ? '✅ Logged — ingredients deducted from your pantry.' : 'Logged — nothing deducted.') + changeCount(res),
+    { label:'Undo', fn:res.undo });
+}
+function settleAnswer(u, i, outcome, r) {
+  if (outcome === 'cooked' && r) {
+    var before = planNeeds().byIdx;
+    var used = deductRecipe(r);
+    cookLog.push({ date:u.date || todayKey(), recipe:r.id, rescued:used.rescued });
+    var after = planNeeds().byIdx;
+    plan.forEach(function(e, idx) {
+      if (!activeEntry(e) || e.chosen || gapCount(after[idx]) <= gapCount(before[idx])) return;
+      var day = Math.floor(idx / 3), reserved = reservationsExcept(idx);
+      var others = plan.map(function(x, j) { return j === idx || !isMealEntry(x) ? null : x.recipe; }).filter(Boolean);
+      var pick = pickRecipe(MEAL_TYPES[idx % 3], day, reserved, others.concat([e.recipe]));
+      if (pick && fullyCovered(pick, reserved, day)) { e.recipe = pick.id; delete e.tried; }
+    });
   }
   // Last night's dinner didn't happen, so there are no leftovers for today's lunch: drop the note,
-  // and the lunch gets a meal of its own on the next render (syncPlanShape).
+  // and the lunch gets a meal of its own (syncPlanShape, run by track).
   if (outcome !== 'cooked' && lastNight && u.type === 'dinner' && u.recipe === lastNight.recipe && u.date === lastNight.date) {
     lastNight = null;
   }
   unreconciled.splice(i, 1);
-  renderAll();
-  showToast(outcome === 'cooked'
-    ? '\u2705 Logged — ingredients deducted from your pantry.'
-    : 'Logged — nothing deducted.');
 }
 
 // ═══════════════ ROLLING DAYS ═══════════════
 // Always today plus the next two. At midnight the first day drops off and a new
 // third day is built from the approved files.
-function rollDay(departingDate) {
+// `recap` (optional) tallies what happened to the departing day's meals, for the day summary.
+function rollDay(departingDate, recap) {
   // Reconcile before dropping. A meal still 'pending' at midnight is queued as a
   // question rather than silently discarded — dropping it would leave its
   // ingredients in the pantry after they were eaten, drifting inventory in the
   // optimistic direction one day at a time.
   // departingDate is passed when catching up on days the app was closed.
   var departing = departingDate || dateFor(0);
+  var gone = [];
   plan.slice(0, 3).forEach(function(entry, i) {
+    if (recap && isMealEntry(entry)) {
+      if (entry.status === 'accepted') recap.cooked++;
+      else if (entry.status === 'skipped') recap.skipped++;
+      else if (!entry.dietBlocked) recap.toConfirm++;
+    }
+    if (isMealEntry(entry)) gone.push(entry.recipe);
     queueUnreconciled(entry, MEAL_TYPES[i], departing);
   });
   // Keep a note of the departing dinner so today's lunch can still be its leftovers. A dinner that
@@ -2196,7 +2882,10 @@ function rollDay(departingDate) {
   // The new third day is planned around what the two days already shown set aside. Those two
   // days are left as they are: changing meals someone has already seen, overnight, would surprise.
   var res = reservationsExcept(-1);
-  var used = plan.filter(isMealEntry).map(function(e){ return e.recipe; });
+  // Yesterday's meals and any still waiting on "did you cook it?" are kept off the new day: the same
+  // meal used to sit in the question and on the new plan at once (feedback 5).
+  var used = plan.filter(isMealEntry).map(function(e){ return e.recipe; })
+    .concat(gone, unreconciled.map(function(u) { return u.recipe; }));
   MEAL_TYPES.forEach(function(type) {
     if (!mealOn(type)) { plan.push({ off:true, status:'off' }); return; }
     if (type === 'lunch' && leftoversOn() && usableDinner(plan[5])) {     // yesterday's (day 2's) dinner
@@ -2217,23 +2906,56 @@ function rollDay(departingDate) {
   dayOffset++;
 }
 
+// ─── the day summary ───
+// The day used to open with one toast, "New day — the plan rolled forward", or with nothing at all,
+// so each morning Ren had to work out what had happened overnight (feedback 5). Now it opens with a
+// summary in the What changed card: how yesterday went, what still needs an answer (the questions
+// sit right below it), the day that was added, and any meal changed to fit a weekday limit.
+function newRecap() { return { cooked:0, skipped:0, toConfirm:0, days:0 }; }
+function dayReceipt(recap, timeLines) {
+  var parts = [];
+  if (recap.cooked)    parts.push(recap.cooked + ' cooked');
+  if (recap.skipped)   parts.push(recap.skipped + ' skipped');
+  if (recap.toConfirm) parts.push(recap.toConfirm + ' to confirm below');
+  var lines = [(recap.days > 1 ? 'The last ' + recap.days + ' days' : 'Yesterday') + ': ' + (parts.length ? parts.join(', ') : 'nothing logged') + '.'];
+  var added = plan.slice(6, 9).filter(isMealEntry).map(function(e) { return recipeById(e.recipe).name; });
+  if (added.length) lines.push(dayLabel(2) + '’s meals were added: ' + listOf(added, 3) + '.');
+  lines = lines.concat(timeLines || []);
+  lastChange = { title:'It’s ' + dateFor(0).toLocaleDateString(undefined, { weekday:'long' }), why:'', kind:'day', lines:lines, undo:null, sig:null };
+}
+// enforceTimes() with each replaced meal named, for the day summary.
+function enforceTimesNamed() {
+  var before = plan.map(entryLabel), lines = [];
+  enforceTimes();
+  plan.forEach(function(e, i) {
+    var now = entryLabel(e);
+    if (now && now !== before[i]) {
+      lines.push(slotName(i) + ': ' + now + ' (was ' + before[i] + '), to fit your weekday ' + MEAL_TYPES[i % 3] + ' time');
+      e.changed = { from:before[i], why:'it didn’t fit your weekday ' + MEAL_TYPES[i % 3] + ' time', kind:'day' };
+    }
+  });
+  return lines;
+}
+
 function scheduleMidnight() {
   var now = new Date();
   var next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2);
   setTimeout(function() {
-    if (catchUp() > 0) {
-      renderAll();
-      showToast('New day — the plan rolled forward.');
-    }
+    // The day summary waits on the Plan tab; whatever Ren has open at midnight is left alone.
+    if (catchUp() > 0) { renderAll(); }
     scheduleMidnight();
   }, next - now);
 }
 
-// Prototype-only control, outside the phone frame.
+// Testing tool (About > Testing tools, and the laptop footer). It rolls the plan but not the dates.
 function simulateMidnight() {
-  rollDay();
+  var recap = newRecap();
+  recap.days = 1;
+  rollDay(null, recap);
+  dayReceipt(recap, []);
+  switchTab('planTab');
   renderAll();
-  showToast('Simulated midnight — the plan rolled forward.');
+  showToast('Simulated midnight — the plan rolled forward a day.');
 }
 
 // ═══════════════ KEYBOARD AND SCREEN-READER ACCESS ═══════════════
@@ -2283,9 +3005,11 @@ function renderGreeting() {
 }
 
 function renderAll() {
+  syncStaples();
   syncPlanShape();
   renderGreeting();
   renderDaySelector();
+  renderChanges();
   renderReconcile();
   renderBanner();
   renderDietStrip();
@@ -2302,6 +3026,13 @@ function renderAll() {
     var n = activeDietLabels().length;
     da.innerHTML = (n ? n + ' active ' : '') + '&rsaquo;';
   }
+  var sa = document.getElementById('staplesArrow');
+  if (sa) {
+    var off = Object.keys(settings.noStaples || {}).length;
+    sa.innerHTML = (off ? off + ' not kept ' : '') + '&rsaquo;';
+  }
+  var tt = document.getElementById('testTools');
+  if (tt) { tt.style.display = settings.testTools ? '' : 'none'; }
   var wa = document.getElementById('wasteArrow');
   if (wa) {
     var w30 = wasteLog.filter(function(x) {
@@ -2435,7 +3166,7 @@ function renderProfile() {
   document.getElementById('profileStats').innerHTML =
     '<div class="profile-stat"><div class="num">' + cooked + '</div><div class="label">Meals<br>cooked</div></div>' +
     '<div class="profile-stat"><div class="num">' + days30 + '</div><div class="label">Days cooked<br>this month</div></div>' +
-    '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Used before<br>they turned</div></div>';
+    '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Rescued<br>just in time</div></div>';
 
   // The ledger line. Deliberately a ratio and not a fourth stat tile or a milestone ladder: a
   // count that only climbs is dispiriting, and the way to "win" a low-waste badge is to stop
@@ -2445,7 +3176,7 @@ function renderProfile() {
   var ledger = document.getElementById('profileLedger');
   if (ledger) {
     ledger.innerHTML = !cooked && !lost ? '' :
-      '<span class="led-good">' + rescued + ' used in time</span>' +
+      '<span class="led-good">' + rescued + ' rescued</span>' +
       '<span class="led-dot">·</span>' +
       '<span class="led-lost">' + lost + ' got away</span>' +
       (lost ? '<div class="led-hint">' + esc(wasteHint()) + '</div>' : '');
@@ -2473,9 +3204,10 @@ function renderProfile() {
   var rPct = r.next === null ? 100 : Math.round((rescued - rPrev) / (r.next - rPrev) * 100);
   var sPct = st.next === null ? 100 : Math.round((days30 - sPrev) / (st.next - sPrev) * 100);
 
-  var rWit = !cooked ? 'Cook something from the plan and this starts counting every ingredient you use before its window closes.'
-    : !rescued ? 'Nothing rescued yet — the first ingredient you use inside its window starts the count.'
-    : rescued < 10 ? rescued + ' ingredient' + (rescued === 1 ? '' : 's') + ' used while still in their prime. The crisper drawer thanks you.'
+  // A rescue is food used in the last two days of its window (RESCUE_DAYS), so the words say that.
+  var rWit = !cooked ? 'Cook something from the plan and this counts every ingredient you use in the last two days of its window.'
+    : !rescued ? 'Nothing rescued yet — use something in the last two days of its window to start the count.'
+    : rescued < 10 ? rescued + ' ingredient' + (rescued === 1 ? '' : 's') + ' used with a day or two to spare. The crisper drawer thanks you.'
     : rescuePace(allSteps, rDates) ||
       'That\'s ' + rescued + ' things that didn\'t end up as a science experiment at the back of the fridge.';
   // The cumulative total stops carrying information somewhere past a few hundred — 340 and 360
@@ -2540,7 +3272,7 @@ INGREDIENTS.forEach(function(i) {
 
 function searchIngredients(q) {
   q = q.trim().toLowerCase();
-  var pool = INGREDIENTS.filter(function(i) { return !i.staple; });
+  var pool = INGREDIENTS.filter(function(i) { return !assumedStaple(i.id); });
   if (!q) {
     return pool.slice().sort(function(a, b) { return (ING_USE[b.id] || 0) - (ING_USE[a.id] || 0); }).slice(0, 24);
   }
@@ -2556,7 +3288,7 @@ function stapleMatch(q) {
   if (!q) return null;
   var hit = null;
   INGREDIENTS.forEach(function(i) {
-    if (!hit && i.staple && (i.name.toLowerCase().indexOf(q) > -1 || (ING_RX[i.id] && ING_RX[i.id].test(q)))) hit = i;
+    if (!hit && assumedStaple(i.id) && (i.name.toLowerCase().indexOf(q) > -1 || (ING_RX[i.id] && ING_RX[i.id].test(q)))) hit = i;
   });
   return hit;
 }
@@ -2597,7 +3329,8 @@ function renderItemScreen() {
       '<input class="field search" id="itemSearch" type="search" placeholder="Search: chicken, spinach, feta…" ' +
         'autocomplete="off" value="' + esc(draft.query) + '" oninput="draft.query=this.value;renderItemResults()">' +
       '<div id="itemResults"></div>' +
-      '<p class="field-hint">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them.</p>' +
+      '<p class="field-hint">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them. ' +
+        'Change which in Profile &rsaquo; Staples you keep.</p>' +
       (justAdded.length ? '<div class="actions"><button class="btn primary" onclick="closeSub()">Done</button></div>' : '');
     renderItemResults();
     // On a computer, put the cursor in the search box, but only once the screen has finished
@@ -2668,7 +3401,7 @@ function renderItemResults() {
         '<small>' + (have ? have + ' in your kitchen' : zoneLabel(i.zone).toLowerCase()) + note + '</small></button>';
     }).join('') + '</div>'
     : '<p class="field-hint">' + (staple ? esc(staple.name) + ' is a staple, so it\'s assumed on hand.'
-        : 'Nothing called that in the approved recipes. Only foods the recipes use can be planned around.') + '</p>');
+        : 'Nothing by that name in our food list. Only foods the recipes use can be planned around.') + '</p>');
 }
 
 function pickIngredient(id) {
@@ -3256,8 +3989,8 @@ function matchFoodName(name) {
   });
   if (!hit) INGREDIENTS.forEach(function(i) { if (!hit && i.extra && ING_RX[i.id] && ING_RX[i.id].test(q)) hit = i; });
   if (!hit) INGREDIENTS.forEach(function(i) { if (!hit && !i.extra && ING_RX[i.id] && ING_RX[i.id].test(q)) hit = i; });
-  // Staples (oil, salt, water...) are assumed on hand and never tracked, as everywhere else.
-  return hit && !hit.staple ? { id:hit.id, name:hit.name, exact:true } : null;
+  // Staples the household keeps (oil, salt...) are assumed on hand and never tracked, as everywhere else.
+  return hit && !assumedStaple(hit.id) ? { id:hit.id, name:hit.name, exact:true } : null;
 }
 
 // The original reader, run on the phone with Tesseract.js: the backup when Claude can't be used.
@@ -3593,7 +4326,7 @@ function matchReceiptLine(line) {
   var best = null, bestScore = 0;
 
   INGREDIENTS.forEach(function(ing) {
-    if (ing.staple) return;
+    if (assumedStaple(ing.id)) return;
     var name = ing.name.toLowerCase();
     var score = 0;
 
@@ -3866,7 +4599,7 @@ function filterIngPicker(idx, query) {
   if (!listEl) return;
   var q = (query || '').toLowerCase().trim();
   var results = INGREDIENTS.filter(function(ing) {
-    if (ing.staple) return false;
+    if (assumedStaple(ing.id)) return false;
     if (!q) return true;
     return ing.name.toLowerCase().indexOf(q) > -1 || ing.id.indexOf(q) > -1;
   });
@@ -3919,18 +4652,24 @@ function mealPrefsHTML(part) {
 function setMealOn(t) {
   var on = !mealOn(t);
   if (!on && MEAL_TYPES.filter(mealOn).length === 1) { showToast('Plan at least one meal a day.'); return; }
-  settings.meals[t] = on;
-  mealPrefsChanged();
+  mealPrefsChanged(t + ' is ' + (on ? 'back on the plan' : 'off the plan'), function() { settings.meals[t] = on; });
 }
-function setLeftovers() { settings.leftovers = !settings.leftovers; mealPrefsChanged(); }
-function setMealTime(t, m) { settings.times[t] = m || null; mealPrefsChanged(); }
+function setLeftovers() {
+  var on = !settings.leftovers;
+  mealPrefsChanged('leftovers are ' + (on ? 'on' : 'off'), function() { settings.leftovers = on; });
+}
+function setMealTime(t, m) {
+  mealPrefsChanged('your weekday ' + t + ' limit is now ' + (m ? m + ' minutes' : 'any length'), function() { settings.times[t] = m || null; });
+}
 // Redraw wherever the controls are, and bring the plan in line: meals switched off empty their
-// slots, leftovers follow dinners, and meals over a new time limit are swapped.
-function mealPrefsChanged() {
-  if (document.getElementById('setup').classList.contains('open')) { renderSetup(); return; }
-  enforceTimes();
-  renderAll();
+// slots, leftovers follow dinners, and meals over a new time limit are swapped. Turning leftovers
+// on turned two lunches into leftovers and doubled every dinner, and a new time limit swapped
+// meals, all without a word (feedback 1). The receipt names each one.
+function mealPrefsChanged(why, apply) {
+  if (document.getElementById('setup').classList.contains('open')) { apply(); renderSetup(); return; }
+  var res = track(why, function() { apply(); enforceTimes(); }, { kind:'meals', mergedWhy:'you changed Meals & cooking' });
   openSub('meals');
+  showToast('Saved.' + changeCount(res), seePlanAction(res));
 }
 function mealsSummary() {
   var on = MEAL_TYPES.filter(mealOn);
@@ -3988,7 +4727,7 @@ function renderSetup() {
         return '<div class="toggle-row"><div class="tr-name">' + x[1] + '</div>' +
           '<button class="switch' + (settings.dietary[x[0]] ? ' on' : '') + '"' + switchAttrs(settings.dietary[x[0]], x[1]) + ' onclick="settings.dietary.' + x[0] + '=!settings.dietary.' + x[0] + ';renderSetup()"></button></div>';
       }).join('') + '</div>' +
-      '<p class="field-hint">These filter recipes by the tags in the recipe file. They are <b>not</b> allergy-safe, since nothing checks individual ingredients or labels.</p>' +
+      '<p class="field-hint">These go by how each recipe is labelled. They are <b>not</b> allergy-safe, since nothing checks individual ingredients or package labels.</p>' +
       '<div class="actions"><button class="btn primary" onclick="setupStep=3;renderSetup()">Next</button>' +
         '<button class="btn quiet" onclick="setupStep=1;renderSetup()">Back</button></div>';
     return;
@@ -4000,20 +4739,20 @@ function renderSetup() {
     '<button class="start-card" onclick="finishSetup(\'own\')"><b>Add my own food</b>' +
       '<span>Start with an empty kitchen and add what you have. A rough count is fine.</span></button>' +
     '<button class="start-card" onclick="finishSetup(\'sample\')"><b>Look around with a sample kitchen</b>' +
-      '<span>About 35 everyday foods, so you can see how planning works. Start over any time from Profile.</span></button>' +
+      '<span>A made-up kitchen of ' + samplePantry().length + ' everyday foods, so you can see how planning works. Start over any time from Profile.</span></button>' +
     '<div class="actions"><button class="btn quiet" onclick="setupStep=4;renderSetup()">Back</button></div>';
 }
 function finishSetup(mode) {
   settings.since = todayKey();
   pantry = mode === 'sample' ? samplePantry() : [];
   plan = [];
-  unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1; lastNight = null;
+  unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1; lastNight = null; lastChange = null;
   planKitchen(false);
   renderAll();
   document.getElementById('setup').classList.remove('open');
   if (mode === 'photos') { switchTab('pantryTab'); openShelves('Pantry'); }
   else if (mode === 'own') { switchTab('pantryTab'); openAddItem(); }
-  else { showToast('Welcome! This is a sample kitchen. Swap in your own food from the Pantry tab.'); }
+  else { showToast('Welcome! This is a sample kitchen, not your own food. Start over from Profile when you want to add yours.', { ms:8000, label:'OK', fn:function() {} }); }
 }
 
 // ═══════════════ SAVED STATE ═══════════════
@@ -4028,7 +4767,7 @@ function saveState() {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       lastSeen:lastSeen || todayKey(), settings:settings, pantry:pantry, plan:plan,
       prefs:prefs, unreconciled:unreconciled, cookLog:cookLog, wasteLog:wasteLog, dayOffset:dayOffset,
-      planSig:planSig, planBuiltEmpty:planBuiltEmpty, lastNight:lastNight
+      planSig:planSig, planBuiltEmpty:planBuiltEmpty, lastNight:lastNight, lastChange:lastChange
     }));
   } catch (e) { /* private mode or storage full — the app still works, it just won't remember */ }
 }
@@ -4045,6 +4784,7 @@ function loadState() {
   var valid = s.plan.length === 9 && s.plan.every(function(e) { return e && (e.off || recipeById(e.recipe)); });
 
   settings = fillMealSettings(s.settings);
+  syncStaples();                          // the saved staples list decides how recipes read
   pantry = s.pantry.filter(function(e) { return ingById(e.ing); });
   plan = valid ? s.plan : [];
   planSig = valid ? (s.planSig || null) : null;
@@ -4055,6 +4795,7 @@ function loadState() {
   unreconciled = (s.unreconciled || []).filter(function(u) { return recipeById(u.recipe); });
   dayOffset = s.dayOffset || 0;
   lastNight = valid && s.lastNight && recipeById(s.lastNight.recipe) ? s.lastNight : null;
+  lastChange = valid && s.lastChange && s.lastChange.lines ? s.lastChange : null;
   lastSeen = s.lastSeen || todayKey();
   catchUp();
   return true;
@@ -4067,19 +4808,23 @@ function loadState() {
 function catchUp() {
   var missed = daysBetween(lastSeen, todayKey());
   if (missed > 0) {
-    var start = parseKey(lastSeen);
-    for (var i = 0; i < Math.min(missed, 3); i++) { rollDay(addDays(start, i)); }
-    enforceTimes();   // days rolled in during catch-up were planned against the wrong weekday
+    var start = parseKey(lastSeen), recap = newRecap();
+    recap.days = Math.min(missed, 3);
+    for (var i = 0; i < recap.days; i++) { rollDay(addDays(start, i), recap); }
+    // Days rolled in during catch-up were planned against the wrong weekday.
+    dayReceipt(recap, enforceTimesNamed());
   }
   lastSeen = todayKey();
   return Math.max(missed, 0);
 }
 
-// A home-screen app is usually resumed, not reloaded, so check the date on return too.
+// A home-screen app is usually resumed, not reloaded, so check the date on return too. The day
+// summary sits at the top of the Plan tab, so that's where Ren lands.
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible' && catchUp() > 0) {
+    // Land on the summary, unless a form is open: a half-added item shouldn't be thrown away.
+    if (!document.getElementById('subScreen').classList.contains('open')) { closeDetail(); switchTab('planTab'); }
     renderAll();
-    showToast('New day — the plan rolled forward.');
   }
 });
 
@@ -4087,6 +4832,7 @@ function loadSampleKitchen() {
   if (pantry.length && !confirm('Replace everything in your kitchen with the sample food?')) { return; }
   pantry = samplePantry();
   closeDetail(); closeSub();
+  lastChange = null;                      // the kitchen it described is gone
   planKitchen(true);
   renderAll();
   showToast('Sample kitchen loaded, and the plan rebuilt around it.');
@@ -4094,11 +4840,14 @@ function loadSampleKitchen() {
 function startOver() {
   if (!confirm('Start over? This clears your kitchen, plan and history from this browser.')) { return; }
   try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+  // Testing tools stay as they were: someone testing the app starts over often, and shouldn't
+  // have to dig the switch out of About each time.
   settings.name = ''; settings.since = null; settings.household = 2;
   settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
+  settings.noStaples = {};
   settings.meals = { breakfast:true, lunch:true, dinner:true }; settings.leftovers = false;
   settings.times = { breakfast:20, lunch:30, dinner:null };
-  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1; lastNight = null;
+  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1; lastNight = null; lastChange = null;
   planKitchen(false);
   closeDetail(); closeSub(); switchTab('planTab');
   renderAll();

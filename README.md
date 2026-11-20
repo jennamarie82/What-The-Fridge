@@ -20,8 +20,11 @@ whichever of them a household wants planned. BUS 860 *Managing Intelligence* · 
 - The Pantry's search button finds what you have by name, grouped by fridge, freezer and cupboard,
   with each item's freshness; tap one to edit it.
 - Estimates freshness from the purchase date (or a printed use-by date you enter) and the shelf-life
-  norms for where the food is kept, and always shows the basis. Food with no date, or no matching
-  norm, stays "unknown" and is never assumed fresh.
+  norms for where the food is kept, and always shows the basis. Chips go by the late end of each
+  window: red only for its last day or two ("use today", "use by tomorrow"), amber for "use within N
+  days", and on a meal they're measured from that meal's day ("window ends Sat"). Food with no date
+  stays undated and is never assumed fresh; food with no shelf-life norm says there's no estimate.
+  **Needs attention** says what to do with each item: use it tonight, freeze it, or check it.
 - Plans today plus the next two days (the meals you chose) from all 579 approved recipes, around
   what's actually in your kitchen. It fills one meal at a time, setting aside what each uses, so a
   scarce ingredient is never promised to two meals. Monday to Friday, each meal stays within your
@@ -32,28 +35,50 @@ whichever of them a household wants planned. BUS 860 *Managing Intelligence* · 
 - If you eat leftovers, each dinner is made for the household twice over and the next day's lunch is
   its leftovers: nothing to cook, and nothing more taken from the pantry. Swapping or skipping the
   dinner carries the lunch along; **Cook something else** gives that lunch a meal of its own.
-- Says plainly when the kitchen can't cover the plan: what's missing, which meal runs short because
-  an earlier one uses the same food, and what will have turned before its meal. Where an amount isn't
-  recorded in a comparable unit, it asks you to check rather than guessing. **Re-plan** replaces only
-  the meals that no longer work.
+- Says one true thing about the plan, in three states: **No grocery trip needed**, **Probably
+  covered: check N amounts** (an amount isn't recorded in a comparable unit, so it asks rather than
+  guessing), or **Short of N foods**, naming what's missing, which meal runs short because an earlier
+  one uses the same food, and what will be past its window by its meal. Each meal card shows the same
+  verdict. **Re-plan** replaces only the meals that no longer work, and names what's still short.
+- Never changes the plan silently. Anything that changes meals (a setting, a skip, a swap, a
+  re-plan, "Use it in a meal") leaves a **What changed** card on the Plan tab naming each meal, what
+  it was and why, with Undo while nothing else has changed since; changed meals stay marked until
+  opened. "Use it in a meal" asks before replacing a meal you picked yourself. Each new day opens
+  with a summary of yesterday (cooked, skipped, still to confirm) and the day that was added.
 - Amounts are scaled to your household from each recipe's estimated servings (`tools/servings.csv`;
   the recipe file doesn't state servings). The meal screen shows the recipe's own wording with the
-  scaled amount beside it, and the scaled amount is what the kitchen check and **Accept** use.
+  scaled amount beside it, and the scaled amount is what the kitchen check and **Cooked it** use.
 - Each meal shows its ingredients in the recipe's own words next to what you have, then the
   numbered steps, then estimated nutrition per serving (calories, protein, carbs, fat, fibre,
   sodium). The recipe file states neither servings nor nutrition, so both are estimates and are
   labelled as such (see Recipe data).
 - Swap, skip or mark a meal cooked. Ingredients are deducted only when you confirm a meal was cooked
   (converting grams, ounces, cups and spoons where that's plain arithmetic), and Undo puts back
-  exactly what was taken. A meal still unconfirmed when its day ends is asked about, not assumed.
-- Profile counts real activity only: meals cooked, your cooking streak, and ingredients used before
-  their window closed.
+  exactly what was taken. A meal still unconfirmed when its day ends is asked about, not assumed,
+  and a late "Cooked it" re-plans any meal it leaves short.
+- **What to pick up** (from the "Short of N foods" banner, or the Pantry when supplies are low) lists
+  what the plan is short of, meal by meal, then the few foods that would make the most other recipes
+  cookable with what you already have ("+ Parsley: 3 more recipes you could cook"), with Copy list.
+  Nothing is ordered or sent anywhere.
+- Where a recipe asks for something you don't have, it may use one **stand-in** from
+  `tools/substitutions.csv` (rice for cooked rice, chicken thighs for breast), said on the card, the
+  ingredient line and above the steps, with the row's note on how. Only in the kinds of dish the row
+  names, only one per meal, and never one that breaks a dietary setting.
+- **Profile → Staples you keep**: the recipes assume 36 staples (oils, spices, flour...) are always on
+  hand. Switch one off and the plan treats it like any other food: needed, and addable to the pantry.
+- Dietary settings also keep excluded food out of the pantry match: a dairy-free household's cow's
+  milk doesn't cover "milk (dairy or plant-based)", and the meal screen says what the setting changes
+  in the steps.
+- Profile counts real activity only: meals cooked, days cooked, and ingredients rescued just in time
+  (used in the last two days of their window). The app doesn't send reminders; **Profile →
+  Reminders** says so.
 
 ## Your data
 
 Everything is saved in your own browser (`localStorage`). Nothing is sent to a server, and each
 person or device has its own copy. **Profile → Start over** clears it; **Load the sample kitchen**
-swaps in the demo food.
+swaps in the demo food. For testing, **Profile → About → Testing tools** adds **Simulate midnight**
+to Profile (the laptop page's footer has it too).
 
 The one exception is a receipt photo someone chooses to scan. It goes to the team's Cloudflare
 Worker (`worker/receipt-reader.js`), which asks Claude to read it and returns the items for review;
@@ -107,6 +132,13 @@ holds an estimated serving count for each recipe. The build turns every ingredie
 adds them up and divides by the servings, and writes `tools/nutrition-review.csv` with each line's
 grams and calories so the team can spot a line that was counted wrongly. The same serving counts are
 what the app scales recipe amounts from.
+
+Stand-ins come from `tools/substitutions.csv` and nowhere else: each row names the food asked for,
+the stand-in, the kinds of dish it works in, any dietary effect, and a note for the cook. The build
+checks every row (both foods exist, contexts are known, no duplicates) and tags each recipe with its
+kinds of dish by keyword from its title and method; `tools/context-review.csv` lists those tags for
+checking, since they decide where a stand-in may be offered. The rows were drafted for review
+(`tools/substitutions-review-notes.md`) and are still worth a read.
 
 ## Updating the site
 

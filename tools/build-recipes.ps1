@@ -8,6 +8,8 @@
     tools/ingredient-review.csv      - every ingredient line and what it was linked to, for the team to check
     tools/unmatched.txt              - lines that matched nothing (should be empty)
     tools/nutrition-review.csv       - every ingredient line's weight and calories, for the team to check
+    tools/context-review.csv         - the kinds of dish each recipe was read as, which decide where a
+                                       stand-in from tools/substitutions.csv may be offered
 
   Nutrition per serving is estimated from tools/nutrition.csv (per-food values) and
   tools/servings.csv (estimated servings per recipe).
@@ -223,6 +225,84 @@ foreach ($r in $recipes) {
   if (-not (Test-Path (Join-Path $root "recipe-images\$($r.id).webp"))) { $problems += "#$($r.n) has no photo at recipe-images\$($r.id).webp" }
 }
 
+# -- stand-ins (tools/substitutions.csv) and the contexts they hold in --
+# A stand-in row says "where a recipe asks for X, Y works instead, in these kinds of dish". The
+# kind of dish is the recipe's context, derived here from its title and method by keyword, and
+# written to tools/context-review.csv so the team can check it. A row is only offered for a
+# recipe whose contexts overlap the row's: banana for berries is right on toast and wrong in a
+# vinaigrette. The checks are the five in tools/substitutions-review-notes.md.
+$ctxVocab = @('sweet-toast','oatmeal','yogurt-bowl','smoothie','baking-sweet','salad-raw','dressing','marinade',
+              'stir-fry','soup-stew','braise','curry','pasta-sauce','roast-bake-savoury','taco-wrap','rice-bowl','eggs')
+$subs = @()
+$subPairs = @{}
+foreach ($s in (Read-Table "$PSScriptRoot\substitutions.csv")) {
+  $where = "substitutions.csv '$($s.for) -> $($s.use)'"
+  if (-not $byId.ContainsKey($s.for)) { $problems += "$where`: '$($s.for)' isn't a recipe ingredient" }
+  if (-not $byId.ContainsKey($s.use)) { $problems += "$where`: '$($s.use)' isn't a recipe ingredient" }
+  if ($s.for -eq $s.use) { $problems += "$where`: a food can't stand in for itself" }
+  if ($subPairs[$s.for + '>' + $s.use]) { $problems += "$where`: listed twice" }
+  $subPairs[$s.for + '>' + $s.use] = $true
+  $ctx = @($s.contexts -split '\|' | Where-Object { $_ })
+  if (-not $ctx.Count) { $problems += "$where`: no contexts" }
+  foreach ($c in $ctx) { if ($ctxVocab -notcontains $c) { $problems += "$where`: unknown context '$c'" } }
+  if ($s.diet -and $s.diet -notmatch '^[+-](V|DF|NF|PF)$') { $problems += "$where`: diet '$($s.diet)' should be +/- then V, DF, NF or PF" }
+  $o = [ordered]@{ for = $s.for; use = $s.use; ctx = $ctx }
+  if ($s.diet) { $o['diet'] = $s.diet }
+  if ($s.note) { $o['note'] = $s.note }
+  $subs += [pscustomobject]$o
+}
+
+# Keywords for each context, tried against the title first and then the steps. Rough on purpose:
+# a stand-in also needs the asked-for food missing and the stand-in in the kitchen, so a context
+# that's slightly too generous rarely fires. context-review.csv is where it gets checked.
+$ctxTitle = [ordered]@{
+  'smoothie'           = 'smoothie'
+  'oatmeal'            = 'oat|porridge|muesli|granola|congee|grits|polenta'
+  'yogurt-bowl'        = 'yogurt|parfait|chia pudding|cottage cheese (bowl|and)|acai'
+  'sweet-toast'        = 'toast'
+  'baking-sweet'       = 'pancake|waffle|crepe|muffin|banana bread|scone|french toast bake|dutch baby|cookie|bar\b|bars\b|cake'
+  'salad-raw'          = 'salad|slaw|tabbouleh|panzanella|poke|gazpacho|summer roll|lettuce|bento|snack box|skewer box|antipasto|ceviche|caprese'
+  'stir-fry'           = 'stir[- ]?fr|fried rice|lo mein|chow mein|pad thai|pad see ew|noodle|kung pao|teriyaki|bulgogi|japchae|szechuan|general tso|orange chicken|sweet and sour|mongolian|cashew chicken|fried quinoa|basil chicken|lettuce cups'
+  'soup-stew'          = 'soup|stew|chowder|chili|bisque|pho|ramen|udon|gumbo|pozole|minestrone|avgolemono|tom kha|broth|cioppino|dumplings|mussels'
+  'braise'             = 'braise|pot roast|osso buco|coq au vin|bourguignon|tagine|ropa vieja|carnitas|pulled|cacciatore|stroganoff|smothered|ribs|short rib|beef stew'
+  'curry'              = 'curry|masala|korma|tikka|\bdal\b|vindaloo|massaman|butter chicken|saag|palak|biryani|paneer'
+  'pasta-sauce'        = 'pasta|spaghetti|penne|linguine|fettuccine|lasagna|ziti|gnocchi|tortellini|bolognese|marinara|carbonara|alfredo|orzo|macaroni|mac and cheese|shells|rigatoni|pappardelle|cacio|puttanesca|aglio|scampi|primavera|ragu'
+  'roast-bake-savoury' = 'roast|bake|baked|sheet pan|traybake|casserole|gratin|pot pie|shepherd|quiche|frittata|stuffed|papillote|enchilada|pizza|flatbread|air[- ]fryer|grill|meatloaf|parmesan|cordon bleu|crab cakes|salmon cakes|fritter|egg cups|muffin cups|hash|potato'
+  'taco-wrap'          = 'taco|wrap|burrito|quesadilla|fajita|tostada|enchilada|pita|gyro|shawarma|sandwich|\bsub\b|panini|banh mi|burger|sloppy|lettuce boats|pinwheel|melt|bagel|english muffin|ciabatta|focaccia|roll|chilaquiles|pupusa|empanada|huevos'
+  'rice-bowl'          = 'bowl|rice|donburi|bibimbap|poke|biryani|risotto|pilaf|jambalaya|paella|grain|farro|quinoa|couscous|barley'
+  'eggs'               = 'egg|omelet|omelette|frittata|scramble|shakshuka|menemen|quiche|benedict|huevos|tortilla|strata|turkish eggs'
+}
+$ctxSteps = [ordered]@{
+  'dressing'           = 'dressing|vinaigrette|whisk together .*(oil|vinegar|lemon|lime)'
+  'marinade'           = 'marinat'
+  'stir-fry'           = 'stir[- ]?fry|\bwok\b'
+  'soup-stew'          = 'simmer'
+  'roast-bake-savoury' = 'preheat (the )?oven|\broast\b|\bsear|skillet|\bgrill|\bbroil|pan[- ]fry|deep[- ]fry|\bsteam'
+}
+$ctxReview = New-Object System.Collections.Generic.List[object]
+foreach ($r in $recipes) {
+  $title = $r.name.ToLower(); $steps = ($r.steps -join ' ').ToLower()
+  $ctx = @()
+  foreach ($k in $ctxTitle.Keys) { if ($title -match $ctxTitle[$k]) { $ctx += $k } }
+  foreach ($k in $ctxSteps.Keys) { if ($ctx -notcontains $k -and $steps -match $ctxSteps[$k]) { $ctx += $k } }
+  # Sweet and savoury split: a breakfast with no savoury context is a sweet one, so toast and baking
+  # contexts there are the sweet kind; elsewhere they aren't.
+  if ($r.type -ne 'breakfast') { $ctx = @($ctx | Where-Object { $_ -notin 'sweet-toast','baking-sweet','oatmeal','yogurt-bowl' }) }
+  if ($r.type -eq 'breakfast' -and ($ctx -contains 'sweet-toast') -and ($title -match 'avocado|egg|smoked salmon|tomato|hummus|mushroom|chickpea|caprese|cottage cheese and tomato')) {
+    $ctx = @($ctx | Where-Object { $_ -ne 'sweet-toast' })
+  }
+  # "Noodle" reads as a stir-fry, but a noodle soup, salad or casserole isn't one.
+  if ($title -match 'casserole|soup|salad|\bbake') { $ctx = @($ctx | Where-Object { $_ -ne 'stir-fry' }) }
+  # French toast is fried in a skillet, which isn't the savoury kind of cooking.
+  if (@($ctx | Where-Object { $_ -in 'sweet-toast','baking-sweet','oatmeal','yogurt-bowl','smoothie' }).Count) {
+    $ctx = @($ctx | Where-Object { $_ -ne 'roast-bake-savoury' })
+  }
+  # A recipe with no context is never offered a stand-in, which is the safe way to be wrong.
+  $r.ctx = @($ctx | Select-Object -Unique)
+  $ctxReview.Add([pscustomobject]@{ recipe_no = $r.n; recipe = $r.name; type = $r.type
+    contexts = $(if ($r.ctx.Count) { $r.ctx -join ' | ' } else { '(none: no stand-ins offered)' }); looks_right = ''; comment = '' })
+}
+
 # -- nutrition estimates (CLAUDE.md open assumption 17) --
 # Each ingredient line is turned into grams with tools/nutrition.csv, summed per recipe, and
 # divided by the estimated servings in tools/servings.csv. Optional lines and lines with no
@@ -364,7 +444,7 @@ $seenIds = @{}; $ingOut = @($ingOut | Where-Object { if ($seenIds[$_.id]) { $fal
 $recipes = @($recipes | ForEach-Object {
   $r = $_
   [pscustomobject]@{ n = $r.n; id = $r.id; name = $r.name; type = $r.type; time = $r.time; mins = $r.mins
-                     tags = @($r.tags); satisfies = @($r.satisfies)
+                     tags = @($r.tags); satisfies = @($r.satisfies); ctx = @($r.ctx)
                      ing = @($r.ing | ForEach-Object { [pscustomobject]$_ }); steps = @($r.steps)
                      nut = $(if ($r.nut) { [pscustomobject]$r.nut } else { $null }) }
 })
@@ -378,8 +458,10 @@ $header = "// GENERATED by tools/build-recipes.ps1 from knowledge/Combined_Recip
 $js = $header +
   'window.WTF_NORMS = ' + ($norms | ConvertTo-Json -Depth 5 -Compress) + ";`n" +
   'window.WTF_INGREDIENTS = ' + (ConvertTo-Json -InputObject $ingOut -Depth 5 -Compress) + ";`n" +
-  'window.WTF_RECIPES = ' + (ConvertTo-Json -InputObject @($recipes) -Depth 6 -Compress) + ";`n"
+  'window.WTF_RECIPES = ' + (ConvertTo-Json -InputObject @($recipes) -Depth 6 -Compress) + ";`n" +
+  'window.WTF_SUBS = ' + (ConvertTo-Json -InputObject @($subs) -Depth 5 -Compress) + ";`n"
 [IO.File]::WriteAllText((Join-Path $root 'recipes.js'), $js, $utf8)
+$ctxReview | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $PSScriptRoot 'context-review.csv')
 $review | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $PSScriptRoot 'ingredient-review.csv')
 $nutReview | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $PSScriptRoot 'nutrition-review.csv')
 [IO.File]::WriteAllLines((Join-Path $PSScriptRoot 'unmatched.txt'), [string[]]$unmatched, $utf8)
@@ -391,4 +473,5 @@ foreach ($g in ($recipes | Group-Object { $_.type })) {
   "kcal per serving, $($g.Name): lowest $($k[0]), median $($k[[int]($k.Count / 2)]), highest $($k[-1])"
 }
 "lines counted for nutrition: lowest share $(@($recipes | ForEach-Object { $_.nut.cover } | Sort-Object)[0])%"
+"stand-ins: $($subs.Count) rows   recipes with no context: $(@($recipes | Where-Object { -not $_.ctx.Count }).Count)   contexts: " + (($recipes | ForEach-Object { $_.ctx } | Group-Object | Sort-Object Count -Descending | ForEach-Object { "$($_.Name) $($_.Count)" }) -join ', ')
 if ($problems.Count) { "PROBLEMS:"; $problems } else { "checks passed" }
