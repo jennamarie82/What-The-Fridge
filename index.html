@@ -168,20 +168,26 @@
           <div class="profile-menu-item" onclick="openSub('household')"><span>Household size</span><span class="arrow" id="hhArrow">2 &rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('meals')"><span>Meals &amp; cooking</span><span class="arrow" id="mealsArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('dietary')"><span>Dietary preferences</span><span class="arrow" id="dietArrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openSub('notify')"><span>Notification reminders</span><span class="arrow" id="notifyArrow">&rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="openSub('notify')"><span>Reminders</span><span class="arrow" id="notifyArrow">not yet &rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('waste')"><span>Where food is going</span><span class="arrow" id="wasteArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openReceipt('Profile')"><span>Upload receipt</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('about')"><span>About What the Fridge</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('feedback')"><span>Send feedback</span><span class="arrow">&rsaquo;</span></div>
         </div>
 
-        <div class="section-label">Demo controls</div>
+        <div class="section-label">Your data</div>
         <div>
-          <div class="profile-menu-item" onclick="simulateMidnight()"><span>Simulate midnight</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="loadSampleKitchen()"><span>Load the sample kitchen</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="startOver()"><span>Start over</span><span class="arrow">&rsaquo;</span></div>
         </div>
-        <p class="pantry-note">Saved in this browser only &mdash; nothing leaves your phone except a receipt photo you choose to scan.</p>
+        <!-- Shown only when About > Testing tools is on (app.js renderAll). -->
+        <div id="testTools" style="display:none;">
+          <div class="section-label">Testing tools</div>
+          <div>
+            <div class="profile-menu-item" onclick="simulateMidnight()"><span>Simulate midnight</span><span class="arrow">&rsaquo;</span></div>
+          </div>
+        </div>
+        <p class="pantry-note">Saved in this browser only &mdash; nothing leaves your phone except a receipt or shelf photo you choose to send.</p>
       </div>
     </div>
 
@@ -238,8 +244,7 @@
 </div>
 
 <footer>
-  What the Fridge &middot; BUS 860 Group 3 &middot; Phase A build &middot; plan around your own food, or look around with a sample kitchen.<br>
-  Recipes from <i>Combined_Recipe_Database.md</i> (the approved recipes, amounts scaled to your household).<br>
+  What the Fridge &middot; BUS 860 Group 3 &middot; plan around your own food, or look around with a sample kitchen.<br>
   Your plan, pantry and settings are saved in this browser only &mdash; only a receipt or shelf photo you take is sent out, to Claude, to read it.<br>
   <span id="appVersion"></span><br>
   <span style="display:inline-block;margin-top:10px;">
