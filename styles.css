@@ -314,6 +314,8 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 .ingredient-row:last-child { border-bottom:none; }
 .ingredient-name { font-size:13px; font-weight:600; }
 .ingredient-basis { font-size:11px; color:var(--ink-soft); margin-top:2px; }
+/* A stand-in from tools/substitutions.csv, said on the line it replaces (feedback 6C). */
+.ingredient-sub { font-size:12px; font-weight:600; color:#8A5B00; margin-top:3px; line-height:1.4; }
 
 .missing-callout {
   background:var(--amber-soft);
@@ -612,6 +614,12 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 .banner.short { background:var(--tomato-soft); }
 .banner.short .tick { background:var(--tomato); }
 .banner.check .tick { background:var(--amber); }
+.banner-acts { display:flex; gap:var(--s4); flex-wrap:wrap; }
+/* What to pick up (feedback 6B): one food per row, what it's for underneath. */
+.shop-row { display:flex; flex-direction:column; gap:2px; padding:10px 14px; border-bottom:1px solid var(--border); }
+.shop-row:last-child { border-bottom:none; }
+.shop-row b { font-size:14px; color:var(--ink); }
+.shop-row span { font-size:12px; color:var(--ink-soft); line-height:1.4; }
 
 /* ─── what changed: the receipt for a change the app made to the plan (feedback 1) ─── */
 .change-card {

@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-19 (feedback 1, 2, 4, 5 and 8)';
+var APP_VERSION = '2026-11-19 (feedback 1, 2, 4, 5, 6 and 8)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -8,6 +8,7 @@ var settings = {
   since: null,                    // YYYY-MM-DD the household was set up; null until setup is finished
   household: 2,
   dietary: { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false },
+  noStaples: {},                  // staples the household doesn't keep: { id:true } (Profile > Staples you keep)
   testTools: false,               // About > Testing tools: shows Simulate midnight in Profile
   // From the setup questionnaire (Profile > Meals & cooking to change):
   meals:     { breakfast:true, lunch:true, dinner:true },   // which meals to plan
@@ -19,6 +20,7 @@ function fillMealSettings(s) {
   if (!s.meals) s.meals = { breakfast:true, lunch:true, dinner:true };
   if (s.leftovers === undefined) s.leftovers = false;
   if (!s.times) s.times = { breakfast:20, lunch:30, dinner:null };
+  if (!s.noStaples) s.noStaples = {};
   return s;
 }
 
@@ -208,9 +210,26 @@ function dietRuleFor(id) {
   }
   return '';
 }
-// A recipe's ingredient lines as they apply to this household: an optional line whose every
-// choice is ruled out is dropped, and choices that are ruled out are taken off the line.
+// A recipe's ingredient lines as they apply to this household and kitchen: an optional line whose
+// every choice is ruled out is dropped, choices that are ruled out are taken off the line, and the
+// one stand-in the recipe may use (standInFor) replaces the line it stands in for. Everything that
+// plans, checks, sets aside or deducts food reads lines through here.
 function visibleLines(recipe) {
+  syncStaples();
+  var lines = dietLines(recipe), s = standInFor(recipe, lines);
+  if (!s) return lines;
+  return lines.reduce(function(out, line) {
+    if (line !== s.line) { out.push(line); return out; }
+    if (s.staple) return out;                       // the stand-in is a staple, assumed on hand
+    var copy = {}; for (var k in line) copy[k] = line[k];
+    delete copy.any; delete copy.all;
+    copy.id = s.row.use;
+    copy.sub = { forId:s.forId, use:s.row.use, note:s.row.note || '' };
+    out.push(copy);
+    return out;
+  }, []);
+}
+function dietLines(recipe) {
   var blocked = activeBlocks();
   if (!blocked.length) return recipe.ing;
   var out = [];
@@ -229,6 +248,49 @@ function visibleLines(recipe) {
   return out;
 }
 
+// ─── stand-ins (feedback 6C) ───
+// Matching used to be exact, so a bag of rice didn't cover "cooked rice" and tomatoes didn't cover
+// cherry tomatoes; a first-timer with 13 everyday foods could cook no lunch or dinner. A stand-in
+// comes only from tools/substitutions.csv, never from the app's own judgement, and it is said out
+// loud on the meal. The rules are the table's own:
+//   3  a row that takes away a dietary property ("-DF": tofu to paneer) is never offered to a
+//      household with that setting, and a stand-in the settings rule out is never used;
+//   4  offered only when the food asked for isn't in the kitchen and the stand-in is (or is a
+//      staple the household keeps);
+//   5  one per meal: two stand-ins in one dish stops being the recipe.
+// And the recipe has to be the kind of dish the row names (its contexts, from the build), because
+// banana for berries is right on toast and wrong in a vinaigrette. Optional lines never get one: a
+// missing extra is simply left out.
+var SUBS = window.WTF_SUBS || [], SUBS_FOR = {};
+SUBS.forEach(function(s) { (SUBS_FOR[s.for] = SUBS_FOR[s.for] || []).push(s); });
+var DIET_CODES = { V:'vegetarian', DF:'dairyFree', NF:'nutFree', PF:'porkFree' };
+function onHand(id) { return entriesFor(id).some(inStock); }
+function standInFor(recipe, lines) {
+  if (!SUBS.length || !recipe.ctx || !recipe.ctx.length) return null;
+  lines = lines || dietLines(recipe);
+  var named = {};
+  recipe.all.forEach(function(l) { if (!l.staple) lineIds(l).forEach(function(id) { named[id] = true; }); });
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.optional || line.all) continue;
+    var ids = lineIds(line);
+    if (ids.some(onHand)) continue;
+    for (var j = 0; j < ids.length; j++) {
+      var rows = SUBS_FOR[ids[j]] || [];
+      for (var k = 0; k < rows.length; k++) {
+        var row = rows[k];
+        if (named[row.use]) continue;                                   // already in the dish
+        if (!row.ctx.some(function(c) { return recipe.ctx.indexOf(c) > -1; })) continue;
+        if (row.diet && row.diet.charAt(0) === '-' && settings.dietary[DIET_CODES[row.diet.slice(1)]]) continue;
+        if (dietRuleFor(row.use)) continue;
+        if (assumedStaple(row.use)) return { line:line, row:row, forId:ids[j], staple:true };
+        if (onHand(row.use)) return { line:line, row:row, forId:ids[j] };
+      }
+    }
+  }
+  return null;
+}
+
 // ═══════════════ RECIPE CATALOG ═══════════════
 // Every recipe from the approved source, knowledge/Combined_Recipe_Database.md, via recipes.js
 // (generated by tools/build-recipes.ps1). `id` is the slug of the title and doubles as the photo name.
@@ -237,16 +299,23 @@ function visibleLines(recipe) {
 // oil, spices...) are kept for display but never planned around: they're assumed on hand.
 // Amounts are as written; amountFor() scales them to the household from each recipe's estimated
 // servings (tools/servings.csv), so each line keeps a link to its recipe (`r`).
-var recipes = (window.WTF_RECIPES || []).map(function(src) {
+//
+// Which staples are assumed is the household's call (Profile > Staples you keep, feedback 6D): a
+// staple Ren says she doesn't keep is planned around like any other food. So a recipe's lines are
+// worked out again whenever that list changes (syncStaples).
+function assumedStaple(id) {
+  var i = ingById(id);
+  return !!(i && i.staple && !(settings.noStaples && settings.noStaples[id]));
+}
+function setLines(r, src) {
   var lines = [];
   src.ing.forEach(function(l) {
     var ids = l.items || [];
     if (!ids.length) return;
     // A staple line, or a choice where one of the options is a staple ("vinegar or lemon juice"),
     // is covered by the staples assumed on hand.
-    var isStaple = function(id) { var i = ingById(id); return !!(i && i.staple); };
-    var staple = ids.every(isStaple) || (l.alt && ids.some(isStaple));
-    var foods = ids.filter(function(id) { var i = ingById(id); return i && !i.staple; });
+    var staple = ids.every(assumedStaple) || (l.alt && ids.some(assumedStaple));
+    var foods = ids.filter(function(id) { return ingById(id) && !assumedStaple(id); });
     var line = { text:l.text, optional:!!l.optional, staple:staple };
     if (!staple) {
       // `alt` is the build's own flag, set only where a line was split on "or". Without it a
@@ -261,12 +330,25 @@ var recipes = (window.WTF_RECIPES || []).map(function(src) {
     }
     lines.push(line);
   });
-  var r = { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
-            tags:src.tags || [], all:lines, ing:lines.filter(function(l) { return !l.staple; }), steps:src.steps || [],
-            nut:src.nut || null };
+  r.all = lines;
+  r.ing = lines.filter(function(l) { return !l.staple; });
   lines.forEach(function(l) { l.r = r; });
+}
+var recipes = (window.WTF_RECIPES || []).map(function(src) {
+  var r = { id:src.id, n:src.n, name:src.name, type:src.type, time:src.time, mins:src.mins,
+            tags:src.tags || [], ctx:src.ctx || [], steps:src.steps || [], nut:src.nut || null, src:src };
+  setLines(r, src);
   return r;
 });
+// Re-reads every recipe's lines when the household's staples list has been replaced (a reload, an
+// Undo, Start over) or changed. Cheap: an identity check, and a rebuild only when it differs.
+var stapleRef = null;
+function syncStaples(force) {
+  if (!settings.noStaples) settings.noStaples = {};
+  if (!force && settings.noStaples === stapleRef) return;
+  stapleRef = settings.noStaples;
+  recipes.forEach(function(r) { setLines(r, r.src); });
+}
 
 // Counts the app states about itself come from the data, never from a sentence typed once: About
 // said "300 approved recipes" after there were 579, and setup offered a sample kitchen of "about
@@ -1032,7 +1114,8 @@ function renderBanner() {
   // are some. It used to appear as "Your kitchen changed: re-plan" after a thumbs-down or a cooked
   // meal, over a plan that was already covered, with nothing for it to do.
   var replan = foods.length && pendingCount
-    ? '<button class="btn ghost small" onclick="replanNow()">Re-plan around my kitchen</button>' : '';
+    ? '<div class="banner-acts"><button class="btn primary small" onclick="openSub(\'shop\')">What to pick up</button>' +
+      '<button class="btn ghost small" onclick="replanNow()">Re-plan</button></div>' : '';
 
   if (!foods.length && !checks.length) {
     el.className = 'banner';
@@ -1091,6 +1174,8 @@ function mealChips(recipe, day, verdict) {
     if (verdict.check.length)   out.push({ cls:'soon', text:'check ' + names(verdict.check) });
     if (!out.length)            out.push({ cls:'ok', text:'nothing missing' });
   }
+  var s = standInFor(recipe);
+  if (s) out.push({ cls:'soon', text:ingName(s.row.use).toLowerCase() + ' for ' + ingName(s.forId).toLowerCase() });
   var urgent = null;
   visibleLines(recipe).forEach(function(line) {
     var e = urgentEntryFor(line);
@@ -1312,7 +1397,8 @@ function renderPantry() {
   var inStockCount = pantry.filter(inStock).length;
   if (inStockCount > 0 && inStockCount <= 5) {
     notices.innerHTML = '<div class="empty-card" style="margin-top:var(--s4);"><strong>Supplies running low</strong>' +
-      '<span>Only ' + inStockCount + ' item' + (inStockCount === 1 ? '' : 's') + ' left. Add your food items with the <b>+</b> button or scan a receipt.</span></div>';
+      '<span>Only ' + inStockCount + ' item' + (inStockCount === 1 ? '' : 's') + ' left. Add your food items with the <b>+</b> button or scan a receipt.</span>' +
+      '<button class="btn ghost small" onclick="openSub(\'shop\')">What to pick up</button></div>';
   }
 
   zones.innerHTML = ZONES.map(function(z) {
@@ -1476,7 +1562,7 @@ function planAround(entryId, checked, replaceChosen) {
   if (!pick) {
     pick = search(true);
     if (pick && !replaceChosen) {
-      showToast('The best fit would replace ' + slotName(pick.idx).toLowerCase() + ', ' + recipeById(plan[pick.idx].recipe).name +
+      showToast('The best fit would replace ' + slotName(pick.idx, true) + ', ' + recipeById(plan[pick.idx].recipe).name +
         ', which you picked. Replace it with ' + pick.r.name + '?',
         { label:'Replace it', ms:10000, fn:function() { planAround(entryId, true, true); } });
       return;
@@ -1622,7 +1708,7 @@ function dietNoteHTML(r) {
 // while cooking (not saved: it resets when the screen closes).
 function methodHTML(r) {
   if (!r.steps.length) return '';
-  return dietNoteHTML(r) +
+  return dietNoteHTML(r) + standInNoteHTML(r) +
     '<div class="section-label">How to make it <span class="method-tip">tap a step when it\'s done</span></div>' +
     '<ol class="method">' + r.steps.map(function(s, i) {
       return '<li onclick="this.classList.toggle(\'done\')"><span class="step-n">' + (i + 1) + '</span><span>' + esc(s) + '</span></li>';
@@ -1673,13 +1759,19 @@ function scaleHint(r) {
 function ingredientRowsHTML(r, idx) {
   var entry = plan[idx];
   var reserved = activeEntry(entry) ? reservationsBefore(idx) : null;
-  var visible = {};
+  var visible = {}, s = standInFor(r);
   visibleLines(r).forEach(function(l) { visible[l.text] = l; });
   var html = '', missing = [];
   r.all.forEach(function(orig) {
     if (orig.staple) {
       html += '<div class="ingredient-row"><div><div class="ingredient-name">' + esc(orig.text) + '</div>' +
-        '<div class="ingredient-basis">Staple, assumed on hand</div></div></div>';
+        '<div class="ingredient-basis">Staple, assumed on hand (change which in Profile &rsaquo; Staples you keep)</div></div></div>';
+      return;
+    }
+    // A stand-in that is itself a staple takes the line off the shopping check altogether.
+    if (s && s.staple && s.line.text === orig.text) {
+      html += '<div class="ingredient-row"><div><div class="ingredient-name">' + esc(orig.text) + '</div>' +
+        '<div class="ingredient-basis">' + esc(standInText(s)) + '</div></div>' + chipHTML('soon', 'stand-in') + '</div>';
       return;
     }
     var line = visible[orig.text];
@@ -1705,13 +1797,28 @@ function ingredientRowsHTML(r, idx) {
       note = ' · <b>' + fmtQty(c.stock.known, line.unit) + ' left' + (reserved && reserved[c.id] ? ' after earlier meals in the plan' : ' on hand') + '</b>';
     }
     if (c.status === 'check') { note = ' · <b>how much you have isn\'t recorded in a comparable unit, so check before cooking</b>'; }
+    var sub = line.sub ? '<div class="ingredient-sub">' + esc(standInText({ forId:line.sub.forId, row:{ use:line.sub.use, note:line.sub.note } })) + '</div>' : '';
     html += '<div class="ingredient-row"><div>' +
-        '<div class="ingredient-name">' + esc(line.text) + opt + scaledNote(line) + '</div>' +
+        '<div class="ingredient-name">' + esc(line.text) + opt + scaledNote(line) + '</div>' + sub +
         '<div class="ingredient-basis">' + esc(e && e.ing !== c.id ? ingName(e.ing) + ' (counts as ' + ingName(c.id).toLowerCase() + ')' : ingName(c.id)) +
           ': ' + esc(basisLine(e)) + note + '</div>' +
-      '</div>' + chipHTML(chip[0], chip[1]) + '</div>';
+      '</div>' + chipHTML(line.sub && c.status === 'ok' ? 'soon' : chip[0], line.sub && c.status === 'ok' ? 'stand-in' : chip[1]) + '</div>';
   });
   return { html:html, missing:missing };
+}
+// How a stand-in is said: the food asked for, what's used instead, where that comes from, and the
+// row's own note on doing it.
+function standInText(s) {
+  return 'No ' + ingName(s.forId).toLowerCase() + ', so this uses your ' + ingName(s.row.use).toLowerCase() +
+    (assumedStaple(s.row.use) ? ' (a staple)' : '') + ' instead, a stand-in from our list.' +
+    (s.row.note ? ' ' + s.row.note : '');
+}
+// Said again just above the steps, which still name the food the recipe asked for.
+function standInNoteHTML(r) {
+  var s = standInFor(r);
+  if (!s) return '';
+  return '<div class="note-card diet-note"><b>Stand-in: ' + esc(ingName(s.row.use).toLowerCase()) + ' for ' +
+    esc(ingName(s.forId).toLowerCase()) + '</b><br>' + esc(standInText(s)) + '</div>';
 }
 // A one-line reason the planner picked this meal, from the kitchen, never made up.
 //
@@ -1883,7 +1990,7 @@ function cookLunchInstead(idx) {
   var pick = pickRecipe('lunch', Math.floor(idx / 3), reservationsExcept(idx), others);
   if (!pick) { showToast('No lunch in our recipes fits your settings.'); return; }
   closeDetail();
-  var res = track('you chose to cook ' + slotName(idx).toLowerCase(), function() {
+  var res = track('you chose to cook ' + slotName(idx, true), function() {
     plan[idx] = { recipe:pick.id, status:'pending', ownLunch:true, chosen:true };
   }, { acted:idx });
   showToast('Planned ' + pick.name + ' for lunch instead.' + changeCount(res), { label:'Undo', fn:res.undo });
@@ -1912,9 +2019,11 @@ var lastChange = null;   // { why, kind, lines:[], undo, sig, before } — the r
 function planDigest() {
   return plan.map(function(e) { return !e ? '' : e.off ? 'off' : (e.leftover ? 'L:' : '') + e.recipe + (e.dietBlocked ? '!' : ''); });
 }
-function slotName(idx) {
+// "Saturday’s lunch". `mid` is for the middle of a sentence: "today’s lunch", but still "Saturday’s".
+function slotName(idx, mid) {
   var d = Math.floor(idx / 3);
-  return (d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : dayLabel(d)) + '’s ' + MEAL_TYPES[idx % 3];
+  var day = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : dayLabel(d);
+  return (mid && d < 2 ? day.toLowerCase() : day) + '’s ' + MEAL_TYPES[idx % 3];
 }
 function entryLabel(e) {
   if (!e || e.off) return '';
@@ -1937,6 +2046,7 @@ function restoreState(json) {
   var s = JSON.parse(json);
   settings = s.settings; pantry = s.pantry; plan = s.plan; prefs = s.prefs; unreconciled = s.unreconciled;
   cookLog = s.cookLog; wasteLog = s.wasteLog; lastNight = s.lastNight; planSig = s.planSig; planBuiltEmpty = s.planBuiltEmpty;
+  syncStaples();
 }
 // What has to be unchanged for an Undo to be safe: if Ren has cooked, added food or changed a
 // setting since, putting the old state back would quietly undo that too.
@@ -2026,6 +2136,130 @@ function changedLine(ch) {
   return (ch.from ? 'Was ' + ch.from + '. ' : '') + 'Changed because ' + ch.why + '.';
 }
 
+// ═══════════════ WHAT TO PICK UP (feedback 6B) ═══════════════
+// The promise only held for a stocked kitchen: with 13 everyday foods a first-timer could cook no
+// lunch or dinner, and the banner ended "shop for the gap" with no list. This is the list, in two
+// parts: what the plan on screen is short of, meal by meal; and the few foods that would make the
+// most other recipes cookable with what's already in the kitchen ("Buy these, unlock those").
+// Both come from the recipes and the kitchen record only. Nothing is ordered or sent anywhere.
+
+// What the current plan is short of, one row per food, with the meals that need it.
+function planShortList() {
+  var n = planNeeds(), rows = {}, order = [];
+  function add(name, idx, detail) {
+    if (!rows[name]) { rows[name] = { name:name, meals:[], detail:'' }; order.push(name); }
+    var m = slotName(+idx, true);
+    if (rows[name].meals.indexOf(m) === -1) rows[name].meals.push(m);
+    if (detail && !rows[name].detail) rows[name].detail = detail;
+  }
+  var shortBy = {};
+  n.short.forEach(function(s) {
+    var more = s.need - s.have;
+    if (more > 0) shortBy[s.name] = 'about ' + kitchenQty(more, s.unit) + ' more';
+  });
+  Object.keys(n.byIdx).sort(function(a, b) { return a - b; }).forEach(function(idx) {
+    var v = n.byIdx[idx];
+    v.missing.forEach(function(name) { add(name, idx, ''); });
+    v.short.forEach(function(name) { add(name, idx, shortBy[name] || 'more than you have'); });
+    v.stale.forEach(function(name) { add(name, idx, 'yours will be past its window by then'); });
+  });
+  return order.map(function(k) { return rows[k]; });
+}
+
+// The foods that would make the most recipes cookable, one at a time, each counted on top of the
+// ones before it. Only recipes this household could be offered count (its meals, its dietary
+// settings, nothing marked "Not for us"), with stand-ins and staples as the plan reads them.
+// Presence only: it doesn't know how much to buy, and says so.
+// The foods the plan on screen is missing outright, by id: the unlock list counts on top of them,
+// since they're on the list already.
+function planMissingIds() {
+  var ids = [];
+  plan.forEach(function(e) {
+    if (!activeEntry(e)) return;
+    visibleLines(recipeById(e.recipe)).forEach(function(l) {
+      if (l.optional) return;
+      if (l.all) { l.all.forEach(function(id) { if (!onHand(id) && ids.indexOf(id) === -1) ids.push(id); }); return; }
+      if (!lineIds(l).some(onHand) && ids.indexOf(lineIds(l)[0]) === -1) ids.push(lineIds(l)[0]);
+    });
+  });
+  return ids;
+}
+function unlockSuggestions(max, already) {
+  var types = MEAL_TYPES.filter(mealOn), gapsBy = [];
+  already = already || [];
+  recipes.forEach(function(r) {
+    if (types.indexOf(r.type) === -1 || !eligible(r, r.type)) return;
+    var gaps = [];
+    visibleLines(r).forEach(function(l) {
+      if (l.optional) return;
+      if (l.all) { l.all.forEach(function(id) { if (!onHand(id)) gaps.push([id]); }); return; }
+      if (!lineIds(l).some(onHand)) gaps.push(lineIds(l));
+    });
+    // Already on the list above, or cookable as soon as it's bought: not "more".
+    var open = gaps.filter(function(gap) { return !gap.some(function(id) { return already.indexOf(id) > -1; }); });
+    if (open.length && gaps.length <= max + already.length) gapsBy.push({ r:r, gaps:gaps });
+  });
+  var buyable = function(id) { var i = ingById(id); return !!i && !i.extra && !assumedStaple(id) && !dietRuleFor(id); };
+  var picked = already.slice(), out = [];
+  for (var k = 0; k < max; k++) {
+    var unlocks = {};
+    gapsBy.forEach(function(g) {
+      if (g.done) return;
+      var open = g.gaps.filter(function(gap) { return !gap.some(function(id) { return picked.indexOf(id) > -1; }); });
+      if (open.length !== 1) return;            // one more food has to finish it
+      open[0].filter(buyable).forEach(function(id) { (unlocks[id] = unlocks[id] || []).push(g); });
+    });
+    var best = null;
+    Object.keys(unlocks).forEach(function(id) {
+      if (!best || unlocks[id].length > unlocks[best].length ||
+          (unlocks[id].length === unlocks[best].length && (ING_USE[id] || 0) > (ING_USE[best] || 0))) best = id;
+    });
+    if (!best) break;
+    picked.push(best);
+    unlocks[best].forEach(function(g) { g.done = true; });
+    out.push({ id:best, recipes:unlocks[best].map(function(g) { return g.r; }) });
+  }
+  return out;
+}
+
+var shopCache = null;   // what the screen shows, kept for Copy list
+function shopHTML() {
+  var need = planShortList(), more = unlockSuggestions(5, planMissingIds());
+  shopCache = { need:need, more:more };
+  var html = '<p class="sub-intro">A short list, so the plan works with what you have. Only foods our recipes use. ' +
+    'Nothing is ordered or sent anywhere.</p>';
+  html += '<div class="section-label">For this plan</div>';
+  html += need.length ? '<div class="w-list">' + need.map(function(x) {
+      return '<div class="shop-row"><b>' + esc(x.name) + '</b><span>' + esc((x.detail ? x.detail + ' · ' : '') + 'for ' + listOf(x.meals, 3)) + '</span></div>';
+    }).join('') + '</div>'
+    : '<div class="note-card" style="margin-top:0;">Nothing. Every meal still to cook is covered' +
+      (planNeeds().check.length ? ', apart from amounts to check on the meals.' : '.') + '</div>';
+  html += '<div class="section-label">To unlock more meals</div>';
+  html += more.length ? '<div class="w-list">' + more.map(function(x, i) {
+      var names = x.recipes.map(function(r) { return r.name; });
+      return '<div class="shop-row"><b>' + (i ? '+ ' : '') + esc(ingName(x.id)) + '</b><span>' + x.recipes.length + ' more ' +
+        (x.recipes.length === 1 ? 'recipe' : 'recipes') + ' you could cook: ' + esc(listOf(names, 2)) + '</span></div>';
+    }).join('') + '</div>' +
+    '<p class="field-hint">Counted on top of everything above it, one food at a time, from the recipes that fit your settings. ' +
+      'It goes by what you have, not how much, so buy enough for the meal. Then tap Re-plan on the Plan tab.</p>'
+    : '<div class="note-card" style="margin-top:0;">No single food would make another recipe cookable yet. ' +
+      'Adding more of what you usually buy is the quickest way to more meals.</div>';
+  if (need.length || more.length) {
+    html += '<div class="actions"><button class="btn primary" onclick="copyShopList()">Copy list</button></div>';
+  }
+  return html;
+}
+function copyShopList() {
+  if (!shopCache) return;
+  var t = 'What the Fridge: to pick up\n';
+  if (shopCache.need.length) t += '\nFor this plan:\n' + shopCache.need.map(function(x) { return '- ' + x.name + (x.detail ? ' (' + x.detail + ')' : ''); }).join('\n') + '\n';
+  if (shopCache.more.length) t += '\nTo unlock more meals:\n' + shopCache.more.map(function(x) { return '- ' + ingName(x.id); }).join('\n') + '\n';
+  var done = function() { showToast('Copied. Paste it into a note or a message.'); };
+  try {
+    navigator.clipboard.writeText(t).then(done, function() { showToast('Couldn’t copy here. Select the list and copy it instead.'); });
+  } catch (e) { showToast('Couldn’t copy here. Select the list and copy it instead.'); }
+}
+
 // ═══════════════ ACCEPT / SWAP / SKIP ═══════════════
 function acceptMeal(idx, confirmed) {
   var entry = plan[idx];
@@ -2105,12 +2339,12 @@ function undoAccept(idx) {
 // receipt now names it, and Undo puts both back.
 function skipMeal(idx) {
   closeDetail();
-  var res = track('you skipped ' + slotName(idx).toLowerCase(), function() { plan[idx].status = 'skipped'; }, { acted:idx });
+  var res = track('you skipped ' + slotName(idx, true), function() { plan[idx].status = 'skipped'; }, { acted:idx });
   showToast('Skipped — nothing deducted.' + changeCount(res), { label:'Undo', fn:res.undo });
 }
 function unskip(idx) {
   closeDetail();
-  var res = track('you put ' + slotName(idx).toLowerCase() + ' back', function() { plan[idx].status = 'pending'; }, { acted:idx });
+  var res = track('you put ' + slotName(idx, true) + ' back', function() { plan[idx].status = 'pending'; }, { acted:idx });
   showToast('Back on the plan.' + changeCount(res));
 }
 
@@ -2151,7 +2385,7 @@ function swapMeal(idx, why, pre) {
   }
 
   closeDetail();
-  var res = track(why || 'you swapped ' + slotName(idx).toLowerCase(), function() {
+  var res = track(why || 'you swapped ' + slotName(idx, true), function() {
     if (pre) pre();
     // Remember what this slot has shown, so the next Swap moves on. bestAlternative() clears the
     // list itself when the pool runs out, so this only ever grows within one rotation.
@@ -2254,6 +2488,31 @@ function openSub(which) {
         'Recipes that still fit: ' + fits + '.</p>' +
       '<div class="note-card"><b>Not for allergies.</b> These filters go by how each recipe is labelled. Nothing checks individual ' +
       'ingredients or package labels, so don\'t rely on them for an allergy.</div>';
+  }
+
+  if (which === 'shop') {
+    title = 'What to pick up';
+    body = shopHTML();
+  }
+
+  // Staples (feedback 6D). The recipes assume 36 staples are always in the kitchen, so a dish that
+  // needs butter never said so to a household without any. Each is now the household's to switch
+  // off; one that's off is planned around like any other food, and can be added to the pantry.
+  if (which === 'staples') {
+    title = 'Staples you keep';
+    var off = Object.keys(settings.noStaples || {}).length;
+    body = '<p class="sub-intro">Recipes assume these are always in your kitchen, so they never show up as missing. ' +
+      'Switch off anything you don\'t keep: the plan then treats it like any other food, and you can add it to your pantry.</p>' +
+      (off ? '<p class="nutri-note" style="margin-top:0;">' + off + ' switched off.</p>' : '') +
+      STAPLE_GROUPS.map(function(g) {
+        var ids = g[1].filter(function(id) { var i = ingById(id); return i && i.staple; });
+        if (!ids.length) return '';
+        return '<div class="field-label">' + g[0] + '</div><div>' + ids.map(function(id) {
+          var keep = !settings.noStaples[id];
+          return '<div class="toggle-row"><div class="tr-name">' + esc(ingName(id)) + '</div>' +
+            '<button class="switch' + (keep ? ' on' : '') + '"' + switchAttrs(keep, ingName(id)) + ' onclick="toggleStaple(\'' + id + '\')"></button></div>';
+        }).join('') + '</div>';
+      }).join('');
   }
 
   // The switches that used to be here did nothing: no reminder was ever sent. A setting that looks
@@ -2413,7 +2672,8 @@ function openSub(which) {
       '<div id="receiptResults" style="display:none;"></div>';
   }
 
-  document.getElementById('subBackLabel').textContent = (which === 'receipt' || which === 'shelves') ? receiptBack : 'Profile';
+  document.getElementById('subBackLabel').textContent = (which === 'receipt' || which === 'shelves') ? receiptBack
+    : which === 'shop' ? (currentTab === 'pantryTab' ? 'Pantry' : 'Plan') : 'Profile';
   document.getElementById('subTitle').textContent = title;
   document.getElementById('subBody').innerHTML = body;
   document.getElementById('subScreen').classList.add('open');
@@ -2441,6 +2701,27 @@ function setHousehold(delta) {
   var res = track('your household is now ' + n, function() { settings.household = n; }, { kind:'household' });
   openSub('household');
   showToast('Household of ' + n + ' saved.' + changeCount(res), seePlanAction(res));
+}
+// Water is the one staple not offered: nobody runs out of it.
+var STAPLE_GROUPS = [
+  ['Oils and fats', ['olive-oil', 'vegetable-oil', 'coconut-oil', 'sesame-oil', 'butter']],
+  ['Fresh', ['garlic', 'ginger']],
+  ['Spices and dried herbs', ['salt', 'black-pepper', 'garlic-powder', 'onion-powder', 'paprika', 'chili-powder', 'cumin',
+                              'cinnamon', 'red-pepper-flakes', 'oregano', 'thyme', 'italian-seasoning']],
+  ['Sauces and vinegars', ['soy-sauce', 'hot-sauce', 'dijon', 'white-vinegar', 'red-wine-vinegar', 'rice-vinegar', 'balsamic-glaze']],
+  ['Baking and sweet', ['flour', 'sugar', 'brown-sugar', 'honey', 'maple-syrup', 'baking-powder', 'baking-soda', 'cornstarch', 'vanilla']]
+];
+function toggleStaple(id) {
+  var keep = !!settings.noStaples[id], name = ingName(id).toLowerCase();
+  var res = track(keep ? 'you keep ' + name + ' again' : 'you don’t keep ' + name, function() {
+    var ns = {};
+    for (var k in settings.noStaples) ns[k] = settings.noStaples[k];
+    if (keep) delete ns[id]; else ns[id] = true;
+    settings.noStaples = ns;              // a new object, so syncStaples re-reads every recipe
+    syncStaples();
+  }, { kind:'staples', mergedWhy:'you changed which staples you keep' });
+  openSub('staples');
+  showToast((keep ? 'Assuming you have ' : 'No longer assuming you have ') + name + '.' + changeCount(res), seePlanAction(res));
 }
 function toggleDiet(key) {
   var result = null, label = DIET_RULES[key].label, on = !settings.dietary[key];
@@ -2724,6 +3005,7 @@ function renderGreeting() {
 }
 
 function renderAll() {
+  syncStaples();
   syncPlanShape();
   renderGreeting();
   renderDaySelector();
@@ -2743,6 +3025,11 @@ function renderAll() {
   if (da) {
     var n = activeDietLabels().length;
     da.innerHTML = (n ? n + ' active ' : '') + '&rsaquo;';
+  }
+  var sa = document.getElementById('staplesArrow');
+  if (sa) {
+    var off = Object.keys(settings.noStaples || {}).length;
+    sa.innerHTML = (off ? off + ' not kept ' : '') + '&rsaquo;';
   }
   var tt = document.getElementById('testTools');
   if (tt) { tt.style.display = settings.testTools ? '' : 'none'; }
@@ -2985,7 +3272,7 @@ INGREDIENTS.forEach(function(i) {
 
 function searchIngredients(q) {
   q = q.trim().toLowerCase();
-  var pool = INGREDIENTS.filter(function(i) { return !i.staple; });
+  var pool = INGREDIENTS.filter(function(i) { return !assumedStaple(i.id); });
   if (!q) {
     return pool.slice().sort(function(a, b) { return (ING_USE[b.id] || 0) - (ING_USE[a.id] || 0); }).slice(0, 24);
   }
@@ -3001,7 +3288,7 @@ function stapleMatch(q) {
   if (!q) return null;
   var hit = null;
   INGREDIENTS.forEach(function(i) {
-    if (!hit && i.staple && (i.name.toLowerCase().indexOf(q) > -1 || (ING_RX[i.id] && ING_RX[i.id].test(q)))) hit = i;
+    if (!hit && assumedStaple(i.id) && (i.name.toLowerCase().indexOf(q) > -1 || (ING_RX[i.id] && ING_RX[i.id].test(q)))) hit = i;
   });
   return hit;
 }
@@ -3042,7 +3329,8 @@ function renderItemScreen() {
       '<input class="field search" id="itemSearch" type="search" placeholder="Search: chicken, spinach, feta…" ' +
         'autocomplete="off" value="' + esc(draft.query) + '" oninput="draft.query=this.value;renderItemResults()">' +
       '<div id="itemResults"></div>' +
-      '<p class="field-hint">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them.</p>' +
+      '<p class="field-hint">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them. ' +
+        'Change which in Profile &rsaquo; Staples you keep.</p>' +
       (justAdded.length ? '<div class="actions"><button class="btn primary" onclick="closeSub()">Done</button></div>' : '');
     renderItemResults();
     // On a computer, put the cursor in the search box, but only once the screen has finished
@@ -3701,8 +3989,8 @@ function matchFoodName(name) {
   });
   if (!hit) INGREDIENTS.forEach(function(i) { if (!hit && i.extra && ING_RX[i.id] && ING_RX[i.id].test(q)) hit = i; });
   if (!hit) INGREDIENTS.forEach(function(i) { if (!hit && !i.extra && ING_RX[i.id] && ING_RX[i.id].test(q)) hit = i; });
-  // Staples (oil, salt, water...) are assumed on hand and never tracked, as everywhere else.
-  return hit && !hit.staple ? { id:hit.id, name:hit.name, exact:true } : null;
+  // Staples the household keeps (oil, salt...) are assumed on hand and never tracked, as everywhere else.
+  return hit && !assumedStaple(hit.id) ? { id:hit.id, name:hit.name, exact:true } : null;
 }
 
 // The original reader, run on the phone with Tesseract.js: the backup when Claude can't be used.
@@ -4038,7 +4326,7 @@ function matchReceiptLine(line) {
   var best = null, bestScore = 0;
 
   INGREDIENTS.forEach(function(ing) {
-    if (ing.staple) return;
+    if (assumedStaple(ing.id)) return;
     var name = ing.name.toLowerCase();
     var score = 0;
 
@@ -4311,7 +4599,7 @@ function filterIngPicker(idx, query) {
   if (!listEl) return;
   var q = (query || '').toLowerCase().trim();
   var results = INGREDIENTS.filter(function(ing) {
-    if (ing.staple) return false;
+    if (assumedStaple(ing.id)) return false;
     if (!q) return true;
     return ing.name.toLowerCase().indexOf(q) > -1 || ing.id.indexOf(q) > -1;
   });
@@ -4496,6 +4784,7 @@ function loadState() {
   var valid = s.plan.length === 9 && s.plan.every(function(e) { return e && (e.off || recipeById(e.recipe)); });
 
   settings = fillMealSettings(s.settings);
+  syncStaples();                          // the saved staples list decides how recipes read
   pantry = s.pantry.filter(function(e) { return ingById(e.ing); });
   plan = valid ? s.plan : [];
   planSig = valid ? (s.planSig || null) : null;
@@ -4555,6 +4844,7 @@ function startOver() {
   // have to dig the switch out of About each time.
   settings.name = ''; settings.since = null; settings.household = 2;
   settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
+  settings.noStaples = {};
   settings.meals = { breakfast:true, lunch:true, dinner:true }; settings.leftovers = false;
   settings.times = { breakfast:20, lunch:30, dinner:null };
   pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1; lastNight = null; lastChange = null;

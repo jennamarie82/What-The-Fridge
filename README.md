@@ -56,6 +56,16 @@ whichever of them a household wants planned. BUS 860 *Managing Intelligence* · 
   (converting grams, ounces, cups and spoons where that's plain arithmetic), and Undo puts back
   exactly what was taken. A meal still unconfirmed when its day ends is asked about, not assumed,
   and a late "Cooked it" re-plans any meal it leaves short.
+- **What to pick up** (from the "Short of N foods" banner, or the Pantry when supplies are low) lists
+  what the plan is short of, meal by meal, then the few foods that would make the most other recipes
+  cookable with what you already have ("+ Parsley: 3 more recipes you could cook"), with Copy list.
+  Nothing is ordered or sent anywhere.
+- Where a recipe asks for something you don't have, it may use one **stand-in** from
+  `tools/substitutions.csv` (rice for cooked rice, chicken thighs for breast), said on the card, the
+  ingredient line and above the steps, with the row's note on how. Only in the kinds of dish the row
+  names, only one per meal, and never one that breaks a dietary setting.
+- **Profile → Staples you keep**: the recipes assume 36 staples (oils, spices, flour...) are always on
+  hand. Switch one off and the plan treats it like any other food: needed, and addable to the pantry.
 - Dietary settings also keep excluded food out of the pantry match: a dairy-free household's cow's
   milk doesn't cover "milk (dairy or plant-based)", and the meal screen says what the setting changes
   in the steps.
@@ -122,6 +132,13 @@ holds an estimated serving count for each recipe. The build turns every ingredie
 adds them up and divides by the servings, and writes `tools/nutrition-review.csv` with each line's
 grams and calories so the team can spot a line that was counted wrongly. The same serving counts are
 what the app scales recipe amounts from.
+
+Stand-ins come from `tools/substitutions.csv` and nowhere else: each row names the food asked for,
+the stand-in, the kinds of dish it works in, any dietary effect, and a note for the cook. The build
+checks every row (both foods exist, contexts are known, no duplicates) and tags each recipe with its
+kinds of dish by keyword from its title and method; `tools/context-review.csv` lists those tags for
+checking, since they decide where a stand-in may be offered. The rows were drafted for review
+(`tools/substitutions-review-notes.md`) and are still worth a read.
 
 ## Updating the site
 
