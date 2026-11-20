@@ -13,7 +13,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css?v=20261119b">
+<link rel="stylesheet" href="styles.css?v=20261120a">
 </head>
 <body>
 
@@ -55,7 +55,7 @@
     <div class="sub-head">
       <button class="back" onclick="closeSub()">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 18.5 8 12l6.5-6.5"/></svg>
-        <span id="subBackLabel">Profile</span>
+        <span id="subBackLabel">Settings</span>
       </button>
     </div>
     <div class="sub-title" id="subTitle"></div>
@@ -69,6 +69,12 @@
 
   <!-- ══════ VIEW AREA ══════ -->
   <div class="view" id="mainView">
+
+    <!-- Back to the previous tab; shown only when there is one (app.js renderBackBar / goBack). -->
+    <button class="back-bar" id="backBar" onclick="goBack()" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 18.5 8 12l6.5-6.5"/></svg>
+      <span>Back to <span id="backBarLabel">Plan</span></span>
+    </button>
 
     <!-- ───── PLAN TAB ───── -->
     <div class="tab-content active" id="planTab">
@@ -159,12 +165,16 @@
     <!-- ───── PROFILE TAB ───── -->
     <div class="tab-content" id="profileTab">
       <div class="view-pad">
+        <div class="top-row">
+          <h3 class="pantry-title">Settings</h3>
+          <img class="wtf-logo" src="logo-header-t.webp" alt="What the Fridge">
+        </div>
         <div id="profileHead"></div>
         <div class="profile-stat-row" id="profileStats"></div>
         <div class="profile-ledger" id="profileLedger"></div>
         <div id="profileRewards"></div>
 
-        <div class="section-label">Settings</div>
+        <div class="section-label">Preferences</div>
         <div>
           <div class="profile-menu-item" onclick="openSub('household')"><span>Household size</span><span class="arrow" id="hhArrow">2 &rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('meals')"><span>Meals &amp; cooking</span><span class="arrow" id="mealsArrow">&rsaquo;</span></div>
@@ -172,7 +182,7 @@
           <div class="profile-menu-item" onclick="openSub('staples')"><span>Staples you keep</span><span class="arrow" id="staplesArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('notify')"><span>Reminders</span><span class="arrow" id="notifyArrow">not yet &rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('waste')"><span>Where food is going</span><span class="arrow" id="wasteArrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openReceipt('Profile')"><span>Upload receipt</span><span class="arrow">&rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="openReceipt('Settings')"><span>Upload receipt</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('about')"><span>About What the Fridge</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('feedback')"><span>Send feedback</span><span class="arrow">&rsaquo;</span></div>
         </div>
@@ -236,9 +246,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8.5h16l-1.4 11A2 2 0 0 1 16.6 21H7.4a2 2 0 0 1-2-1.5l-1.4-11Z"/><path d="M8.5 8.5V6a3.5 3.5 0 0 1 7 0v2.5"/></svg>
       Pantry
     </button>
-    <button class="tab" data-tab="profileTab" onclick="switchTab('profileTab')" aria-label="Profile tab — settings and stats">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.2" r="3.4"/><path d="M4.8 20c0-3.6 3.2-6.2 7.2-6.2s7.2 2.6 7.2 6.2"/></svg>
-      Profile
+    <button class="tab" data-tab="profileTab" onclick="switchTab('profileTab')" aria-label="Settings tab — your household, kitchen data and stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      Settings
     </button>
   </nav>
 
@@ -259,6 +269,6 @@
 
 <!-- ?v= makes every phone fetch the new files after a release; change it with APP_VERSION in app.js. -->
 <script src="recipes.js?v=20261119b"></script>
-<script src="app.js?v=20261119b"></script>
+<script src="app.js?v=20261120a"></script>
 </body>
 </html>

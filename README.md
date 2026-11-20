@@ -8,10 +8,15 @@ whichever of them a household wants planned. BUS 860 *Managing Intelligence* · 
 
 ## What it does
 
+- The first screen says what the app is for (cutting food waste by making the most of the food you
+  already have) and how it works, in three lines.
+- **Back** goes to the previous screen inside the app: a "Back to …" button at the top of a tab
+  returns to the last tab, and the browser's or phone's Back closes the open meal, sheet or settings
+  page first, then returns to earlier tabs, and only leaves the site when there's nowhere left.
 - A short first-time questionnaire: name, household size and dietary filters; which meals to plan
   (any of breakfast, lunch and dinner); whether you eat leftovers; and how long each meal can take on
   a weekday. Then either an empty kitchen to fill or a sample kitchen to look around. All of it can
-  be changed later under **Profile → Meals & cooking** (and Household size, Dietary preferences).
+  be changed later under **Settings → Meals & cooking** (and Household size, Dietary preferences).
 - Add food with the **+** button: **Scan a receipt** (camera), **Upload a receipt photo** (camera roll)
   or **Add manually**. Receipts are read by Claude (see Your data) and every item is shown for review
   before anything is added; non-food lines come unticked. Manual entry searches about 440 foods, so
@@ -64,21 +69,21 @@ whichever of them a household wants planned. BUS 860 *Managing Intelligence* · 
   `tools/substitutions.csv` (rice for cooked rice, chicken thighs for breast), said on the card, the
   ingredient line and above the steps, with the row's note on how. Only in the kinds of dish the row
   names, only one per meal, and never one that breaks a dietary setting.
-- **Profile → Staples you keep**: the recipes assume 36 staples (oils, spices, flour...) are always on
+- **Settings → Staples you keep**: the recipes assume 36 staples (oils, spices, flour...) are always on
   hand. Switch one off and the plan treats it like any other food: needed, and addable to the pantry.
 - Dietary settings also keep excluded food out of the pantry match: a dairy-free household's cow's
   milk doesn't cover "milk (dairy or plant-based)", and the meal screen says what the setting changes
   in the steps.
-- Profile counts real activity only: meals cooked, days cooked, and ingredients rescued just in time
-  (used in the last two days of their window). The app doesn't send reminders; **Profile →
+- Settings counts real activity only: meals cooked, days cooked, and ingredients rescued just in time
+  (used in the last two days of their window). The app doesn't send reminders; **Settings →
   Reminders** says so.
 
 ## Your data
 
 Everything is saved in your own browser (`localStorage`). Nothing is sent to a server, and each
-person or device has its own copy. **Profile → Start over** clears it; **Load the sample kitchen**
-swaps in the demo food. For testing, **Profile → About → Testing tools** adds **Simulate midnight**
-to Profile (the laptop page's footer has it too).
+person or device has its own copy. **Settings → Start over** clears it; **Load the sample kitchen**
+swaps in the demo food. For testing, **Settings → About → Testing tools** adds **Simulate midnight**
+to Settings (the laptop page's footer has it too).
 
 The one exception is a receipt photo someone chooses to scan. It goes to the team's Cloudflare
 Worker (`worker/receipt-reader.js`), which asks Claude to read it and returns the items for review;
@@ -147,7 +152,7 @@ republishes about a minute after the merge. Code and data are fetched fresh on e
 copies pick up changes on their own.
 
 For a release people need to see, change `APP_VERSION` at the top of `app.js` and the `?v=` number on
-the three files in `index.html`. The version shows under **Profile → About** and in the page footer,
+the three files in `index.html`. The version shows under **Settings → About** and in the page footer,
 so anyone can check which build their phone is running.
 
 Every change, in Claude or on GitHub, is recorded in the team's Build and Fix Log.

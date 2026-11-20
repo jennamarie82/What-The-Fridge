@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-19 (feedback 1, 2, 4, 5, 6 and 8)';
+var APP_VERSION = '2026-11-20 (Back, Settings, welcome)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -8,8 +8,8 @@ var settings = {
   since: null,                    // YYYY-MM-DD the household was set up; null until setup is finished
   household: 2,
   dietary: { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false },
-  noStaples: {},                  // staples the household doesn't keep: { id:true } (Profile > Staples you keep)
-  testTools: false,               // About > Testing tools: shows Simulate midnight in Profile
+  noStaples: {},                  // staples the household doesn't keep: { id:true } (Settings > Staples you keep)
+  testTools: false,               // About > Testing tools: shows Simulate midnight in Settings
   // From the setup questionnaire (Profile > Meals & cooking to change):
   meals:     { breakfast:true, lunch:true, dinner:true },   // which meals to plan
   leftovers: false,                                          // dinner covers the next day's lunch
@@ -1765,7 +1765,7 @@ function ingredientRowsHTML(r, idx) {
   r.all.forEach(function(orig) {
     if (orig.staple) {
       html += '<div class="ingredient-row"><div><div class="ingredient-name">' + esc(orig.text) + '</div>' +
-        '<div class="ingredient-basis">Staple, assumed on hand (change which in Profile &rsaquo; Staples you keep)</div></div></div>';
+        '<div class="ingredient-basis">Staple, assumed on hand (change which in Settings &rsaquo; Staples you keep)</div></div></div>';
       return;
     }
     // A stand-in that is itself a staple takes the line off the shopping check altogether.
@@ -1887,6 +1887,7 @@ function seenChangeHTML(entry) {
 }
 
 function openDetail(idx) {
+  armBack();
   detailIndex = idx;
   var entry = plan[idx];
   if (!entry || entry.off) return;
@@ -1972,7 +1973,7 @@ function openLeftoverDetail(idx) {
       '</div>' +
       '<p class="detail-note">You eat leftovers, so ' + esc(dayLabel(day - 1).toLowerCase()) + '\'s dinner is planned for ' +
         settings.household + ' ' + (settings.household === 1 ? 'person' : 'people') + ' twice over: once for dinner and once for this lunch. ' +
-        'There\'s nothing to cook, and nothing more is taken from your pantry. Change this in Profile &rsaquo; Meals &amp; cooking.</p>';
+        'There\'s nothing to cook, and nothing more is taken from your pantry. Change this in Settings &rsaquo; Meals &amp; cooking.</p>';
   }
   html += nutritionHTML(r);
   document.getElementById('detailContent').innerHTML = html;
@@ -2444,6 +2445,7 @@ function enforceTimes() {
 }
 // ═══════════════ SETTINGS SUB-SCREENS ═══════════════
 function openSub(which) {
+  armBack();
   var title = '', body = '';
 
   if (which === 'household') {
@@ -2607,7 +2609,7 @@ function openSub(which) {
       // Testing tools live behind a switch here rather than in the Profile menu, where "Simulate
       // midnight" sat beside the household's real settings.
       '<div class="toggle-row" style="margin-top:var(--s8);border-radius:var(--r);"><div><div class="tr-name">Testing tools</div>' +
-        '<div class="tr-sub">Adds Simulate midnight to Profile, to try the next day without waiting for it.</div></div>' +
+        '<div class="tr-sub">Adds Simulate midnight to Settings, to try the next day without waiting for it.</div></div>' +
         '<button class="switch' + (settings.testTools ? ' on' : '') + '"' + switchAttrs(!!settings.testTools, 'Testing tools') +
           ' onclick="settings.testTools=!settings.testTools;renderAll();openSub(\'about\')"></button></div>' +
       '<div style="margin-top:var(--s8);color:var(--ink-soft);font-size:13px;line-height:1.5;text-align:center;">' +
@@ -2673,7 +2675,7 @@ function openSub(which) {
   }
 
   document.getElementById('subBackLabel').textContent = (which === 'receipt' || which === 'shelves') ? receiptBack
-    : which === 'shop' ? (currentTab === 'pantryTab' ? 'Pantry' : 'Plan') : 'Profile';
+    : which === 'shop' ? (currentTab === 'pantryTab' ? 'Pantry' : 'Plan') : 'Settings';
   document.getElementById('subTitle').textContent = title;
   document.getElementById('subBody').innerHTML = body;
   document.getElementById('subScreen').classList.add('open');
@@ -2742,7 +2744,76 @@ function toggleDiet(key) {
 }
 
 // ═══════════════ TABS / TOAST / ALLOCATION ═══════════════
+// ═══════════════ GOING BACK ═══════════════
+// The browser's Back button left the site instead of returning to the previous screen, and a
+// home-screen install has no browser Back at all. Now:
+//   - goBack() steps back one screen: the open sheet, meal, settings page or search first, then
+//     the previous tab, then the previous setup step;
+//   - each tab shows a Back button (top left) whenever there's a previous tab to return to;
+//   - the browser's or phone's Back does the same, and only leaves the site once there's nowhere
+//     left to go back to inside the app.
+var tabHistory = [];      // tabs left behind, most recent last
+var goingBack = false;
+var TAB_NAMES = { planTab:'Plan', pantryTab:'Pantry', profileTab:'Settings' };
+
+function setupOpen() { return document.getElementById('setup').classList.contains('open'); }
+function canGoBack() {
+  if (setupOpen()) return setupStep > 1;
+  return document.getElementById('wasteReasons').style.display !== 'none' ||
+    document.getElementById('addSheet').classList.contains('open') ||
+    document.getElementById('detailOverlay').classList.contains('open') ||
+    document.getElementById('subScreen').classList.contains('open') ||
+    document.getElementById('pantrySearchBar').style.display !== 'none' ||
+    tabHistory.length > 0;
+}
+function goBack() {
+  if (setupOpen()) { if (setupStep > 1) { setupStep--; renderSetup(); } return; }
+  if (document.getElementById('wasteReasons').style.display !== 'none') { closeWasteReasons(); return; }
+  if (document.getElementById('addSheet').classList.contains('open')) { closeAddSheet(); return; }
+  if (document.getElementById('detailOverlay').classList.contains('open')) { closeDetail(); return; }
+  if (document.getElementById('subScreen').classList.contains('open')) { closeSub(); return; }
+  if (document.getElementById('pantrySearchBar').style.display !== 'none') { closePantrySearch(); return; }
+  if (tabHistory.length) {
+    goingBack = true;
+    switchTab(tabHistory.pop());
+    goingBack = false;
+  }
+}
+function renderBackBar() {
+  var bar = document.getElementById('backBar');
+  if (!bar) return;
+  var to = tabHistory[tabHistory.length - 1];
+  bar.style.display = to ? '' : 'none';
+  if (to) document.getElementById('backBarLabel').textContent = TAB_NAMES[to] || 'Back';
+}
+// The browser's Back. One extra history entry ("app") sits on top of the page's own ("base"), so
+// Back lands on "base" instead of leaving. If there's somewhere to go back to in the app, it goes
+// there and the "app" entry is put back; if not, it carries on out of the site, as Back meant.
+(function() {
+  if (!window.history || !history.pushState) return;
+  // A reload keeps the entries it already has, so they're only added on a fresh visit.
+  if (!(history.state && history.state.wtf)) {
+    history.replaceState({ wtf:'base' }, '');
+    history.pushState({ wtf:'app' }, '');
+  }
+  window.addEventListener('popstate', function(e) {
+    if (!e.state || e.state.wtf !== 'base') return;
+    if (canGoBack()) { goBack(); history.pushState({ wtf:'app' }, ''); }
+    else { history.back(); }
+  });
+})();
+// When there was nowhere to leave to (the app opened in a fresh tab), Back stays on "base". Put the
+// "app" entry back as soon as Ren moves to another screen, so the next Back is caught again.
+function armBack() {
+  if (window.history && history.pushState && history.state && history.state.wtf === 'base') history.pushState({ wtf:'app' }, '');
+}
+
 function switchTab(tabId) {
+  armBack();
+  if (!goingBack && currentTab !== tabId) {
+    tabHistory.push(currentTab);
+    if (tabHistory.length > 20) tabHistory.shift();
+  }
   document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
   document.querySelectorAll('.tabs .tab').forEach(function(t) { t.classList.remove('active'); });
   document.getElementById(tabId).classList.add('active');
@@ -2753,6 +2824,7 @@ function switchTab(tabId) {
   closeDetail();
   closeSub();
   closePantrySearch();
+  renderBackBar();
 }
 
 function showToast(msg, action) {
@@ -3026,6 +3098,7 @@ function renderAll() {
     var n = activeDietLabels().length;
     da.innerHTML = (n ? n + ' active ' : '') + '&rsaquo;';
   }
+  renderBackBar();
   var sa = document.getElementById('staplesArrow');
   if (sa) {
     var off = Object.keys(settings.noStaples || {}).length;
@@ -3313,6 +3386,7 @@ function openEditItem(entryId) {
   openItemScreen();
 }
 function openItemScreen() {
+  armBack();
   document.getElementById('subBackLabel').textContent = 'Back';
   document.getElementById('subScreen').dataset.which = 'item';
   renderItemScreen();
@@ -3330,7 +3404,7 @@ function renderItemScreen() {
         'autocomplete="off" value="' + esc(draft.query) + '" oninput="draft.query=this.value;renderItemResults()">' +
       '<div id="itemResults"></div>' +
       '<p class="field-hint">Staples like oil, salt, flour and spices are assumed on hand, so there\'s no need to add them. ' +
-        'Change which in Profile &rsaquo; Staples you keep.</p>' +
+        'Change which in Settings &rsaquo; Staples you keep.</p>' +
       (justAdded.length ? '<div class="actions"><button class="btn primary" onclick="closeSub()">Done</button></div>' : '');
     renderItemResults();
     // On a computer, put the cursor in the search box, but only once the screen has finished
@@ -3709,7 +3783,7 @@ function closeWasteReasons() {
 // Nothing enters the pantry without the user reviewing every line first.
 
 var receiptItems = [];   // extracted lines awaiting review
-var receiptBack = 'Profile';   // where the receipt screen's Back goes: Profile or Pantry
+var receiptBack = 'Settings';  // where the receipt screen's Back goes: Settings or Pantry
 // The receipt screen's review list also serves shelf photos ("Snap your shelves"): same tick-
 // every-item step, same matcher. photoMode says which one is on screen.
 var photoMode = 'receipt';     // 'receipt' or 'shelves'
@@ -3719,7 +3793,7 @@ var receiptDateNote = null;    // where the receipt's purchase date came from: {
 
 // Opens the receipt screen from Profile or from the Pantry's Add food screen.
 function openReceipt(from) {
-  receiptBack = from || 'Profile';
+  receiptBack = from || 'Settings';
   receiptItems = [];
   receiptDateNote = null;
   photoMode = 'receipt';
@@ -3858,6 +3932,7 @@ function setReceiptQty(idx, v) {
 }
 // The + button offers two ways in: scan a receipt (straight to the camera) or add manually.
 function openAddSheet() {
+  armBack();
   closeDetail();
   document.getElementById('addSheet').classList.add('open');
 }
@@ -4706,7 +4781,16 @@ function renderSetup() {
     el.innerHTML = dots +
       '<div class="setup-mark"><img src="logo-setup-t.webp" alt="What the Fridge"></div>' +
       '<h2>What the Fridge</h2>' +
-      '<p class="setup-lede">Three days of breakfast, lunch and dinner, planned around what\'s already in your kitchen. Less "what are we eating?", less forgotten spinach.</p>' +
+      // The purpose first, then what the app does in three lines, so a new user knows what they're
+      // signing up for before the first question.
+      '<p class="setup-purpose">WTF works to cut food waste by making the most of the food you already have, ' +
+        'in delicious recipes that use what\'s closest to its date first.</p>' +
+      '<ul class="setup-how">' +
+        '<li><b>Tell it what\'s in your kitchen.</b> Snap a receipt or your shelves, or type it in.</li>' +
+        '<li><b>Get three days of meals</b> (breakfast, lunch and dinner) planned around that food.</li>' +
+        '<li><b>Tap Cooked it</b> and what you used comes off your kitchen list.</li>' +
+      '</ul>' +
+      '<p class="setup-lede">Less "what are we eating?", less forgotten spinach.</p>' +
       '<div class="field-label">What should we call you? <span>optional</span></div>' +
       '<input class="field" id="setupName" maxlength="30" placeholder="Your first name" value="' + esc(settings.name) + '" oninput="settings.name=this.value.trim()">' +
       '<div class="actions"><button class="btn primary" onclick="setupStep=2;renderSetup()">Next</button></div>';
@@ -4739,7 +4823,7 @@ function renderSetup() {
     '<button class="start-card" onclick="finishSetup(\'own\')"><b>Add my own food</b>' +
       '<span>Start with an empty kitchen and add what you have. A rough count is fine.</span></button>' +
     '<button class="start-card" onclick="finishSetup(\'sample\')"><b>Look around with a sample kitchen</b>' +
-      '<span>A made-up kitchen of ' + samplePantry().length + ' everyday foods, so you can see how planning works. Start over any time from Profile.</span></button>' +
+      '<span>A made-up kitchen of ' + samplePantry().length + ' everyday foods, so you can see how planning works. Start over any time from Settings.</span></button>' +
     '<div class="actions"><button class="btn quiet" onclick="setupStep=4;renderSetup()">Back</button></div>';
 }
 function finishSetup(mode) {
@@ -4752,7 +4836,7 @@ function finishSetup(mode) {
   document.getElementById('setup').classList.remove('open');
   if (mode === 'photos') { switchTab('pantryTab'); openShelves('Pantry'); }
   else if (mode === 'own') { switchTab('pantryTab'); openAddItem(); }
-  else { showToast('Welcome! This is a sample kitchen, not your own food. Start over from Profile when you want to add yours.', { ms:8000, label:'OK', fn:function() {} }); }
+  else { showToast('Welcome! This is a sample kitchen, not your own food. Start over from Settings when you want to add yours.', { ms:8000, label:'OK', fn:function() {} }); }
 }
 
 // ═══════════════ SAVED STATE ═══════════════
@@ -4849,7 +4933,7 @@ function startOver() {
   settings.times = { breakfast:20, lunch:30, dinner:null };
   pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1; lastNight = null; lastChange = null;
   planKitchen(false);
-  closeDetail(); closeSub(); switchTab('planTab');
+  closeDetail(); closeSub(); switchTab('planTab'); tabHistory = []; renderBackBar();
   renderAll();
   showSetup();
 }
