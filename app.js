@@ -880,17 +880,18 @@ function syncPlanShape() {
 // Says what is still missing rather than "already fits": re-planning can leave gaps when nothing in
 // the approved files is fully covered, and calling that a fit was untrue (T5).
 function replanNow() {
-  var n = planKitchen(true);
   closeDetail();
-  renderAll();
+  var n = 0;
+  // The receipt names each meal it replaced: "Re-planned 2 meals" didn't say which (feedback 1).
+  var res = track('you re-planned around your kitchen', function() { n = planKitchen(true); });
   // When nothing fits better it says so and names what to pick up, rather than pointing elsewhere
   // (feedback 2).
   var needs = planNeeds(), foods = shortFoods(needs).map(function(s) { return s.toLowerCase(); });
   var still = foods.length ? ' Still short of ' + listOf(foods, 4) + '.'
             : needs.check.length ? ' Every meal is covered, apart from amounts to check.' : ' Every meal is now covered.';
-  showToast((n ? 'Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ' around your kitchen.'
+  showToast((n ? 'Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ': see What changed.'
                : foods.length ? 'No other recipe fits better.' : 'Your plan already works with your kitchen.') + still,
-    { label:'OK', ms:8000, fn:function() {} });
+    n ? { label:'Undo', ms:8000, fn:res.undo } : { label:'OK', ms:8000, fn:function() {} });
 }
 
 // ═══════════════ RECIPE IMAGERY ═══════════════
@@ -940,27 +941,35 @@ function ratingBarHTML(id) {
 }
 function rateMeal(id, kind) {
   var p = getPref(id), msg;
+  if (kind === 'down' && p.vote !== 'down') {
+    // A disliked recipe is replaced rather than leaving a hole in the day. The message names the
+    // replacement: "Replaced with X" used to be overwritten at once by "Swapping it out", so Ren
+    // never saw what took the meal's place, and it showed even when nothing was swapped. The vote
+    // is cast inside the swap's receipt, so Undo takes back both.
+    var idx = -1;
+    for (var i=0;i<plan.length;i++) { if (isMealEntry(plan[i]) && plan[i].recipe === id && plan[i].status === 'pending') { idx = i; break; } }
+    closeDetail();
+    var name = (recipeById(id) || { name:'it' }).name;
+    var swapped = idx > -1 ? swapMeal(idx, 'you marked ' + name + ' “Not for us”', function() { p.vote = 'down'; }) : null;
+    if (swapped) {
+      showToast('👎 Not for us — replaced with ' + swapped.r.name + '. We won\'t suggest ' + name + ' again.',
+        { label:'Undo', fn:swapped.undo });
+    } else {
+      p.vote = 'down';
+      renderAll();
+      showToast('👎 Noted — we won\'t suggest ' + name + ' again.');
+    }
+    return;
+  }
   if (kind === 'fav') {
     p.fav = !p.fav;
     msg = p.fav ? '❤️ Favourited — this one comes back around more often.' : 'Un-favourited. Back to the regular rotation.';
   } else {
     p.vote = (p.vote === kind) ? null : kind;
-    if (p.vote === 'up')        { msg = '👍 Noted — more like this.'; }
-    else if (p.vote === 'down') { msg = '👎 Swapping it out — we won\'t suggest this again.'; }
-    else                        { msg = 'Rating cleared.'; }
+    msg = p.vote === 'up' ? '👍 Noted — more like this.' : 'Rating cleared.';
   }
   var bar = document.getElementById('ratingBar');
   if (bar) { bar.outerHTML = ratingBarHTML(id); }
-
-  if (p.vote === 'down') {
-    // A disliked recipe is replaced rather than leaving a hole in the day.
-    var idx = -1;
-    for (var i=0;i<plan.length;i++) { if (isMealEntry(plan[i]) && plan[i].recipe === id && plan[i].status === 'pending') { idx = i; break; } }
-    closeDetail();
-    if (idx > -1) { swapMeal(idx, true); }
-    showToast(msg);
-    return;
-  }
   renderAll();
   showToast(msg);
 }
@@ -1125,9 +1134,13 @@ function renderMeals() {
       : (entry.status !== 'pending' || entry.dietBlocked) ? ''
       : mealChips(r, Math.floor(idx / 3), verdict).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
     // Why this meal is on the plan, on the card itself. Only while it's still Ren's to decide:
-    // once cooked or skipped the reason is history, not something to act on.
-    var why = (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3), 'card', verdict);
+    // once cooked or skipped the reason is history, not something to act on. A meal the app changed
+    // says what it was and why instead, until Ren opens it (feedback 1).
+    var ch = entry.changed && entry.status === 'pending' ? entry.changed : null;
+    var why = ch ? changedLine(ch)
+      : (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3), 'card', verdict);
     var badge = '';
+    if (ch)                          { badge = '<span class="state-badge changed">changed</span>'; }
     if (entry.status === 'accepted') { badge = '<span class="state-badge cooked">✓ ' + (left ? 'eaten' : 'cooked') + '</span>'; }
     if (entry.status === 'skipped')  { badge = '<span class="state-badge skipped">skipped</span>'; }
     if (entry.dietBlocked)           { badge = '<span class="state-badge blocked">⚠ doesn\'t fit</span>'; }
@@ -1142,7 +1155,7 @@ function renderMeals() {
       '<div class="meal-info">' +
         '<h4>' + r.name + '</h4>' +
         '<p class="meta">' + (left ? 'Lunch · leftovers from last night\'s dinner' : Type + ' · ' + r.time) + '</p>' +
-        (why ? '<p class="meal-why">' + esc(why) + '</p>' : '') +
+        (why ? '<p class="meal-why' + (ch ? ' changed' : '') + '">' + esc(why) + '</p>' : '') +
         '<div class="chip-row">' + chips + '</div>' +
       '</div>';
 
@@ -1403,7 +1416,11 @@ function nameList(names) {
 // reasons it actually is.
 var NEAR_MISS_MAX = 2;   // beyond this it stops being a near miss and becomes a shopping list
 
-function planAround(entryId, checked) {
+// It also replaced meals Ren had picked herself: one tap replaced tonight's dinner, and a second
+// tap, for another food, replaced that one too (feedback 1). Meals the planner chose are used
+// first now; a meal Ren chose (by Swap, by "Use it in a meal", or by cooking her own lunch) is only
+// replaced after she says so (`replaceChosen`).
+function planAround(entryId, checked, replaceChosen) {
   var e = entryById(entryId);
   if (!e) return;
   var name = ingName(e.ing).toLowerCase();
@@ -1426,27 +1443,41 @@ function planAround(entryId, checked) {
   if (plannedIngredientIds()[e.ing]) { showToast('Your plan already uses your ' + name + '.'); return; }
 
   var best = null, nearest = null, fitAny = false;
-  plan.forEach(function(slot, idx) {
-    if (!isMealEntry(slot) || slot.status !== 'pending' || slot.dietBlocked) return;
-    var type = MEAL_TYPES[idx % 3], day = Math.floor(idx / 3);
-    var others = plan.map(function(x, i) { return i === idx ? null : x.recipe; }).filter(Boolean);
-    var reserved = reservationsExcept(idx);
-    uses.forEach(function(r) {
-      if (r.type !== type || !eligible(r, type) || others.indexOf(r.id) > -1) return;
-      if (!fitsTime(r, day)) return;
-      fitAny = true;
-      var s = scoreRecipe(r, day, reserved), gaps = missingFor(r, day, reserved);
-      var cand = { idx:idx, r:r, score:s.score, day:day, gaps:gaps };
-      if (!gaps.length) {
-        if (!best || s.score > best.score) best = cand;
-      } else if (!nearest || gaps.length < nearest.gaps.length ||
-                 (gaps.length === nearest.gaps.length && s.score > nearest.score)) {
-        nearest = cand;
-      }
+  function search(allowChosen) {
+    best = null; nearest = null;
+    plan.forEach(function(slot, idx) {
+      if (!isMealEntry(slot) || slot.status !== 'pending' || slot.dietBlocked) return;
+      if (slot.chosen && !allowChosen) return;
+      var type = MEAL_TYPES[idx % 3], day = Math.floor(idx / 3);
+      var others = plan.map(function(x, i) { return i === idx ? null : x.recipe; }).filter(Boolean);
+      var reserved = reservationsExcept(idx);
+      uses.forEach(function(r) {
+        if (r.type !== type || !eligible(r, type) || others.indexOf(r.id) > -1) return;
+        if (!fitsTime(r, day)) return;
+        fitAny = true;
+        var s = scoreRecipe(r, day, reserved), gaps = missingFor(r, day, reserved);
+        var cand = { idx:idx, r:r, score:s.score, day:day, gaps:gaps };
+        if (!gaps.length) {
+          if (!best || s.score > best.score) best = cand;
+        } else if (!nearest || gaps.length < nearest.gaps.length ||
+                   (gaps.length === nearest.gaps.length && s.score > nearest.score)) {
+          nearest = cand;
+        }
+      });
     });
-  });
+    return best || (nearest && nearest.gaps.length <= NEAR_MISS_MAX ? nearest : null);
+  }
 
-  var pick = best || (nearest && nearest.gaps.length <= NEAR_MISS_MAX ? nearest : null);
+  var pick = search(false);
+  if (!pick) {
+    pick = search(true);
+    if (pick && !replaceChosen) {
+      showToast('The best fit would replace ' + slotName(pick.idx).toLowerCase() + ', ' + recipeById(plan[pick.idx].recipe).name +
+        ', which you picked. Replace it with ' + pick.r.name + '?',
+        { label:'Replace it', ms:10000, fn:function() { planAround(entryId, true, true); } });
+      return;
+    }
+  }
   if (!pick) {
     if (nearest) {
       showToast(uses.length + ' recipe' + (uses.length === 1 ? '' : 's') + ' use ' + name +
@@ -1459,20 +1490,19 @@ function planAround(entryId, checked) {
     return;
   }
 
-  var slot = plan[pick.idx], was = recipeById(slot.recipe);
-  slot.recipe = pick.r.id;
-  slot.status = 'pending';
-  delete slot.tried;                     // a fresh rotation from the new meal
-  renderAll();
-  showToast(DAY_WORDS[pick.day] + ' ' + MEAL_TYPES[pick.idx % 3] + ' is now ' + pick.r.name +
-    ', which uses your ' + name + '.' +
+  // Ren is on the Pantry tab, away from the meal this replaces, so the receipt names it too and
+  // the card stays marked until she opens it.
+  var slot = plan[pick.idx];
+  var res = track('you asked to use your ' + name, function() {
+    slot.recipe = pick.r.id;
+    slot.status = 'pending';
+    slot.chosen = true;
+    delete slot.tried;                   // a fresh rotation from the new meal
+  }, { acted:pick.idx, include:true });
+  showToast(slotName(pick.idx) + ' is now ' + pick.r.name + ', which uses your ' + name + '.' +
     (pick.gaps.length ? ' You’ll need ' + nameList(pick.gaps) + '.' : ''),
-    { label:'Undo', fn:function() {
-      slot.recipe = was.id; delete slot.tried; renderAll();
-      showToast('Put ' + was.name + ' back.');
-    } });
+    { label:'Undo', fn:res.undo });
 }
-var DAY_WORDS = ['Today’s', 'Tomorrow’s', 'Day 3’s'];
 
 var openZones = { attention:false, fridge:false, freezer:false, cupboard:false };
 function toggleZone(key) { openZones[key] = !openZones[key]; renderPantry(); }
@@ -1735,6 +1765,16 @@ function whyLine(r, dayIdx, where, verdict) {
   return '';
 }
 
+// A changed meal's note, shown once at the top of its screen; opening it counts as seeing it.
+function seenChangeHTML(entry) {
+  if (!entry.changed) return '';
+  var html = '<div class="change-note">' + esc(changedLine(entry.changed)) + '</div>';
+  delete entry.changed;
+  saveState();
+  renderMeals();                          // the card underneath drops its mark
+  return html;
+}
+
 function openDetail(idx) {
   detailIndex = idx;
   var entry = plan[idx];
@@ -1749,7 +1789,7 @@ function openDetail(idx) {
   document.getElementById('detailBackLabel').textContent = dayLabel(day) + ' · ' + r.type;
 
   var rows = ingredientRowsHTML(r, idx);
-  var html = ratingBarHTML(r.id) +
+  var html = seenChangeHTML(entry) + ratingBarHTML(r.id) +
     '<div class="detail-facts">' +
       '<div class="detail-fact">⏱ ' + r.time + '</div>' +
     '</div>' +
@@ -1805,7 +1845,8 @@ function openLeftoverDetail(idx) {
   document.getElementById('detailHero').style.background = heroFor(r);
   document.getElementById('detailTitle').textContent = 'Leftovers: ' + r.name;
   document.getElementById('detailBackLabel').textContent = dayLabel(day) + ' · lunch';
-  var html = '<div class="detail-facts"><div class="detail-fact">Reheat</div><div class="detail-fact">From ' + esc(dayLabel(day - 1).toLowerCase()) + '\'s dinner</div></div>';
+  var html = seenChangeHTML(entry) +
+    '<div class="detail-facts"><div class="detail-fact">Reheat</div><div class="detail-fact">From ' + esc(dayLabel(day - 1).toLowerCase()) + '\'s dinner</div></div>';
   if (entry.status === 'accepted') {
     html += '<div class="actions"><button class="btn ghost" onclick="unskip(' + idx + ')">Undo</button></div>' +
       '<p class="detail-note">Marked eaten. Nothing was deducted: the ingredients were counted when the dinner was cooked.</p>';
@@ -1837,15 +1878,148 @@ function cookLunchInstead(idx) {
   var others = plan.map(function(e, i) { return i !== idx && isMealEntry(e) ? e.recipe : null; }).filter(Boolean);
   var pick = pickRecipe('lunch', Math.floor(idx / 3), reservationsExcept(idx), others);
   if (!pick) { showToast('No lunch in our recipes fits your settings.'); return; }
-  plan[idx] = { recipe:pick.id, status:'pending', ownLunch:true };
-  closeDetail(); renderAll();
-  showToast('Planned ' + pick.name + ' for lunch instead.');
+  closeDetail();
+  var res = track('you chose to cook ' + slotName(idx).toLowerCase(), function() {
+    plan[idx] = { recipe:pick.id, status:'pending', ownLunch:true, chosen:true };
+  }, { acted:idx });
+  showToast('Planned ' + pick.name + ' for lunch instead.' + changeCount(res), { label:'Undo', fn:res.undo });
 }
 
 function closeDetail() {
   document.getElementById('detailOverlay').classList.remove('open');
   detailIndex = null;
   if (currentTab !== 'profileTab') { document.getElementById('fab').style.display = 'flex'; }
+}
+
+// ═══════════════ WHAT CHANGED ═══════════════
+// The plan used to change underneath Ren (feedback 1). A new household size took a covered plan to
+// seven gaps with only "Household of 8 saved."; turning leftovers on, a new time limit or a skipped
+// dinner rewrote other days' meals with no word at all; and where there was a word it was a count
+// ("swapped 1 meal out", "Re-planned 2 meals") in a toast that lasted 2.6 seconds. To find out what
+// had moved, Ren had to re-read three days of cards.
+//
+// Now every action that can change the plan runs through track(), which compares the plan before
+// and after and leaves a receipt: each meal that changed, what it was, why, and the banner's verdict
+// when that moved. The receipt stays at the top of the Plan tab until Ren taps Got it, changed
+// meals carry a "changed" mark until opened, and Undo puts everything back while nothing else has
+// happened since.
+var lastChange = null;   // { why, kind, lines:[], undo, sig, before } — the receipt on the Plan tab
+
+function planDigest() {
+  return plan.map(function(e) { return !e ? '' : e.off ? 'off' : (e.leftover ? 'L:' : '') + e.recipe + (e.dietBlocked ? '!' : ''); });
+}
+function slotName(idx) {
+  var d = Math.floor(idx / 3);
+  return (d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : dayLabel(d)) + '’s ' + MEAL_TYPES[idx % 3];
+}
+function entryLabel(e) {
+  if (!e || e.off) return '';
+  var r = recipeById(e.recipe);
+  if (!r) return '';
+  if (e.dietBlocked) return 'empty (nothing fits your settings)';
+  return e.leftover ? 'leftovers of ' + r.name : r.name;
+}
+function bannerState() {
+  if (pantryEmpty()) return 'empty';
+  var n = planNeeds(), foods = shortFoods(n).length;
+  return foods ? 'short of ' + foods + ' food' + (foods > 1 ? 's' : '') : n.check.length ? 'probably covered' : 'covered';
+}
+// Everything an action can change, for Undo.
+function snapshotState() {
+  return JSON.stringify({ settings:settings, pantry:pantry, plan:plan, prefs:prefs, unreconciled:unreconciled,
+    cookLog:cookLog, wasteLog:wasteLog, lastNight:lastNight, planSig:planSig, planBuiltEmpty:planBuiltEmpty });
+}
+function restoreState(json) {
+  var s = JSON.parse(json);
+  settings = s.settings; pantry = s.pantry; plan = s.plan; prefs = s.prefs; unreconciled = s.unreconciled;
+  cookLog = s.cookLog; wasteLog = s.wasteLog; lastNight = s.lastNight; planSig = s.planSig; planBuiltEmpty = s.planBuiltEmpty;
+}
+// What has to be unchanged for an Undo to be safe: if Ren has cooked, added food or changed a
+// setting since, putting the old state back would quietly undo that too.
+function stateSig() {
+  var votes = Object.keys(prefs).filter(function(k) { return prefs[k].vote || prefs[k].fav; })
+    .map(function(k) { return k + ':' + prefs[k].vote + ':' + prefs[k].fav; }).sort();
+  return JSON.stringify([settings, pantry, plan.map(function(e) { return e && [e.recipe, e.status, !!e.off, !!e.leftover, !!e.dietBlocked]; }),
+    unreconciled.length, cookLog.length, wasteLog.length, votes]);
+}
+
+// Runs `fn` (which changes the plan, settings or kitchen) and reports what it did.
+//   why       why the meals changed, as a clause: "you skipped Friday’s dinner", "Vegetarian is on"
+//   opts.acted     the slot Ren acted on directly; it isn't listed unless opts.include is set
+//   opts.kind      repeated changes of one kind (stepping the household 5, 6, 7, 8) merge into one
+//                  receipt measured from before the first, while nothing else happened in between;
+//                  opts.mergedWhy is the reason line once two different changes share a receipt
+// Returns { lines, undo } — `undo` puts everything back if nothing has changed since.
+function track(why, fn, opts) {
+  opts = opts || {};
+  var merge = opts.kind && lastChange && lastChange.kind === opts.kind && lastChange.before && stateSig() === lastChange.sig;
+  if (merge && opts.mergedWhy && lastChange.why !== why) why = opts.mergedWhy;   // several changes, one reason line
+  var before = merge ? lastChange.before : { digest:planDigest(), names:plan.map(entryLabel), state:bannerState(), snap:snapshotState() };
+  if (merge) plan.forEach(function(e) { if (e && e.changed && e.changed.kind === opts.kind) delete e.changed; });
+  fn();
+  syncPlanShape();
+  var lines = [];
+  planDigest().forEach(function(d, i) {
+    if (d === before.digest[i] || (i === opts.acted && !opts.include)) return;
+    var e = plan[i], now = entryLabel(e), was = before.names[i];
+    if (!now && !was) return;
+    lines.push(slotName(i) + ': ' + (now ? now : 'no longer planned') + (was ? ' (was ' + was + ')' : ''));
+    if (now) e.changed = { from:was, why:why, kind:opts.kind || null };
+  });
+  var state = bannerState();
+  if (state !== before.state && before.state !== 'empty' && state !== 'empty') {
+    lines.push('The plan was ' + before.state + '; it’s now ' + state + '.');
+  }
+  var sig = stateSig();                   // the plan is already in its final shape (syncPlanShape above)
+  if (lines.length) {
+    lastChange = { why:why, kind:opts.kind || null, lines:lines, undo:before.snap, before:before, sig:sig };
+  } else if (merge) {
+    lastChange = null;                    // stepped back to where it started: nothing to report
+  }
+  renderAll();
+  return { lines:lines, undo:function() { undoTo(before.snap, sig); } };
+}
+function undoTo(snap, sig) {
+  if (stateSig() !== sig) { showToast('Can’t undo that now: the plan or kitchen has changed since.'); return; }
+  restoreState(snap);
+  lastChange = null;
+  closeDetail();
+  renderAll();
+  var sub = document.getElementById('subScreen');
+  if (sub.classList.contains('open') && /^(household|meals|dietary)$/.test(sub.dataset.which)) openSub(sub.dataset.which);
+  showToast('Undone. Your plan is as it was.');
+}
+// "2 meals changed" for a toast, pointing at the receipt on the Plan tab.
+function changeCount(res) {
+  var n = res.lines.filter(function(l) { return l.indexOf('The plan was') !== 0; }).length;
+  return n ? ' ' + n + ' meal' + (n > 1 ? 's' : '') + ' changed.' : res.lines.length ? ' ' + res.lines[0] : '';
+}
+function seePlanAction(res) {
+  return res.lines.length ? { label:'See plan', ms:6000, fn:function() { switchTab('planTab'); } } : null;
+}
+
+function renderChanges() {
+  var el = document.getElementById('changes');
+  if (!el) return;
+  if (!lastChange || !lastChange.lines.length) { el.innerHTML = ''; return; }
+  var canUndo = lastChange.undo && stateSig() === lastChange.sig;
+  el.innerHTML = '<div class="change-card"><div class="ch-head"><strong>What changed</strong>' +
+      '<span>Because ' + esc(lastChange.why) + ':</span></div>' +
+    '<ul class="ch-list">' + lastChange.lines.map(function(l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' +
+    '<div class="ch-acts">' +
+      (canUndo ? '<button class="btn ghost small" onclick="undoLastChange()">Undo</button>' : '') +
+      '<button class="btn primary small" onclick="dismissChanges()">Got it</button>' +
+    '</div></div>';
+}
+function undoLastChange() { if (lastChange && lastChange.undo) undoTo(lastChange.undo, lastChange.sig); }
+function dismissChanges() {
+  lastChange = null;
+  plan.forEach(function(e) { if (e) delete e.changed; });
+  renderAll();
+}
+// The line under a changed meal's name, until Ren opens it.
+function changedLine(ch) {
+  return (ch.from ? 'Was ' + ch.from + '. ' : '') + 'Changed because ' + ch.why + '.';
 }
 
 // ═══════════════ ACCEPT / SWAP / SKIP ═══════════════
@@ -1922,17 +2096,17 @@ function undoAccept(idx) {
   showToast('Undone — ingredients are back in your pantry.');
 }
 
+// Skipping a dinner used to rewrite the next day's leftovers lunch with no word (feedback 1). The
+// receipt now names it, and Undo puts both back.
 function skipMeal(idx) {
-  plan[idx].status = 'skipped';
   closeDetail();
-  renderAll();
-  showToast('Skipped — nothing deducted.');
+  var res = track('you skipped ' + slotName(idx).toLowerCase(), function() { plan[idx].status = 'skipped'; }, { acted:idx });
+  showToast('Skipped — nothing deducted.' + changeCount(res), { label:'Undo', fn:res.undo });
 }
 function unskip(idx) {
-  plan[idx].status = 'pending';
   closeDetail();
-  renderAll();
-  showToast('Back on the plan.');
+  var res = track('you put ' + slotName(idx).toLowerCase() + ' back', function() { plan[idx].status = 'pending'; }, { acted:idx });
+  showToast('Back on the plan.' + changeCount(res));
 }
 
 // Swap: the best other recipe of the same meal type for what's in the kitchen, after what the
@@ -1958,31 +2132,34 @@ function bestAlternative(idx, current) {
   return null;                     // the pool really does hold nothing else for this slot
 }
 
-function swapMeal(idx, silent) {
+// Returns { r: the recipe swapped in, undo }, or null. `why` is given when the swap comes from
+// somewhere else (a "Not for us"), so the receipt says so and the caller writes the toast.
+function swapMeal(idx, why, pre) {
   var entry = plan[idx];
-  if (entry.leftover) { cookLunchInstead(idx); return; }
+  if (entry.leftover) { cookLunchInstead(idx); return null; }
   var current = recipeById(entry.recipe);
   var pick = bestAlternative(idx, current);
 
   if (!pick) {
     showToast('No other ' + current.type + ' in our recipes fits your settings.');
-    return;
+    return null;
   }
 
-  // Remember what this slot has shown, so the next Swap moves on. bestAlternative() clears the
-  // list itself when the pool runs out, so this only ever grows within one rotation.
-  entry.tried = (entry.tried || []).concat([current.id]);
-
-  entry.recipe = pick.id;
-  entry.status = 'pending';
-  delete entry.dietBlocked;
-
   closeDetail();
-  renderAll();
+  var res = track(why || 'you swapped ' + slotName(idx).toLowerCase(), function() {
+    if (pre) pre();
+    // Remember what this slot has shown, so the next Swap moves on. bestAlternative() clears the
+    // list itself when the pool runs out, so this only ever grows within one rotation.
+    entry.tried = (entry.tried || []).concat([current.id]);
+    entry.recipe = pick.id;
+    entry.status = 'pending';
+    entry.chosen = true;                 // Ren picked this one; see planAround()
+    delete entry.dietBlocked;
+  }, { acted:idx });
   // The reason stays on the card and in the detail view, where Ren can read it at her own pace.
-  // Repeating it here pushed the toast past 100 characters for a 2.6-second appearance, which is
-  // not long enough to read two clauses even when they fit.
-  showToast((silent ? 'Replaced with ' : 'Swapped to ') + pick.name);
+  // Swap now has an Undo: one curious tap used to lose a meal Ren liked, with no way back to it.
+  if (!why) showToast('Swapped to ' + pick.name + '.' + changeCount(res), { label:'Undo', fn:res.undo });
+  return { r:pick, undo:res.undo };
 }
 
 // Applied whenever a dietary preference changes. Any pending meal that breaks a restriction is
@@ -2002,6 +2179,7 @@ function enforceDiet() {
       entry.recipe = pick.id;
       delete entry.dietBlocked;
       delete entry.tried;          // the planner chose this slot again; Swap starts fresh
+      delete entry.chosen;
     } else {
       entry.dietBlocked = true;
       stuck.push(r.type);
@@ -2021,7 +2199,7 @@ function enforceTimes() {
     if (!r || entry.status !== 'pending' || entry.dietBlocked || fitsTime(r, day)) return;
     var others = plan.map(function(e, i) { return i === idx ? null : e.recipe; }).filter(Boolean);
     var pick = pickRecipe(r.type, day, reservationsExcept(idx), others);
-    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; delete entry.tried; changed++; }
+    if (pick && fitsTime(pick, day)) { entry.recipe = pick.id; delete entry.tried; delete entry.chosen; changed++; }
   });
   return changed;
 }
@@ -2249,26 +2427,31 @@ function closeSub() {
   }
   if (currentTab !== 'profileTab') { document.getElementById('fab').style.display = 'flex'; }
 }
+// A new household size changes how much every meal needs, so the plan's cover can change though no
+// meal does: 5 to 8 took the sample plan from 1 gap to 7 with only "Household of 8 saved." The
+// receipt now says so (feedback 1). Steps in a row merge into one receipt, from the size before.
 function setHousehold(delta) {
-  settings.household = Math.min(8, Math.max(1, settings.household + delta));
-  document.getElementById('hhArrow').innerHTML = settings.household + ' &rsaquo;';
+  var n = Math.min(8, Math.max(1, settings.household + delta));
+  if (n === settings.household) return;
+  var res = track('your household is now ' + n, function() { settings.household = n; }, { kind:'household' });
   openSub('household');
-  renderAll();
-  showToast('Household of ' + settings.household + ' saved.');
+  showToast('Household of ' + n + ' saved.' + changeCount(res), seePlanAction(res));
 }
 function toggleDiet(key) {
-  settings.dietary[key] = !settings.dietary[key];
-  var result = enforceDiet();
+  var result = null, label = DIET_RULES[key].label, on = !settings.dietary[key];
+  var now = Object.keys(DIET_RULES).filter(function(k) { return k === key ? on : settings.dietary[k]; })
+    .map(function(k) { return DIET_RULES[k].label; });
+  // The meals swapped, by name, are in the receipt: the toast used to give only a count. Toggles
+  // in a row share one receipt, so its reason names every setting now on.
+  var res = track('you changed your dietary settings (now ' + (now.length ? now.join(' + ') : 'none') + ')', function() {
+    settings.dietary[key] = on;
+    result = enforceDiet();
+  }, { kind:'diet' });
   openSub('dietary');
-
-  var on = settings.dietary[key];
-  var label = DIET_RULES[key].label;
   if (result.stuck.length) {
-    showToast('⚠ No ' + result.stuck[0] + ' in our recipes fits — that slot needs attention.');
-  } else if (result.swapped.length) {
-    showToast(label + ' on — swapped ' + result.swapped.length + ' meal' + (result.swapped.length > 1 ? 's' : '') + ' out.');
+    showToast('⚠ No ' + listOf(result.stuck, 3) + ' in our recipes fits — see What changed.', seePlanAction(res));
   } else {
-    showToast(label + (on ? ' on — your plan already fits.' : ' off.'));
+    showToast(label + (on ? ' on.' : ' off.') + (changeCount(res) || (on ? ' Your plan already fits.' : '')), seePlanAction(res));
   }
 }
 
@@ -2480,6 +2663,7 @@ function renderAll() {
   syncPlanShape();
   renderGreeting();
   renderDaySelector();
+  renderChanges();
   renderReconcile();
   renderBanner();
   renderDietStrip();
@@ -4115,18 +4299,24 @@ function mealPrefsHTML(part) {
 function setMealOn(t) {
   var on = !mealOn(t);
   if (!on && MEAL_TYPES.filter(mealOn).length === 1) { showToast('Plan at least one meal a day.'); return; }
-  settings.meals[t] = on;
-  mealPrefsChanged();
+  mealPrefsChanged(t + ' is ' + (on ? 'back on the plan' : 'off the plan'), function() { settings.meals[t] = on; });
 }
-function setLeftovers() { settings.leftovers = !settings.leftovers; mealPrefsChanged(); }
-function setMealTime(t, m) { settings.times[t] = m || null; mealPrefsChanged(); }
+function setLeftovers() {
+  var on = !settings.leftovers;
+  mealPrefsChanged('leftovers are ' + (on ? 'on' : 'off'), function() { settings.leftovers = on; });
+}
+function setMealTime(t, m) {
+  mealPrefsChanged('your weekday ' + t + ' limit is now ' + (m ? m + ' minutes' : 'any length'), function() { settings.times[t] = m || null; });
+}
 // Redraw wherever the controls are, and bring the plan in line: meals switched off empty their
-// slots, leftovers follow dinners, and meals over a new time limit are swapped.
-function mealPrefsChanged() {
-  if (document.getElementById('setup').classList.contains('open')) { renderSetup(); return; }
-  enforceTimes();
-  renderAll();
+// slots, leftovers follow dinners, and meals over a new time limit are swapped. Turning leftovers
+// on turned two lunches into leftovers and doubled every dinner, and a new time limit swapped
+// meals, all without a word (feedback 1). The receipt names each one.
+function mealPrefsChanged(why, apply) {
+  if (document.getElementById('setup').classList.contains('open')) { apply(); renderSetup(); return; }
+  var res = track(why, function() { apply(); enforceTimes(); }, { kind:'meals', mergedWhy:'you changed Meals & cooking' });
   openSub('meals');
+  showToast('Saved.' + changeCount(res), seePlanAction(res));
 }
 function mealsSummary() {
   var on = MEAL_TYPES.filter(mealOn);
@@ -4203,7 +4393,7 @@ function finishSetup(mode) {
   settings.since = todayKey();
   pantry = mode === 'sample' ? samplePantry() : [];
   plan = [];
-  unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1; lastNight = null;
+  unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1; lastNight = null; lastChange = null;
   planKitchen(false);
   renderAll();
   document.getElementById('setup').classList.remove('open');
@@ -4224,7 +4414,7 @@ function saveState() {
     localStorage.setItem(STORE_KEY, JSON.stringify({
       lastSeen:lastSeen || todayKey(), settings:settings, pantry:pantry, plan:plan,
       prefs:prefs, unreconciled:unreconciled, cookLog:cookLog, wasteLog:wasteLog, dayOffset:dayOffset,
-      planSig:planSig, planBuiltEmpty:planBuiltEmpty, lastNight:lastNight
+      planSig:planSig, planBuiltEmpty:planBuiltEmpty, lastNight:lastNight, lastChange:lastChange
     }));
   } catch (e) { /* private mode or storage full — the app still works, it just won't remember */ }
 }
@@ -4251,6 +4441,7 @@ function loadState() {
   unreconciled = (s.unreconciled || []).filter(function(u) { return recipeById(u.recipe); });
   dayOffset = s.dayOffset || 0;
   lastNight = valid && s.lastNight && recipeById(s.lastNight.recipe) ? s.lastNight : null;
+  lastChange = valid && s.lastChange && s.lastChange.lines ? s.lastChange : null;
   lastSeen = s.lastSeen || todayKey();
   catchUp();
   return true;
@@ -4283,6 +4474,7 @@ function loadSampleKitchen() {
   if (pantry.length && !confirm('Replace everything in your kitchen with the sample food?')) { return; }
   pantry = samplePantry();
   closeDetail(); closeSub();
+  lastChange = null;                      // the kitchen it described is gone
   planKitchen(true);
   renderAll();
   showToast('Sample kitchen loaded, and the plan rebuilt around it.');
@@ -4296,7 +4488,7 @@ function startOver() {
   settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
   settings.meals = { breakfast:true, lunch:true, dinner:true }; settings.leftovers = false;
   settings.times = { breakfast:20, lunch:30, dinner:null };
-  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1; lastNight = null;
+  pantry = []; plan = []; planSig = null; prefs = {}; unreconciled = []; cookLog = []; wasteLog = []; dayOffset = 0; currentDay = 1; lastNight = null; lastChange = null;
   planKitchen(false);
   closeDetail(); closeSub(); switchTab('planTab');
   renderAll();
