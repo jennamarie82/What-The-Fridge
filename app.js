@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-12 (app-test fixes T1-T8)';
+var APP_VERSION = '2026-11-19 (feedback 1, 2, 4, 5 and 8)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -1053,7 +1053,7 @@ function renderBanner() {
     return;
   }
   // Shortfalls name the meal that runs out, because an earlier meal in the plan uses the same food.
-  // At most three are spelled out: at a household of five the sample kitchen ran to seventeen,
+  // At most two are spelled out: at a household of five the sample kitchen ran to seventeen,
   // one after another in small grey type. Each meal's card says what that meal is short of.
   var missingLine = n.missing.length ? ['Not in your kitchen: ' + listOf(n.missing.map(function(m) { return m.name.toLowerCase(); }), 6)] : [];
   var lines = n.short.map(function(s) {
@@ -1061,14 +1061,14 @@ function renderBanner() {
     }).concat(n.stale.map(function(s) {
       return s.name + ' will be past its estimated window by ' + s.meal;
     }));
-  var more = lines.length > 3 ? lines.length - 3 : 0;
-  lines = missingLine.concat(lines.slice(0, 3));
+  var more = lines.length > 2 ? lines.length - 2 : 0;
+  lines = missingLine.concat(lines.slice(0, 2));
   el.className = 'banner short';
   el.innerHTML = '<span class="tick">' + BANG_SVG + '</span>' +
     '<div class="text"><strong>Short of ' + foods.length + ' food' + (foods.length > 1 ? 's' : '') + '</strong>' +
     '<span>' + esc(lines.join(' · ') + (more ? ' · and ' + more + ' more, shown on each meal' : '') +
       '. Swap or re-plan those meals, or pick up what\'s missing.' +
-      (checks.length ? ' Also check you have enough ' + listOf(checks, 4) + '.' : '')) + '</span>' + replan + '</div>';
+      (checks.length ? ' Also check ' + checks.length + ' amount' + (checks.length > 1 ? 's' : '') + ', shown on each meal.' : '')) + '</span>' + replan + '</div>';
 }
 function listOf(items, max) {
   if (items.length <= 1) return items.join('');
