@@ -163,7 +163,7 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
 }
 .banner .tick svg { width:14px; height:14px; }
 .banner .text strong { display:block; font-size:13px; color:var(--ink); }
-.banner .text span { font-size:11px; color:var(--ink-soft); }
+.banner .text span { font-size:12px; line-height:1.45; color:var(--ink-soft); }
 
 /* ─── section label ─── */
 .section-label {
@@ -607,8 +607,11 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 }
 
 /* ─── shortfall banner variant ─── */
-.banner.short { background:var(--amber-soft); }
-.banner.short .tick { background:var(--amber); }
+/* Three banner states, told apart by headline first and colour second (feedback 2):
+   covered = leaf, probably covered = amber, short = tomato. */
+.banner.short { background:var(--tomato-soft); }
+.banner.short .tick { background:var(--tomato); }
+.banner.check .tick { background:var(--amber); }
 
 /* ─── unconfirmed meals carried past the midnight roll ─── */
 .rec-card {

@@ -684,27 +684,36 @@ function reservationsBefore(idx) {
 
 // ─── requirements & feasibility ───
 // Walks the pending meals in order, setting food aside as it goes, and reports what's missing,
-// what runs short because an earlier meal needs it too, and what can't be counted.
+// what runs short because an earlier meal needs it too, and what can't be counted. `byIdx` holds
+// the same verdict for each meal, so a card can never say something the banner contradicts: a card
+// read "Nothing missing." while the banner listed that meal's chicken as short (feedback 2).
 function planNeeds() {
-  var res = {}, out = { short:[], missing:[], check:[], stale:[] }, seen = {};
+  var res = {}, out = { short:[], missing:[], check:[], stale:[], byIdx:{} }, seen = {};
   function add(list, key, item) { if (!seen[key]) { seen[key] = true; list.push(item); } }
   plan.forEach(function(entry, idx) {
     if (!activeEntry(entry)) return;
     var r = recipeById(entry.recipe);
     if (!r) return;
+    var day = Math.floor(idx / 3), mine = out.byIdx[idx] = { missing:[], short:[], stale:[], check:[] };
     visibleLines(r).forEach(function(line) {
       if (line.optional) return;
       var amount = amountFor(line);
       var c = coverage(line, amount, res);
-      var meal = dayLabel(Math.floor(idx / 3)).toLowerCase() + ' ' + r.type;
-      if (c.status === 'missing') add(out.missing, 'm:' + lineName(line), { name:lineName(line) });
-      else if (turnsBefore(line, Math.floor(idx / 3))) add(out.stale, 't:' + c.id + idx, { name:ingName(c.id), meal:meal });
-      else if (c.status === 'short') add(out.short, 's:' + c.id, { name:ingName(c.id), need:amount, have:c.stock.known, unit:line.unit, meal:meal });
-      else if (c.status === 'check') add(out.check, 'c:' + c.id, { name:ingName(c.id) });
+      var meal = (day < 2 ? dayLabel(day).toLowerCase() : dayLabel(day)) + ' ' + r.type;   // "Saturday", not "saturday"
+      if (c.status === 'missing') { mine.missing.push(lineName(line)); add(out.missing, 'm:' + lineName(line), { name:lineName(line) }); }
+      else if (turnsBefore(line, day)) { mine.stale.push(ingName(c.id)); add(out.stale, 't:' + c.id + idx, { name:ingName(c.id), meal:meal }); }
+      else if (c.status === 'short') { mine.short.push(ingName(c.id)); add(out.short, 's:' + c.id, { name:ingName(c.id), need:amount, have:c.stock.known, unit:line.unit, meal:meal }); }
+      else if (c.status === 'check') { mine.check.push(ingName(c.id)); add(out.check, 'c:' + c.id, { name:ingName(c.id) }); }
     });
     reserveRecipe(r, res);
   });
   return out;
+}
+// The foods a plan is short of, each named once however many meals or reasons it comes up under.
+function shortFoods(n) {
+  var names = [];
+  n.missing.concat(n.short, n.stale).forEach(function(x) { if (names.indexOf(x.name) === -1) names.push(x.name); });
+  return names;
 }
 function optionalMissing() {
   var names = [];
@@ -874,15 +883,14 @@ function replanNow() {
   var n = planKitchen(true);
   closeDetail();
   renderAll();
-  var needs = planNeeds(), gaps = needs.missing.length + needs.short.length + needs.stale.length;
-  var gapText = gaps + ' ingredient' + (gaps > 1 ? 's' : '') + ' you don’t have enough of';
-  if (n) {
-    showToast('Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ' around your kitchen.' +
-      (gaps ? ' The plan still needs ' + gapText + ': see the list on the Plan tab.' : ' The rest still work.'));
-  } else {
-    showToast(gaps ? 'No other recipe fits better. The plan still needs ' + gapText + ': see the list on the Plan tab.'
-                   : 'Your plan already fits your kitchen.');
-  }
+  // When nothing fits better it says so and names what to pick up, rather than pointing elsewhere
+  // (feedback 2).
+  var needs = planNeeds(), foods = shortFoods(needs).map(function(s) { return s.toLowerCase(); });
+  var still = foods.length ? ' Still short of ' + listOf(foods, 4) + '.'
+            : needs.check.length ? ' Every meal is covered, apart from amounts to check.' : ' Every meal is now covered.';
+  showToast((n ? 'Re-planned ' + n + ' meal' + (n > 1 ? 's' : '') + ' around your kitchen.'
+               : foods.length ? 'No other recipe fits better.' : 'Your plan already works with your kitchen.') + still,
+    { label:'OK', ms:8000, fn:function() {} });
 }
 
 // ═══════════════ RECIPE IMAGERY ═══════════════
@@ -995,64 +1003,102 @@ function renderBanner() {
     return;
   }
 
+  // Three states, and the headline never promises what the small print takes back (feedback 2).
+  // "No grocery trip required" used to sit above "Check you have enough mango, bread, carrots,
+  // lettuce and 6 more": an amount the app can't compare is not an amount it has checked.
+  //   covered   every meal still to cook is covered, amounts included
+  //   check     nothing is missing, but some amounts can't be compared, so "probably"
+  //   short     something is missing, runs short, or will be past its window by its meal
   var n = planNeeds();
   var pendingCount = plan.filter(activeEntry).length;
-  var gaps = n.short.length + n.missing.length + n.stale.length;
-  var check = n.check.length ? ' Check you have enough ' + listOf(n.check.map(function(c){ return c.name.toLowerCase(); }), 4) +
-                               ': the amount isn\'t recorded in a unit we can compare.' : '';
-  var changed = planSig !== kitchenSig();
-  var replan = (gaps || changed) && pendingCount
-    ? '<button class="btn ghost small" onclick="replanNow()">' + (changed ? 'Your kitchen changed: re-plan' : 'Re-plan around my kitchen') + '</button>' : '';
+  var foods = shortFoods(n);
+  var checks = n.check.map(function(c) { return c.name.toLowerCase(); });
+  var opt = optionalMissing();
+  var extras = opt.length ? ' Optional extras you don\'t have: ' + listOf(opt, 4) + '.' : '';
+  // Re-planning can only replace meals the kitchen doesn't cover, so it's offered only when there
+  // are some. It used to appear as "Your kitchen changed: re-plan" after a thumbs-down or a cooked
+  // meal, over a plan that was already covered, with nothing for it to do.
+  var replan = foods.length && pendingCount
+    ? '<button class="btn ghost small" onclick="replanNow()">Re-plan around my kitchen</button>' : '';
 
-  if (gaps === 0) {
-    var opt = optionalMissing();
-    el.className = 'banner' + (n.check.length ? ' check' : '');
+  if (!foods.length && !checks.length) {
+    el.className = 'banner';
     el.innerHTML = '<span class="tick">' + TICK_SVG + '</span>' +
-      '<div class="text"><strong>No grocery trip required</strong><span>' +
-        (pendingCount ? pendingCount + ' meal' + (pendingCount > 1 ? 's' : '') + ' still to cook, covered by what you have.' : 'Every meal in this plan is logged. Nice work.') +
-        esc(check) + (opt.length ? ' Optional extras you don\'t have: ' + esc(listOf(opt, 4)) + '.' : '') +
-      '</span>' + replan + '</div>';
+      '<div class="text"><strong>No grocery trip needed</strong><span>' +
+        esc((pendingCount ? pendingCount + ' meal' + (pendingCount > 1 ? 's' : '') + ' still to cook, all covered by what you have.'
+                          : 'Every meal in this plan is logged. Nice work.') + extras) +
+      '</span></div>';
+    return;
+  }
+  if (!foods.length) {
+    el.className = 'banner check';
+    el.innerHTML = '<span class="tick">' + BANG_SVG + '</span>' +
+      '<div class="text"><strong>Probably covered: check ' + checks.length + ' amount' + (checks.length > 1 ? 's' : '') + '</strong><span>' +
+        esc('Everything is in your kitchen. Check you have enough ' + listOf(checks, 4) + ': your amounts are in units we ' +
+            'can\'t compare with the recipes.' + extras) +
+      '</span></div>';
     return;
   }
   // Shortfalls name the meal that runs out, because an earlier meal in the plan uses the same food.
+  // At most three are spelled out: at a household of five the sample kitchen ran to seventeen,
+  // one after another in small grey type. Each meal's card says what that meal is short of.
+  var missingLine = n.missing.length ? ['Not in your kitchen: ' + listOf(n.missing.map(function(m) { return m.name.toLowerCase(); }), 6)] : [];
   var lines = n.short.map(function(s) {
       return s.name + ': ' + s.meal + ' needs ' + kitchenQty(s.need, s.unit) + ', ' + kitchenQty(s.have, s.unit) + ' left after earlier meals';
     }).concat(n.stale.map(function(s) {
       return s.name + ' will be past its estimated window by ' + s.meal;
-    })).concat(n.missing.length ? ['Not in your kitchen: ' + listOf(n.missing.map(function(m) { return m.name.toLowerCase(); }), 6)] : []);
+    }));
+  var more = lines.length > 3 ? lines.length - 3 : 0;
+  lines = missingLine.concat(lines.slice(0, 3));
   el.className = 'banner short';
   el.innerHTML = '<span class="tick">' + BANG_SVG + '</span>' +
-    '<div class="text"><strong>' + gaps + ' gap' + (gaps > 1 ? 's' : '') + ' in this plan</strong>' +
-    '<span>' + esc(lines.join(' · ')) + '. Swap a meal, re-plan, or shop for the gap.' + esc(check) + '</span>' + replan + '</div>';
+    '<div class="text"><strong>Short of ' + foods.length + ' food' + (foods.length > 1 ? 's' : '') + '</strong>' +
+    '<span>' + esc(lines.join(' · ') + (more ? ' · and ' + more + ' more, shown on each meal' : '') +
+      '. Swap or re-plan those meals, or pick up what\'s missing.' +
+      (checks.length ? ' Also check you have enough ' + listOf(checks, 4) + '.' : '')) + '</span>' + replan + '</div>';
 }
 function listOf(items, max) {
-  return items.length <= max ? items.join(', ') : items.slice(0, max).join(', ') + ' and ' + (items.length - max) + ' more';
+  if (items.length <= 1) return items.join('');
+  if (items.length <= max) return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
+  return items.slice(0, max).join(', ') + ' and ' + (items.length - max) + ' more';
 }
 
-function mealChips(recipe, day) {
-  // Surface the most urgent ingredient this recipe uses, seen from the meal's own day, and the
-  // first thing it's missing.
-  var out = [], urgent = null, missing = null;
+// A meal card's chips: first its verdict, worked out exactly as the banner's (planNeeds), then the
+// ingredient closest to the end of its window, seen from the meal's own day. The card used to judge
+// "missing" on its own, ignoring amounts and what earlier meals set aside, so it could read
+// "all in window" and "Nothing missing." beside a banner listing that meal's chicken as short. And
+// "all in window" appeared when nothing in the meal had a date at all (feedback 2).
+function mealChips(recipe, day, verdict) {
+  var out = [];
+  function names(list) { return listOf(list.map(function(s) { return s.toLowerCase(); }), 1); }
+  if (verdict) {
+    if (verdict.missing.length) out.push({ cls:'now', text:'needs ' + names(verdict.missing) });
+    if (verdict.short.length)   out.push({ cls:'now', text:'short of ' + names(verdict.short) });
+    if (verdict.stale.length)   out.push({ cls:'now', text:names(verdict.stale) + ' past window by then' });
+    if (verdict.check.length)   out.push({ cls:'soon', text:'check ' + names(verdict.check) });
+    if (!out.length)            out.push({ cls:'ok', text:'nothing missing' });
+  }
+  var urgent = null;
   visibleLines(recipe).forEach(function(line) {
     var e = urgentEntryFor(line);
-    if (!e) { if (!line.optional && !missing) missing = line; return; }
+    if (!e) return;
     var f = freshness(e);
     if (f.known && (!urgent || f.max < urgent.f.max)) { urgent = { e:e, f:f }; }
   });
   var on = urgent ? freshnessOn(urgent.e, day || 0) : null;
-  if (on && on.cls !== 'ok') {
+  if (on && on.cls !== 'ok' && !(verdict && verdict.stale.length)) {
     out.push({ cls:on.cls, text:'uses ' + ingName(urgent.e.ing).toLowerCase() + ' · ' + on.text });
-  } else if (!missing) {
-    out.push({ cls:'ok', text:'all in window' });
   }
-  if (missing) { out.push({ cls:'now', text:'needs ' + lineName(missing).toLowerCase() }); }
   return out;
 }
+// Whether a meal's verdict has anything wrong with it.
+function verdictClear(v) { return !!v && !v.missing.length && !v.short.length && !v.stale.length && !v.check.length; }
 
 function renderMeals() {
   var container = document.getElementById('mealCards');
   container.innerHTML = '';
   var spot = (currentDay === 1) ? nextMealSlot() : -1;
+  var needs = planNeeds();
 
   MEAL_TYPES.forEach(function(type, slot) {
     var idx = planIndex(currentDay, type);
@@ -1072,10 +1118,15 @@ function renderMeals() {
     card.setAttribute('tabindex', '0');
     card.onclick = function() { openDetail(idx); };
 
-    var chips = left ? chipHTML('ok', 'nothing to cook') : mealChips(r, Math.floor(idx / 3)).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
+    // A cooked or skipped meal carries its badge and no chips: they were worked out from today's
+    // pantry, after the meal took its food, so a cooked dinner used to say "needs chicken".
+    var verdict = needs.byIdx[idx];
+    var chips = left ? chipHTML('ok', 'nothing to cook')
+      : (entry.status !== 'pending' || entry.dietBlocked) ? ''
+      : mealChips(r, Math.floor(idx / 3), verdict).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
     // Why this meal is on the plan, on the card itself. Only while it's still Ren's to decide:
     // once cooked or skipped the reason is history, not something to act on.
-    var why = (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3));
+    var why = (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3), 'card', verdict);
     var badge = '';
     if (entry.status === 'accepted') { badge = '<span class="state-badge cooked">✓ ' + (left ? 'eaten' : 'cooked') + '</span>'; }
     if (entry.status === 'skipped')  { badge = '<span class="state-badge skipped">skipped</span>'; }
@@ -1642,12 +1693,14 @@ function ingredientRowsHTML(r, idx) {
 // in the future tense and is avoided for the same reason: a stated spoilage date is the single
 // biggest driver of food being binned while it is still fine.
 //
-// `where` is 'detail' for the detail view, anything else for the card.
-function whyLine(r, dayIdx, where) {
-  var urgent = null, missing = false;
+// `where` is 'detail' for the detail view, anything else for the card. `verdict` is the meal's
+// entry in planNeeds().byIdx: "Nothing missing." is said only when that verdict is clear, so the
+// card, the meal screen and the banner agree (feedback 2).
+function whyLine(r, dayIdx, where, verdict) {
+  var urgent = null, missing = verdict ? !verdictClear(verdict) : false;
   visibleLines(r).forEach(function(line) {
     var e = urgentEntryFor(line);
-    if (!e) { if (!line.optional) missing = true; return; }
+    if (!e) { if (!line.optional && !verdict) missing = true; return; }
     var f = freshness(e), on = freshnessOn(e, dayIdx || 0);
     if (f.known && f.max >= (dayIdx || 0) && on.cls !== 'ok' && (!urgent || f.max < urgent.f.max)) urgent = { e:e, f:f };
   });
@@ -1676,7 +1729,7 @@ function whyLine(r, dayIdx, where) {
   if (!missing) {
     var lim = (typeof dayIdx === 'number') ? timeLimit(r.type, dayIdx) : null;
     if (lim && r.mins && r.mins <= lim) { return 'Quick enough for your ' + lim + '-minute ' + r.type + '.'; }
-    return 'Nothing missing.';
+    return where === 'detail' ? 'Nothing missing.' : '';   // the card's chip already says so
   }
   if (p.vote === 'up') return 'You liked this one before.';
   return '';
@@ -1729,7 +1782,7 @@ function openDetail(idx) {
       '</div>' +
       '<p class="detail-note">Skipped. Nothing was deducted from your pantry.</p>';
   } else {
-    var why = whyLine(r, Math.floor(idx / 3), 'detail');
+    var why = whyLine(r, Math.floor(idx / 3), 'detail', planNeeds().byIdx[idx]);
     html += '<div class="actions">' +
         '<button class="btn primary" onclick="acceptMeal(' + idx + ')">Cooked it</button>' +
         '<button class="btn ghost" onclick="swapMeal(' + idx + ')">Swap</button>' +
