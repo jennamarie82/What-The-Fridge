@@ -382,7 +382,6 @@ function zoneLabel(z) { for (var i=0;i<ZONES.length;i++) { if (ZONES[i].key === 
 //   1. a printed use-by date the user typed wins outright;
 //   2. otherwise purchase date + the norm's window for the storage spot it's in;
 //   3. anything else is unknown, with the reason, and never assumed fresh.
-// Norms are ranges ("3–7 days"), so the chip goes by the short end and "past window" by the long end.
 function freshness(e) {
   var today = todayKey();
   var ing = ingById(e.ing);
@@ -392,20 +391,37 @@ function freshness(e) {
   }
   if (!e.bought) { return { known:false, cls:'unknown', text:'no date', via:'nodate' }; }
   var norm = ing && ing.norm ? NORMS[ing.norm] : null;
-  if (!norm)             { return { known:false, cls:'unknown', text:'unknown', via:'nonorm' }; }
+  if (!norm)             { return { known:false, cls:'unknown', text:'no estimate', via:'nonorm' }; }
   if (norm.printed)      { return { known:false, cls:'unknown', text:'check date', via:'needsprinted', norm:norm }; }
   var win = norm[e.zone];
-  if (!win)              { return { known:false, cls:'unknown', text:'unknown', via:'nozone', norm:norm }; }
+  if (!win)              { return { known:false, cls:'unknown', text:'no estimate', via:'nozone', norm:norm }; }
   var age = daysBetween(e.bought, today);
   return status({ known:true, min:win[0] - age, max:win[1] - age, via:'norm', norm:norm });
 }
+// Norms are ranges ("3–7 days"), and the chip goes by the LATE end. It used to go by the early end,
+// so spinach bought three days ago with a 3–7 day window said "use today" though up to four days
+// were left, and 21 of the sample kitchen's 102 foods said "use today" at once (feedback 4). When
+// everything is urgent nothing is. Red is now only for the last day or two of a window, and the
+// words are about when to use it, never about the food's condition.
 function status(f) {
-  f.left = f.min;
-  if (f.max < 0)       { f.cls = 'now';  f.text = 'past window'; }
-  else if (f.min <= 0) { f.cls = 'now';  f.text = 'use today'; }
-  else if (f.min <= 3) { f.cls = 'soon'; f.text = f.min + (f.min === 1 ? ' day' : ' days'); }
-  else                 { f.cls = 'ok';   f.text = 'fine'; }
+  if (f.max < 0)        { f.cls = 'now';  f.text = 'past window'; }
+  else if (f.max === 0) { f.cls = 'now';  f.text = 'use today'; }
+  else if (f.max === 1) { f.cls = 'now';  f.text = 'use by tomorrow'; }
+  else if (f.max <= 4)  { f.cls = 'soon'; f.text = 'use within ' + f.max + ' days'; }
+  else                  { f.cls = 'ok';   f.text = 'no rush'; }
   return f;
+}
+// The same estimate seen from the day a meal is planned for. A chip on Saturday's dinner said "use
+// today" on Thursday, about food the plan uses on Saturday (feedback 4). For a later day it names
+// the day the window ends instead, which reads the same whichever day the plan is opened.
+function freshnessOn(e, day) {
+  var f = freshness(e);
+  if (!day || !f.known) return f;
+  var g = { known:true, min:f.min, max:f.max, via:f.via, norm:f.norm };
+  if (f.max < day)            { g.cls = 'now';  g.text = 'past window by then'; }
+  else if (f.max <= day + 1)  { g.cls = 'soon'; g.text = 'window ends ' + (f.max === 1 ? 'tomorrow' : dayShort(f.max)); }
+  else                        { g.cls = 'ok';   g.text = 'in window'; }
+  return g;
 }
 // A norm's wording for the storage spot the food is actually in: "Leafy greens: 3–7 days
 // refrigerated; 10–12 months frozen" reads as just the refrigerated part for a fridge item.
@@ -429,11 +445,14 @@ function basisLine(e) {
     return (bought ? bought + ' · ' : '') + 'use-by date you entered: ' + fmtKey(e.expires);
   }
   if (f.via === 'nodate') { return 'No purchase date on record, so no freshness estimate.'; }
+  // No guide for this food (or for where it's kept): say so and stop. It used to end "Add the
+  // printed date for an estimate", which asked Ren to fix a gap in our data, and loose herbs
+  // have no printed date to add (feedback 4).
   if (f.via === 'nonorm') {
-    return bought + ' · the shelf-life norms have no entry for ' + name.toLowerCase() + '. Add the printed date for an estimate.';
+    return bought + ' · we have no shelf-life guide for ' + name.toLowerCase() + ', so no estimate.';
   }
   if (f.via === 'nozone') {
-    return bought + ' · the norms give no window for ' + name.toLowerCase() + ' kept in the ' + zoneLabel(e.zone).toLowerCase() + '. Add the printed date for an estimate.';
+    return bought + ' · we have no shelf-life guide for ' + name.toLowerCase() + ' kept in the ' + zoneLabel(e.zone).toLowerCase() + ', so no estimate.';
   }
   if (f.via === 'needsprinted') {
     return bought + ' · ' + f.norm.basis + '. That counts from the printed date, so add it for an estimate.';
@@ -442,13 +461,23 @@ function basisLine(e) {
   return bought + ' · ' + normBasis(f.norm, e.zone) + ' · estimated use-by ' +
     (todayKey(from) === todayKey(to) ? fmtDate(from) : fmtDate(from) + '–' + fmtDate(to));
 }
-// Soonest-to-turn first; unknowns last, since nothing is known about them.
+// Soonest window end first (the late end, as the chips read), then the early end; unknowns last,
+// since nothing is known about them.
 function byUrgency(a, b) {
   var fa = freshness(a), fb = freshness(b);
   if (!fa.known && !fb.known) return 0;
   if (!fa.known) return 1;
   if (!fb.known) return -1;
-  return fa.min - fb.min;
+  return (fa.max - fb.max) || (fa.min - fb.min);
+}
+// Whether a pantry item belongs under Needs attention: a window ending within four days (red or
+// amber), or fridge and freezer food Ren could date and hasn't. Food we have no shelf-life guide
+// for is left out: there is nothing to act on, and asking for a date can't fill our gap.
+function needsAttention(e) {
+  if (!inStock(e)) return false;
+  var f = freshness(e);
+  if (f.known) return f.max <= 4;
+  return (f.via === 'nodate' || f.via === 'needsprinted') && e.zone !== 'cupboard';
 }
 
 // ═══════════════ STOCK ═══════════════
@@ -1000,17 +1029,19 @@ function listOf(items, max) {
   return items.length <= max ? items.join(', ') : items.slice(0, max).join(', ') + ' and ' + (items.length - max) + ' more';
 }
 
-function mealChips(recipe) {
-  // Surface the most urgent ingredient this recipe uses, and the first thing it's missing.
+function mealChips(recipe, day) {
+  // Surface the most urgent ingredient this recipe uses, seen from the meal's own day, and the
+  // first thing it's missing.
   var out = [], urgent = null, missing = null;
   visibleLines(recipe).forEach(function(line) {
     var e = urgentEntryFor(line);
     if (!e) { if (!line.optional && !missing) missing = line; return; }
     var f = freshness(e);
-    if (f.known && (!urgent || f.min < urgent.f.min)) { urgent = { e:e, f:f }; }
+    if (f.known && (!urgent || f.max < urgent.f.max)) { urgent = { e:e, f:f }; }
   });
-  if (urgent && urgent.f.min <= 3) {
-    out.push({ cls:urgent.f.cls, text:'uses ' + ingName(urgent.e.ing).toLowerCase() + ' · ' + urgent.f.text });
+  var on = urgent ? freshnessOn(urgent.e, day || 0) : null;
+  if (on && on.cls !== 'ok') {
+    out.push({ cls:on.cls, text:'uses ' + ingName(urgent.e.ing).toLowerCase() + ' · ' + on.text });
   } else if (!missing) {
     out.push({ cls:'ok', text:'all in window' });
   }
@@ -1041,7 +1072,7 @@ function renderMeals() {
     card.setAttribute('tabindex', '0');
     card.onclick = function() { openDetail(idx); };
 
-    var chips = left ? chipHTML('ok', 'nothing to cook') : mealChips(r).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
+    var chips = left ? chipHTML('ok', 'nothing to cook') : mealChips(r, Math.floor(idx / 3)).map(function(c) { return chipHTML(c.cls, esc(c.text)); }).join('');
     // Why this meal is on the plan, on the card itself. Only while it's still Ren's to decide:
     // once cooked or skipped the reason is history, not something to act on.
     var why = (left || entry.status !== 'pending') ? '' : whyLine(r, Math.floor(idx / 3));
@@ -1112,24 +1143,21 @@ function renderPantry() {
     return;
   }
 
-  // Needs attention: anything near or past its window, plus fridge and freezer food whose
-  // freshness can't be estimated — it might be fine, but nobody can say.
-  var attention = pantry.filter(function(e) {
-    if (!inStock(e)) return false;
-    var f = freshness(e);
-    return f.known ? f.min <= 3 : e.zone !== 'cupboard';
-  }).sort(byUrgency);
+  // Needs attention: anything within four days of the end of its window, plus fridge and freezer
+  // food Ren could date and hasn't (see needsAttention).
+  var attention = pantry.filter(needsAttention).sort(byUrgency);
 
   // Needs attention is a zone row like the three storage zones, so the tab reads as one list
   // instead of a flat block sitting above a set of rows.
   //
   // It closes like them too, which took some deciding. The spec wants the freshness flag
   // "prominent enough that skipping it takes a deliberate action", and opening by default looked
-  // like the safe reading — until it was measured: the sample kitchen puts 59 items in here, so
-  // open-by-default just rebuilds the wall this change exists to remove, and a wall of 59 rows is
+  // like the safe reading — until it was measured: the sample kitchen put 59 items in here, so
+  // open-by-default just rebuilt the wall this change exists to remove, and a wall of 59 rows is
   // skimmed, not read. What has to be unmissable is the signal, not the detail. So the row itself
-  // carries the worst chip in its own colour — "21 use today" — and that is what Ren has to
-  // deliberately ignore. The per-item basis is one tap away.
+  // carries the worst chip in its own colour, and that is what Ren has to deliberately ignore.
+  // The per-item basis is one tap away. (Judging by the late end of each window, feedback 4,
+  // brought the sample kitchen's list down from 59 items.)
   var attOpen = openZones.attention;
 
   // Three groups, because they ask three different things of Ren.
@@ -1142,18 +1170,35 @@ function renderPantry() {
   //
   // It matters more now that an undated receipt no longer invents today's date: items legitimately
   // arrive with nothing on record, and this is where Ren closes that gap.
-  var planned = plannedIngredientIds();
+  var plannedOn = plannedDays();
   var dated   = attention.filter(function(e) { return freshness(e).known; });
   var undated = attention.filter(function(e) { return !freshness(e).known; });
-  var atRisk  = dated.filter(function(e) { return !planned[e.ing]; });
-  var covered = dated.filter(function(e) { return planned[e.ing]; });
+  var atRisk  = dated.filter(function(e) { return plannedOn[e.ing] === undefined; });
+  var covered = dated.filter(function(e) { return plannedOn[e.ing] !== undefined; });
 
+  // Each row says what to do about it, not only how close it is (feedback 4): cook it, freeze it,
+  // or check it. Never what condition it's in: the app has only read a date.
+  var todo = function(e) {
+    var f = freshness(e), day = plannedOn[e.ing];
+    if (f.max < 0) return 'Past its estimated window. Check it before you use it.';
+    if (day !== undefined) {
+      var when = day === 0 ? 'today' : day === 1 ? 'tomorrow' : 'on ' + dayLabel(day);
+      return f.max < day ? 'Your plan uses it ' + when + ', after its window ends: swap or re-plan that meal.'
+                         : 'Your plan uses it ' + when + '.';
+    }
+    if (dietRuleFor(e.ing)) return 'Your ' + dietRuleFor(e.ing) + ' setting keeps it out of meals.';
+    return (f.max <= 1 ? 'Use it tonight' : 'Use it in a meal soon') + (canFreeze(e) ? ', or freeze it.' : '.');
+  };
   var row = function(e, act) {
-    var f = freshness(e);
+    var f = freshness(e), ruled = !!dietRuleFor(e.ing);
     return '<div class="zone-line" onclick="event.stopPropagation();openEditItem(\'' + e.id + '\')">' +
       '<div><div class="zl-name">' + esc(ingName(e.ing)) + '</div>' +
       '<div class="zl-sub">' + esc(zoneLabel(e.zone).toLowerCase() + ' · ' + basisLine(e)) + '</div>' +
-      (act ? '<button class="btn ghost small use-it" onclick="event.stopPropagation();planAround(\'' + e.id + '\')">Use it in a meal</button>' : '') +
+      (f.known ? '<div class="zl-todo">' + esc(todo(e)) + '</div>' : '') +
+      (act && f.max >= 0 && !ruled ? '<div class="zl-acts">' +
+        '<button class="btn ghost small use-it" onclick="event.stopPropagation();planAround(\'' + e.id + '\')">Use it in a meal</button>' +
+        (canFreeze(e) ? '<button class="btn ghost small use-it" onclick="event.stopPropagation();freezeItem(\'' + e.id + '\')">Freeze it</button>' : '') +
+      '</div>' : '') +
       '</div>' +
       '<div class="zl-right"><div class="zl-qty">' + entryQty(e) + '</div>' + chipHTML(f.cls, f.text) + '</div>' +
     '</div>';
@@ -1179,7 +1224,8 @@ function renderPantry() {
   // The collapsed row carries whatever is most worth acting on. Food about to turn that nothing
   // is planning to use comes first; with none of that, a gap in the record is the next most
   // useful thing to say. "All in your plan" is only honest once both are clear.
-  var headChip = atRisk.length  ? chipHTML('now', atRisk.length + ' not in your plan')
+  var worst = atRisk.some(function(e) { return freshness(e).cls === 'now'; }) ? 'now' : 'soon';
+  var headChip = atRisk.length  ? chipHTML(worst, atRisk.length + ' not in your plan')
                : undated.length ? chipHTML('unknown', undated.length + ' need a date')
                : dated.length   ? chipHTML('ok', 'all in your plan') : '';
 
@@ -1234,6 +1280,44 @@ function plannedIngredientIds() {
   });
   return out;
 }
+// The first day (0 = today) a meal still to cook uses each ingredient, for "Your plan uses it
+// tomorrow" under Needs attention.
+function plannedDays() {
+  var out = {};
+  plan.forEach(function(e, idx) {
+    if (!activeEntry(e)) return;
+    var r = recipeById(e.recipe), day = Math.floor(idx / 3);
+    if (!r) return;
+    visibleLines(r).forEach(function(l) {
+      lineIds(l).forEach(function(id) {
+        if (out[id] === undefined || day < out[id]) out[id] = day;
+        var i = ingIndex[id];
+        // A variety in the pantry (frozen salmon) is used by a line that names the food it counts as.
+        INGREDIENTS.forEach(function(v) { if (v.counts === id && (out[v.id] === undefined || day < out[v.id])) out[v.id] = day; });
+        if (i && i.counts && (out[i.counts] === undefined || day < out[i.counts])) out[i.counts] = day;
+      });
+    });
+  });
+  return out;
+}
+
+// Freezing is the other way to keep food in time, and the norms hold a freezer window for most
+// fridge foods. Offered only inside the window: freezing doesn't take food back into it.
+function canFreeze(e) {
+  if (e.zone !== 'fridge') return false;
+  var f = freshness(e), ing = ingById(e.ing), norm = ing && ing.norm ? NORMS[ing.norm] : null;
+  return f.known && f.max >= 0 && !!(norm && norm.freezer && !norm.printed);
+}
+function freezeItem(entryId) {
+  var e = entryById(entryId);
+  if (!e || !canFreeze(e)) return;
+  e.zone = 'freezer';
+  renderAll();
+  var f = freshness(e), name = ingName(e.ing).toLowerCase();
+  showToast('Moved the ' + name + ' to the freezer.' + (f.known && f.via === 'norm' ? ' ' + normBasis(f.norm, 'freezer') + '.' : ''),
+    { label:'Undo', fn:function() { e.zone = 'fridge'; renderAll(); showToast('The ' + name + ' is back in the fridge.'); } });
+}
+
 function recipeUses(r, ingId) {
   return visibleLines(r).some(function(l) { return lineIds(l).indexOf(ingId) > -1; });
 }
@@ -1525,7 +1609,7 @@ function ingredientRowsHTML(r, idx) {
         chipHTML(line.optional ? 'unknown' : 'now', line.optional ? 'skip it' : 'missing') + '</div>';
       return;
     }
-    var e = urgentEntryFor(line), f = freshness(e);
+    var e = urgentEntryFor(line), f = freshnessOn(e, Math.floor(idx / 3));
     var chip = { ok:[f.cls, f.text], check:['soon', 'check amount'], short:['now', 'short'] }[c.status];
     var note = '';
     if (activeEntry(entry) && turnsBefore(line, Math.floor(idx / 3))) {
@@ -1564,8 +1648,8 @@ function whyLine(r, dayIdx, where) {
   visibleLines(r).forEach(function(line) {
     var e = urgentEntryFor(line);
     if (!e) { if (!line.optional) missing = true; return; }
-    var f = freshness(e);
-    if (f.known && f.max >= 0 && f.min <= 3 && (!urgent || f.min < urgent.f.min)) urgent = { e:e, f:f };
+    var f = freshness(e), on = freshnessOn(e, dayIdx || 0);
+    if (f.known && f.max >= (dayIdx || 0) && on.cls !== 'ok' && (!urgent || f.max < urgent.f.max)) urgent = { e:e, f:f };
   });
 
   if (urgent) {

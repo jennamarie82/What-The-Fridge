@@ -571,7 +571,10 @@ input:focus-visible, select:focus-visible, a:focus-visible {
   color:var(--ink-soft); padding:var(--s6) 0 var(--s2); border-bottom:1px solid var(--border);
 }
 /* The one-tap rescue, on at-risk items only. Sits under the basis so the row stays scannable. */
-.zone-line .use-it { margin-top:6px; padding:3px 10px; font-size:11px; }
+.zone-line .use-it { margin-top:6px; padding:3px 10px; font-size:12px; }
+/* What to do about a Needs-attention item: cook it, freeze it, or check it (feedback 4). */
+.zone-line .zl-todo { font-size:12px; font-weight:600; color:var(--ink); margin-top:4px; line-height:1.4; }
+.zone-line .zl-acts { display:flex; gap:6px; flex-wrap:wrap; }
 .zone-line .zl-qty { font-weight:700; font-size:13px; white-space:nowrap; }
 .zone-line.out .zl-name, .zone-line.out .zl-qty { color:var(--ink-soft); text-decoration:line-through; }
 
