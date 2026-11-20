@@ -89,6 +89,16 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
 }
 .view::-webkit-scrollbar { display:none; }
 .view-pad { padding:0 var(--s8) var(--s12); }
+/* Back to the previous tab. Stays at the top while the tab scrolls, so it's always one tap away. */
+.back-bar {
+  position:sticky; top:0; z-index:6;
+  display:flex; align-items:center; gap:var(--s2); width:100%;
+  padding:var(--s4) var(--s8); min-height:40px;
+  background:var(--cream); border:none; cursor:pointer;
+  font-family:inherit; font-size:14px; font-weight:600; color:var(--leaf); text-align:left;
+  -webkit-tap-highlight-color:transparent;
+}
+.back-bar svg { width:18px; height:18px; stroke:var(--leaf); flex-shrink:0; }
 
 /* ═══════════════ BOTTOM TABS ═══════════════ */
 .tabs {
@@ -892,6 +902,14 @@ footer {
 .setup-body h2 { font-size:24px; font-weight:800; line-height:1.2; margin-bottom:var(--s4); }
 .setup-lede { font-size:14px; color:var(--ink-soft); line-height:1.55; margin-bottom:var(--s4); }
 .setup-mark { margin:var(--s8) 0 var(--s4); text-align:center; }
+/* The welcome screen's purpose statement and three-line description. */
+.setup-purpose { font-size:15px; font-weight:600; color:var(--ink); line-height:1.5; margin-bottom:var(--s6); }
+.setup-how { list-style:none; padding:0; margin:0 0 var(--s6); display:flex; flex-direction:column; gap:var(--s4); }
+.setup-how li {
+  font-size:13px; line-height:1.45; color:var(--ink-soft);
+  padding:var(--s4) var(--s6); background:var(--white); border-radius:var(--r);
+}
+.setup-how li b { color:var(--ink); }
 .setup-mark img { height:120px; width:auto; object-fit:contain; }
 .setup-dots { display:flex; gap:6px; margin-bottom:var(--s8); }
 .setup-dots i { width:8px; height:8px; border-radius:50%; background:var(--border); }
