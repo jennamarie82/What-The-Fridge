@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-20 (Back, Settings, welcome)';
+var APP_VERSION = '2026-11-20 (accounts)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -2603,8 +2603,10 @@ function openSub(which) {
       '</div>' +
       '<div class="note-card" style="margin-top:var(--s4);">' +
         '<strong>Privacy</strong><br>' +
-        'Your food, plan and settings are saved in this browser only and never leave your device. ' +
-        'The one exception: when you scan a receipt or photograph your shelves, the photo is sent to Claude (by Anthropic) to read it, and isn\'t stored by the app.' +
+        'Your food, plan and settings are saved in this browser. If you sign in (Settings &rsaquo; Account), they are also saved ' +
+        'to your account with Supabase in Canada, so you can use them on other devices; only you can see them, and you can delete ' +
+        'your account and everything in it there. When you scan a receipt or photograph your shelves, the photo is sent to ' +
+        'Claude (by Anthropic) to read it, and isn\'t stored by the app.' +
       '</div>' +
       // Testing tools live behind a switch here rather than in the Profile menu, where "Simulate
       // midnight" sat beside the household's real settings.
@@ -2616,6 +2618,11 @@ function openSub(which) {
         'BUS 860 · Group 3<br>University of Alberta' +
         '<br><br>Version ' + APP_VERSION +
       '</div>';
+  }
+
+  if (which === 'account') {
+    title = 'Account';
+    body = typeof accountScreenHTML === 'function' ? accountScreenHTML() : '';
   }
 
   if (which === 'feedback') {
@@ -4759,6 +4766,18 @@ function showSetup() { setupStep = 1; renderSetup(); document.getElementById('se
 function renderSetup() {
   var el = document.getElementById('setupBody');
   var dots = '<div class="setup-dots">' + [1,2,3,4,5].map(function(n) { return '<i class="' + (n === setupStep ? 'on' : '') + '"></i>'; }).join('') + '</div>';
+  // Someone who already has an account (say, opening the app on an iPad) signs in instead of
+  // setting up again; their kitchen loads and setup closes (account.js).
+  if (setupStep === 'signin') {
+    el.innerHTML =
+      '<div class="setup-mark"><img src="logo-setup-t.webp" alt="What the Fridge"></div>' +
+      '<h2>Sign in</h2>' +
+      '<p class="setup-lede">Your kitchen, plan and history load from your account.</p>' +
+      (typeof accountSignInHTML === 'function' ? accountSignInHTML('setup') : '') +
+      (typeof account !== 'undefined' && account.choice ? accountChoiceHTML() : '') +
+      '<div class="actions"><button class="btn quiet" onclick="setupStep=1;renderSetup()">Back</button></div>';
+    return;
+  }
   if (setupStep === 3) {
     el.innerHTML = dots +
       '<h2>Which meals should we plan?</h2>' +
@@ -4793,7 +4812,9 @@ function renderSetup() {
       '<p class="setup-lede">Less "what are we eating?", less forgotten spinach.</p>' +
       '<div class="field-label">What should we call you? <span>optional</span></div>' +
       '<input class="field" id="setupName" maxlength="30" placeholder="Your first name" value="' + esc(settings.name) + '" oninput="settings.name=this.value.trim()">' +
-      '<div class="actions"><button class="btn primary" onclick="setupStep=2;renderSetup()">Next</button></div>';
+      '<div class="actions"><button class="btn primary" onclick="setupStep=2;renderSetup()">Next</button></div>' +
+      (typeof accountsReady === 'function' && accountsReady()
+        ? '<div class="actions"><button class="btn quiet" onclick="setupStep=\'signin\';renderSetup()">Already have an account? Sign in</button></div>' : '');
     return;
   }
   if (setupStep === 2) {
@@ -4841,7 +4862,8 @@ function finishSetup(mode) {
 
 // ═══════════════ SAVED STATE ═══════════════
 // Everything the user changes is kept in this browser's localStorage, so a refresh or a closed
-// tab loses nothing. It never leaves the device. The recipe catalog is not saved; it always
+// tab loses nothing. If Ren signs in, account.js also saves it to Ren's account (Supabase) after
+// each change; without an account it never leaves the device. The recipe catalog is not saved; it always
 // comes from the approved file built into this page.
 var STORE_KEY = 'wtf-state-v2';       // v1 (prototype10's web build) had a different pantry shape
 var lastSeen = null;                  // calendar day (YYYY-MM-DD) the saved state belongs to
@@ -4923,6 +4945,11 @@ function loadSampleKitchen() {
 }
 function startOver() {
   if (!confirm('Start over? This clears your kitchen, plan and history from this browser.')) { return; }
+  resetKitchen();
+}
+// Clears this browser's kitchen and opens setup. Start over asks first; signing out and deleting
+// an account (account.js) have already asked in their own words.
+function resetKitchen() {
   try { localStorage.removeItem(STORE_KEY); } catch (e) {}
   // Testing tools stay as they were: someone testing the app starts over often, and shouldn't
   // have to dig the switch out of About each time.
