@@ -1,5 +1,5 @@
 key,fridge,freezer,cupboard,printed,basis
-# Days, transcribed from knowledge/shelf-life-norms.md (USDA FSIS / FoodKeeper / StillTasty / EatByDate).
+# Days, transcribed from knowledge/shelf-life-norms.md (USDA FSIS / FoodKeeper / StillTasty / EatByDate). The 248-row version was adopted on 2026-11-20.
 # A blank column means the norms file gives no window for that storage spot.
 # printed=1 means the norm counts from the package's printed date, not the purchase date.
 ground-meat,1-2,90-120,,,Ground meats: 1–2 days refrigerated; 3–4 months frozen
@@ -57,3 +57,109 @@ mayonnaise,60-90,,,,Mayonnaise (opened): 2–3 months refrigerated
 soy-sauce,730-730,,,,Soy sauce (opened): 2 years refrigerated
 salsa,30-30,,,,"Salsa (jarred, opened): 1 month refrigerated"
 olive-oil,,,365-730,,"Olive oil: 1–2 years in a cool, dark cupboard"
+# ── Added 2026-11-20 from the 248-row norms file (request 91). Opened windows where the file gives a choice. ──
+smoked-sausage,3-7,30-60,,,"Sausage, cooked / smoked: 3–7 days refrigerated; 1–2 months frozen"
+smoked-fish,3-5,60-60,,,"Smoked fish (salmon, trout), opened: 3–5 days refrigerated; 2 months frozen"
+surimi,3-5,270-270,,,Surimi (imitation crab): 3–5 days refrigerated once opened; 9 months frozen
+squid,1-2,90-180,,,Squid / calamari: 1–2 days refrigerated; 3–6 months frozen
+nuggets-cooked,3-4,30-90,,,"Chicken nuggets, patties (cooked): 3–4 days refrigerated; 1–3 months frozen"
+liquid-eggs,3-3,,,,Liquid pasteurized eggs (opened): 3 days refrigerated
+buttermilk,7-14,90-90,,,Buttermilk: 1–2 weeks refrigerated; 3 months frozen
+heavy-cream,5-7,90-120,,,Heavy / whipping cream (opened): 5–7 days refrigerated; 3–4 months frozen
+half-and-half,3-5,120-120,,,Half-and-half (opened): 3–5 days refrigerated; 4 months frozen
+sour-cream,7-21,,,,Sour cream: 1–3 weeks refrigerated; freezing not recommended
+cream-cheese,14-14,,,,Cream cheese (opened): 2 weeks refrigerated; freezing not recommended
+kefir,7-14,30-60,,,Kefir: 1–2 weeks refrigerated; 1–2 months frozen
+soft-cheese,7-14,180-180,,,"Soft cheese (Brie, Camembert), opened: 1–2 weeks refrigerated; 6 months frozen"
+fresh-mozzarella,3-5,180-180,,,Fresh mozzarella (opened): 3–5 days refrigerated; 6 months frozen
+feta,7-21,90-180,,,"Feta (opened, in brine): 1–3 weeks refrigerated; 3–6 months frozen"
+cottage-ricotta,5-7,,,,Cottage cheese / ricotta (opened): 5–7 days refrigerated; freezing not recommended
+margarine,120-150,365-365,,,Margarine: 4–5 months refrigerated; 12 months frozen
+whipped-cream-can,90-90,,,,Whipped cream (aerosol can): 3 months refrigerated (or its use-by date)
+dairy-dips,7-14,,,,Dairy-based dips (opened): 1–2 weeks refrigerated; freezing not recommended
+artichokes,5-7,180-240,,,Artichokes: 5–7 days refrigerated; 6–8 months frozen (cooked)
+basil,5-7,90-180,,,Fresh basil: 5–7 days refrigerated; 3–6 months frozen in oil
+beets,14-21,300-360,,,Beets: 2–3 weeks refrigerated; 10–12 months frozen (cooked)
+brussels-sprouts,3-5,300-360,,,Brussels sprouts: 3–5 days refrigerated; 10–12 months frozen (blanched)
+cabbage,7-14,300-360,,,Cabbage: 1–2 weeks refrigerated; 10–12 months frozen (blanched)
+cilantro,5-10,90-180,,,Fresh cilantro: 5–10 days refrigerated; 3–6 months frozen in oil or water
+eggplant,3-5,300-360,,,Eggplant: 3–5 days refrigerated; 10–12 months frozen (cooked or blanched)
+green-onions,7-14,90-120,,,Green onions / scallions: 1–2 weeks refrigerated; 3–4 months frozen (chopped)
+fresh-herbs,7-14,90-180,,,"Fresh herbs (dill, mint, thyme, rosemary): 1–2 weeks refrigerated; 3–6 months frozen in oil or water"
+leeks,7-14,300-360,,,Leeks: 1–2 weeks refrigerated; 10–12 months frozen (blanched)
+okra,2-3,300-360,,,Okra: 2–3 days refrigerated; 10–12 months frozen (blanched)
+parsley,7-14,90-180,,,Fresh parsley: 1–2 weeks refrigerated; 3–6 months frozen in oil or water
+fresh-peas,3-5,300-360,,,Fresh peas in the pod: 3–5 days refrigerated; 10–12 months frozen (blanched)
+root-veg,14-21,300-360,,,"Parsnips, turnips, rutabagas: 2–3 weeks refrigerated; 10–12 months frozen (blanched)"
+radishes,7-14,,,,Radishes: 1–2 weeks refrigerated; freezing not recommended
+garlic,7-10,,90-180,,"Garlic: whole heads 3–6 months in a cool, dry cupboard; peeled cloves 7–10 days refrigerated"
+sweet-potatoes,,300-360,7-14,,"Sweet potatoes: 1–2 weeks in a cool, dark cupboard; 10–12 months frozen (cooked); do not refrigerate raw"
+winter-squash,,300-360,30-90,,"Winter squash (whole): 1–3 months in a cool, dry cupboard; 10–12 months frozen (cooked)"
+apricots,3-5,300-360,,,"Apricots: 3–5 days refrigerated once ripe; 10–12 months frozen"
+cherries,4-7,300-360,,,Cherries: 4–7 days refrigerated; 10–12 months frozen
+fresh-coconut,4-5,180-240,60-90,,"Fresh coconut: whole 2–3 months in the cupboard; opened 4–5 days refrigerated; 6–8 months frozen (shredded)"
+kiwi,7-14,300-360,3-5,,"Kiwi: 3–5 days on the counter until ripe, then 1–2 weeks refrigerated; 10–12 months frozen"
+cantaloupe,3-5,300-360,5-7,,"Cantaloupe, honeydew: whole 5–7 days on the counter; cut 3–5 days refrigerated; 10–12 months frozen"
+watermelon,3-5,300-360,7-10,,"Watermelon: whole 7–10 days on the counter; cut 3–5 days refrigerated; 10–12 months frozen"
+peaches,3-5,300-360,1-3,,"Peaches / nectarines: 1–3 days on the counter until ripe, then 3–5 days refrigerated; 10–12 months frozen"
+pears,5-7,300-360,3-5,,"Pears: 3–5 days on the counter until ripe, then 5–7 days refrigerated; 10–12 months frozen"
+plums,3-5,300-360,3-5,,"Plums: 3–5 days on the counter until ripe, then 3–5 days refrigerated; 10–12 months frozen"
+wild-rice,,,180-240,,Wild rice (dry): 6–8 months in the cupboard
+flour,365-365,365-730,180-240,,"All-purpose flour: 6–8 months in the cupboard; 12 months refrigerated; 12–24 months frozen"
+whole-wheat-flour,,,30-90,,Whole-wheat flour: 1–3 months in the cupboard
+cornmeal,360-360,720-720,270-360,,Cornmeal: 9–12 months in the cupboard; 12 months refrigerated; 24 months frozen
+oats,,,365-540,,Oats (rolled / steel-cut): 12–18 months in the cupboard
+cereal,,,60-90,,Breakfast cereal (opened): 2–3 months in the cupboard
+crackers,,,30-60,,Crackers (opened): 1–2 months in the cupboard
+tofu,3-5,90-150,,,Tofu (opened): 3–5 days refrigerated; 3–5 months frozen
+tempeh,7-10,90-180,,,Tempeh: 7–10 days refrigerated; 3–6 months frozen
+miso,90-360,,,,Miso paste (opened): 3–12 months refrigerated
+meat-substitutes,3-5,60-90,,,Soy-based meat substitutes (opened): 3–5 days refrigerated; 2–3 months frozen
+pesto,5-7,90-180,,,Pesto (opened): 5–7 days refrigerated; 3–6 months frozen
+convenience-meals,3-4,90-120,,,Convenience meals / TV dinners: 3–4 months frozen; 3–4 days refrigerated once opened
+canned-beans,3-4,,730-1825,,Canned beans: 2–5 years unopened in the cupboard; 3–4 days refrigerated after opening
+canned-tomatoes,5-7,,365-540,,Canned tomatoes / tomato sauce: 12–18 months unopened in the cupboard; 5–7 days refrigerated after opening
+canned-veg,3-4,,730-1825,,"Canned vegetables (corn, peas, carrots): 2–5 years unopened in the cupboard; 3–4 days refrigerated after opening"
+canned-meat,3-4,,730-1825,,"Canned meat (chicken, Spam, corned beef): 2–5 years unopened in the cupboard; 3–4 days refrigerated after opening"
+canned-fish,3-4,,1095-1825,,"Canned fish (tuna, salmon, sardines): 3–5 years unopened in the cupboard; 3–4 days refrigerated after opening"
+canned-soup,3-4,,730-1825,,Canned soups: 2–5 years unopened in the cupboard; 3–4 days refrigerated after opening
+canned-fruit,5-7,,365-540,,Canned fruit: 12–18 months unopened in the cupboard; 5–7 days refrigerated after opening
+pickles,30-90,,365-540,,Pickles: 12–18 months unopened in the cupboard; 1–3 months refrigerated after opening
+evaporated-milk,4-5,,365-365,,Evaporated milk: 12 months unopened in the cupboard; 4–5 days refrigerated after opening
+baking-powder,,,180-360,,Baking powder (opened): 6–12 months in the cupboard
+baking-soda,,,180-180,,Baking soda (opened): 6 months in the cupboard
+brown-sugar,,,120-180,,Brown sugar: 4–6 months in the cupboard
+powdered-sugar,,,540-720,,Powdered / icing sugar: 18–24 months in the cupboard
+cornstarch,,,540-720,,Cornstarch: 18–24 months in the cupboard
+cocoa,,,730-1095,,Cocoa powder: 2–3 years in the cupboard
+yeast,,,120-120,,Active dry yeast (opened): 4 months in the cupboard
+gelatin,,,1095-1095,,Unflavored gelatin: 3 years in the cupboard
+peanut-butter,,,60-90,,Peanut butter (opened): 2–3 months in the cupboard
+nut-butters,60-90,,60-90,,"Nut butters (almond, cashew), opened: 2–3 months, refrigerated after opening"
+vegetable-oil,,,180-360,,Vegetable / canola oil (opened): 6–12 months in a cool cupboard
+coconut-oil,,,365-540,,Coconut oil: 12–18 months in the cupboard
+dried-legumes,,,365-730,,Dried beans / lentils / split peas: 1–2 years in the cupboard
+whole-spices,,,730-1460,,"Herbs and spices (dried, whole): 2–4 years in the cupboard"
+ground-spices,,,365-1095,,Ground spices: 1–3 years in the cupboard
+coffee,,,90-150,,"Coffee, opened: 3–5 months ground, 6–9 months whole bean, in the cupboard"
+tea,,,180-360,,Tea bags: 6–12 months in the cupboard
+bouillon,,,360-360,,Bouillon cubes / powder: 12 months in the cupboard
+nuts,90-180,365-365,90-180,,Nuts: 3–6 months in the cupboard; opened 3–6 months refrigerated; 12 months frozen
+popcorn,,,365-730,,Popcorn kernels: 1–2 years in the cupboard
+chips,,,7-14,,Potato chips (opened): 1–2 weeks in the cupboard
+instant-mashed,,,180-360,,Instant mashed potatoes: 6–12 months in the cupboard
+jam,180-360,,,,Jams and jellies (opened): 6–12 months refrigerated
+dried-fruit,,,180-360,,"Dried fruit (raisins, cranberries, apricots): 6–12 months in the cupboard"
+jerky,,,30-60,,Jerky (opened): 1–2 months in the cupboard
+vinegar,,,730-730,,Rice vinegar / white vinegar: 2 years or more in the cupboard
+bbq-sauce,120-180,,,,BBQ sauce (opened): 4–6 months refrigerated
+hot-sauce,180-360,,,,"Hot sauce (Tabasco, Sriracha), opened: 6–12 months refrigerated"
+creamy-dressing,30-90,,,,Creamy salad dressing (opened): 1–3 months refrigerated
+vinaigrette,90-180,,,,Vinaigrette (opened): 3–6 months refrigerated
+horseradish,90-120,,,,Prepared horseradish (opened): 3–4 months refrigerated
+juice,7-10,,,,"Juice (pasteurized, carton), opened: 7–10 days refrigerated"
+frozen-veg,,240-360,,,Frozen vegetables (commercial): 8–12 months frozen
+frozen-fruit,,240-360,,,Frozen fruit (commercial): 8–12 months frozen
+ice-cream,,60-120,,,Ice cream / frozen yogurt: 2–4 months frozen
+frozen-waffles,,90-120,,,Frozen waffles / pancakes: 3–4 months frozen
+frozen-burritos,,90-120,,,Frozen burritos / pockets: 3–4 months frozen
