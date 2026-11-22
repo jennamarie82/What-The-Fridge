@@ -66,6 +66,8 @@
   <div class="toast" id="toast"></div>
   <!-- Asked once, right after Ren logs something as thrown out. Skippable; see askWasteReason(). -->
   <div class="waste-backdrop" id="wasteReasons" style="display:none;" onclick="if(event.target===this)closeWasteReasons()"></div>
+  <!-- Guided pairing: pick a food, then one that shares a recipe with it. See openPairing(). -->
+  <div class="waste-backdrop" id="pairSheet" style="display:none;" onclick="if(event.target===this)closePairing()"></div>
 
   <!-- ══════ VIEW AREA ══════ -->
   <div class="view" id="mainView">
