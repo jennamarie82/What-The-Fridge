@@ -588,7 +588,6 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 .zone-line .zl-todo { font-size:12px; font-weight:600; color:var(--ink); margin-top:4px; line-height:1.4; }
 .zone-line .zl-acts { display:flex; gap:6px; flex-wrap:wrap; }
 .zone-line .zl-qty { font-weight:700; font-size:13px; white-space:nowrap; }
-.zone-line.out .zl-name, .zone-line.out .zl-qty { color:var(--ink-soft); text-decoration:line-through; }
 
 /* ─── small italic footnote ─── */
 .nutri-note { font-size:11px; color:var(--ink-soft); margin:-8px 0 var(--s8); font-style:italic; }
@@ -1231,3 +1230,17 @@ footer {
 .ac-danger { border-left:4px solid var(--tomato); margin-top:var(--s6); }
 .btn.ac-delete { background:#A63D24; color:#fff; }            /* 5.4:1 on white, like the "now" chip */
 .btn.ac-delete-link { background:none; color:#A63D24; text-decoration:underline; }
+
+/* What's been cooked or skipped today, folded into one line at the bottom of the day. The meals
+   come back with Show, so a mis-tap can be undone after the toast has gone. */
+.done-line {
+  display:flex; align-items:center; justify-content:space-between; gap:var(--s4);
+  flex-wrap:wrap; margin:var(--s2) 0 var(--s8); padding:var(--s4) var(--s6);
+  background:var(--white); border-radius:var(--r); font-size:12px; color:var(--ink-soft);
+}
+.done-line .done-all { width:100%; font-size:14px; font-weight:700; color:var(--ink); }
+.done-line .done-list { flex:1; min-width:0; }
+.done-line .done-toggle {
+  font-family:inherit; font-size:12px; font-weight:700; color:var(--leaf); background:none;
+  border:1px solid var(--leaf); border-radius:20px; padding:3px 12px; cursor:pointer; flex-shrink:0;
+}

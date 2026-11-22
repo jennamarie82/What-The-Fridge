@@ -1192,11 +1192,19 @@ function mealChips(recipe, day, verdict) {
 // Whether a meal's verdict has anything wrong with it.
 function verdictClear(v) { return !!v && !v.missing.length && !v.short.length && !v.stale.length && !v.check.length; }
 
+// Cooked and skipped meals leave the day so it shows only what is still to decide. They are not
+// gone: the toast offers Undo straight away, and the line at the bottom of the day reopens them
+// for as long as the day is on the plan — so a mis-tap noticed after the toast has faded can still
+// be put back. Per day and not saved: a fresh visit always starts tidy.
+var showDone = {};
+function toggleDone(day) { showDone[day] = !showDone[day]; renderMeals(); }
+
 function renderMeals() {
   var container = document.getElementById('mealCards');
   container.innerHTML = '';
   var spot = (currentDay === 1) ? nextMealSlot() : -1;
   var needs = planNeeds();
+  var done = [], shown = 0;
 
   MEAL_TYPES.forEach(function(type, slot) {
     var idx = planIndex(currentDay, type);
@@ -1205,6 +1213,12 @@ function renderMeals() {
     var r = recipeById(entry.recipe);
     if (!r) return;
     var left = !!entry.leftover;
+    if (entry.status === 'accepted' || entry.status === 'skipped') {
+      done.push(type.charAt(0).toUpperCase() + type.slice(1) + ' ' +
+        (entry.status === 'skipped' ? 'skipped' : left ? 'eaten' : 'cooked'));
+      if (!showDone[currentDay]) return;
+    }
+    shown++;
     var Type = type.charAt(0).toUpperCase() + type.slice(1);
 
     var pref = getPref(r.id);
@@ -1250,6 +1264,17 @@ function renderMeals() {
 
     container.appendChild(card);
   });
+
+  if (done.length) {
+    var line = document.createElement('div');
+    line.className = 'done-line';
+    line.innerHTML =
+      (!shown ? '<div class="done-all">All done for this day.</div>' : '') +
+      '<span class="done-list">✓ ' + esc(done.join(' · ')) + '</span>' +
+      '<button class="done-toggle" onclick="toggleDone(' + currentDay + ')" aria-expanded="' + !!showDone[currentDay] + '">' +
+        (showDone[currentDay] ? 'Hide' : 'Show') + '</button>';
+    container.appendChild(line);
+  }
 }
 
 // The "Where everything goes" table that listed each ingredient's amount per day was removed:
@@ -1381,19 +1406,22 @@ function renderPantry() {
       '<button class="btn ghost small" onclick="openSub(\'shop\')">What to pick up</button></div>';
   }
 
+  // Used-up food is left out of the list rather than shown struck through. It is hidden, not
+  // deleted: undoing a cooked meal puts quantities back by finding each entry by id, so removing
+  // the entry would make Undo silently return nothing.
   zones.innerHTML = ZONES.map(function(z) {
-    var items = pantry.filter(function(e) { return e.zone === z.key; })
+    var items = pantry.filter(function(e) { return e.zone === z.key && inStock(e); })
       .sort(function(a, b) { return ingName(a.ing).localeCompare(ingName(b.ing)); });
-    var count = items.filter(inStock).length;
+    var count = items.length;
     var open = openZones[z.key];
     var lines = items.map(function(e) {
       var f = freshness(e);
-      return '<div class="zone-line' + (inStock(e) ? '' : ' out') + '" onclick="event.stopPropagation();openEditItem(\'' + e.id + '\')">' +
+      return '<div class="zone-line" onclick="event.stopPropagation();openEditItem(\'' + e.id + '\')">' +
         '<div><div class="zl-name">' + esc(ingName(e.ing)) + '</div>' +
         '<div class="zl-sub">' + esc(basisLine(e)) + '</div></div>' +
-        '<div class="zl-right"><div class="zl-qty">' + entryQty(e) + '</div>' + (inStock(e) ? chipHTML(f.cls, f.text) : '') + '</div>' +
+        '<div class="zl-right"><div class="zl-qty">' + entryQty(e) + '</div>' + chipHTML(f.cls, f.text) + '</div>' +
       '</div>';
-    }).join('') || '<div class="zone-line empty"><div class="zl-sub">Nothing in the ' + z.label.toLowerCase() + ' yet.</div></div>';
+    }).join('') || '<div class="zone-line empty"><div class="zl-sub">Nothing in the ' + z.label.toLowerCase() + ' right now.</div></div>';
     return '<div class="zone-row' + (open ? ' open' : '') + '" onclick="toggleZone(\'' + z.key + '\')">' +
         '<span class="zone-name">' + z.label + '</span>' +
         '<span class="zone-count">' + count + ' item' + (count === 1 ? '' : 's') + ' <span class="caret">&rsaquo;</span></span>' +
