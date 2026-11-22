@@ -1252,30 +1252,10 @@ function renderMeals() {
   });
 }
 
-// Where everything goes: each measured ingredient, and how much each day's meals take.
-function renderAlloc() {
-  var body = document.getElementById('allocBody');
-  if (!body) return;
-  var rows = {}, order = [];
-  plan.forEach(function(entry, idx) {
-    if (!isMealEntry(entry) || entry.status === 'skipped') return;
-    var r = recipeById(entry.recipe);
-    var day = Math.floor(idx / 3);
-    visibleLines(r).forEach(function(line) {
-      var amount = amountFor(line);
-      if (amount === null) return;
-      var key = lineIds(line).join('|') + '@' + line.unit;
-      if (!rows[key]) { rows[key] = { name:lineName(line), unit:line.unit, days:[0,0,0] }; order.push(key); }
-      rows[key].days[day] = round2(rows[key].days[day] + amount);
-    });
-  });
-  body.innerHTML = order.map(function(k) {
-    var row = rows[k];
-    return '<tr><td>' + esc(row.name) + '</td>' + row.days.map(function(t) {
-      return t > 0 ? '<td>' + fmtQty(t, row.unit) + '</td>' : '<td class="nil">&mdash;</td>';
-    }).join('') + '</tr>';
-  }).join('');
-}
+// The "Where everything goes" table that listed each ingredient's amount per day was removed:
+// it repeated, as a grid of numbers, what each meal card and the feasibility banner already say,
+// and it was the densest thing on the Plan tab. Cross-meal allocation itself is unchanged — it
+// was never the table that enforced it, it is reserveRecipe() and reservationsExcept().
 
 // ═══════════════ PANTRY RENDERING ═══════════════
 function entryQty(e) { return e.qty === null ? 'amount not recorded' : (e.qty > 0 ? fmtQty(e.qty, e.unit) : 'used up'); }
@@ -2520,15 +2500,6 @@ function openSub(which) {
   // The switches that used to be here did nothing: no reminder was ever sent. A setting that looks
   // finished and changes nothing teaches people not to trust the ones that work, so this screen
   // now says plainly what happens instead.
-  if (which === 'notify') {
-    title = 'Reminders';
-    body = '<p class="sub-intro">What the Fridge doesn\'t send reminders yet.</p>' +
-      '<div class="note-card" style="margin-top:0;"><strong>What it does instead</strong><br>' +
-        'Each time you open it, it asks about any meal from an earlier day you didn\'t mark cooked, so your pantry catches up. ' +
-        'Nothing is taken out of the pantry until you answer.</div>' +
-      '<div class="note-card">Would a reminder help? Say so in <b>Send feedback</b>.</div>';
-  }
-
   if (which === 'waste') {
     title = 'Where food is going';
     var w = wasteStats();
@@ -2600,6 +2571,10 @@ function openSub(which) {
         '<strong>How it works</strong><br>' +
         'Add your groceries to the Pantry (manually or by snapping a receipt). The planner picks from our ' + recipes.length + ' recipes, ' +
         'putting food closest to the end of its window first. Mark a meal cooked and its ingredients come out of the pantry.' +
+        // Moved here from the Reminders screen, which existed only to say there were no
+        // reminders. This is the one part of it that described something the app does.
+        ' If a day passes with a meal you didn\'t mark, the app asks what happened next time you open it, ' +
+        'and nothing comes out of the pantry until you answer.' +
       '</div>' +
       '<div class="note-card" style="margin-top:var(--s4);">' +
         '<strong>Privacy</strong><br>' +
@@ -2852,14 +2827,6 @@ function showToast(msg, action) {
   toast._t = setTimeout(function() { toast.classList.remove('show'); }, (action && action.ms) || (action ? 5000 : 2600));
 }
 
-function toggleAlloc() {
-  var sec = document.getElementById('allocSection');
-  var arrow = document.getElementById('allocArrow');
-  var open = sec.style.display === 'none';
-  sec.style.display = open ? 'block' : 'none';
-  arrow.innerHTML = open ? '&#x25BE;' : '&#x25B8;';
-}
-
 // ═══════════════ UNCONFIRMED MEALS ═══════════════
 // A meal that leaves the horizon still 'pending' is ambiguous, not resolved: it may
 // have been cooked and never logged, or never cooked at all. Those have opposite
@@ -3093,7 +3060,6 @@ function renderAll() {
   renderBanner();
   renderDietStrip();
   renderMeals();
-  renderAlloc();
   renderPantry();
   renderProfile();
   var hh = document.getElementById('hhArrow');
@@ -3113,6 +3079,8 @@ function renderAll() {
   }
   var tt = document.getElementById('testTools');
   if (tt) { tt.style.display = settings.testTools ? '' : 'none'; }
+  var ls = document.getElementById('leaveSampleRow');
+  if (ls) { ls.style.display = settings.sample ? '' : 'none'; }
   var wa = document.getElementById('wasteArrow');
   if (wa) {
     var w30 = wasteLog.filter(function(x) {
@@ -3241,7 +3209,7 @@ function renderProfile() {
     '<div class="profile-sub">Household of ' + settings.household + (since ? ' &middot; planning since ' + since : '') + '</div>';
 
   var cooked = cookLog.length;
-  var days30 = cookedDaysIn(30), days7 = cookedDaysIn(7);
+  var days30 = cookedDaysIn(30);
   var rescued = cookLog.reduce(function(s, c) { return s + (c.rescued || 0); }, 0);
   document.getElementById('profileStats').innerHTML =
     '<div class="profile-stat"><div class="num">' + cooked + '</div><div class="label">Meals<br>cooked</div></div>' +
@@ -3269,10 +3237,6 @@ function renderProfile() {
   var rSteps = ladderWindow(allSteps, rescued);
   var rDates = milestoneDates(allSteps);
   var r = ladderHTML(rescued, rSteps, rescueStepLabel, rDates);
-  // Reachable rungs: 5 of 30 days is a household that cooks now and then, 25 is one that cooks
-  // most nights. Every one of them is attainable by someone who takes a night off.
-  var COOK_STEPS = [5, 10, 15, 20, 25, 30];
-  var st = ladderHTML(days30, ladderWindow(COOK_STEPS, days30), function(s) { return s + 'd'; });
 
   var prevStep = function(steps, next) {
     var p = 0;
@@ -3280,9 +3244,7 @@ function renderProfile() {
     return p;
   };
   var rPrev = prevStep(allSteps, r.next);
-  var sPrev = prevStep(COOK_STEPS, st.next);
   var rPct = r.next === null ? 100 : Math.round((rescued - rPrev) / (r.next - rPrev) * 100);
-  var sPct = st.next === null ? 100 : Math.round((days30 - sPrev) / (st.next - sPrev) * 100);
 
   // A rescue is food used in the last two days of its window (RESCUE_DAYS), so the words say that.
   var rWit = !cooked ? 'Cook something from the plan and this counts every ingredient you use in the last two days of its window.'
@@ -3301,11 +3263,9 @@ function renderProfile() {
       (win30 >= bestWin && win30 > 0 && prev30 ? ' &middot; <span class="win-best">best yet</span>' : '') +
     '</div>';
 
-  var sWit = !days30 ? (cooked ? 'Nothing logged in the last month. The plan is still here when you are.' : 'Mark a meal cooked and this starts counting.')
-    : days7 >= 6 ? days7 + ' of the last 7 days. The takeaway menus are starting to feel ignored.'
-    : days7 ? days7 + ' of the last 7 days, ' + days30 + ' of the last 30. Nights off are allowed.'
-    : days30 + ' days this month. Nothing this week yet — no streak to break, just pick it up.';
-
+  // One milestone, on purpose. A cooking-frequency badge measured how often Ren cooks, which is
+  // not what the app is for; food rescued is the measure that matches the purpose stated on the
+  // very first screen.
   document.getElementById('profileRewards').innerHTML =
     '<div class="section-label">Food rescued</div>' +
     '<div class="reward-card"><div class="reward-head"><div class="reward-icon coin">🥬</div><div>' +
@@ -3313,14 +3273,7 @@ function renderProfile() {
       '<div class="s">' + (r.next === 1 ? 'Cook anything from the plan to start'
         : rescued + ' so far &middot; ' + (r.next - rescued) + ' to go') + '</div></div></div>' +
       '<div class="progress-track"><div class="progress-fill leaf" style="width:' + rPct + '%;"></div></div>' +
-      '<div class="ladder">' + r.rungs + '</div>' + windowLine + '<p class="witty">' + rWit + '</p></div>' +
-    '<div class="section-label">Cooking regularly</div>' +
-    '<div class="reward-card"><div class="reward-head"><div class="reward-icon flame">🔥</div><div>' +
-      '<div class="t">' + (days30 ? 'Cooked ' + days30 + ' of the last 30 days' : 'No meals logged yet') + '</div>' +
-      '<div class="s">' + (st.next === null ? 'Every night this month. Remarkable.'
-        : 'Next badge at ' + st.next + ' days &middot; ' + (st.next - days30) + ' to go') + '</div></div></div>' +
-      '<div class="progress-track"><div class="progress-fill amber" style="width:' + sPct + '%;"></div></div>' +
-      '<div class="ladder">' + st.rungs + '</div><p class="witty">' + sWit + '</p></div>';
+      '<div class="ladder">' + r.rungs + '</div>' + windowLine + '<p class="witty">' + rWit + '</p></div>';
 }
 
 // ═══════════════ ADD & EDIT FOOD ═══════════════
@@ -4852,7 +4805,7 @@ function renderSetup() {
       '<h2>What the Fridge</h2>' +
       // The purpose first, then what the app does in three lines, so a new user knows what they're
       // signing up for before the first question.
-      '<p class="setup-purpose">WTF works to cut food waste by making the most of the food you already have, ' +
+      '<p class="setup-purpose"><span class="eyebrow">Our mission</span>WTF works to cut food waste by making the most of the food you already have, ' +
         'in delicious recipes that use what\'s closest to its date first.</p>' +
       '<ul class="setup-how">' +
         '<li><b>Tell it what\'s in your kitchen.</b> Snap a receipt or your shelves, or type it in.</li>' +
@@ -4899,6 +4852,7 @@ function renderSetup() {
 }
 function finishSetup(mode) {
   settings.since = todayKey();
+  settings.sample = mode === 'sample';    // shows "Leave the sample kitchen" in Settings
   pantry = mode === 'sample' ? samplePantry() : [];
   plan = [];
   unreconciled = []; cookLog = []; wasteLog = []; currentDay = 1; lastNight = null; lastChange = null;
@@ -4907,7 +4861,7 @@ function finishSetup(mode) {
   document.getElementById('setup').classList.remove('open');
   if (mode === 'photos') { switchTab('pantryTab'); openShelves('Pantry'); }
   else if (mode === 'own') { switchTab('pantryTab'); openAddItem(); }
-  else { showToast('Welcome! This is a sample kitchen, not your own food. Start over from Settings when you want to add yours.', { ms:8000, label:'OK', fn:function() {} }); }
+  else { showToast('Welcome! This is a sample kitchen, not your own food. Settings › Leave the sample kitchen when you want to add yours.', { ms:8000, label:'OK', fn:function() {} }); }
 }
 
 // ═══════════════ SAVED STATE ═══════════════
@@ -4984,17 +4938,12 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
-function loadSampleKitchen() {
-  if (pantry.length && !confirm('Replace everything in your kitchen with the sample food?')) { return; }
-  pantry = samplePantry();
-  closeDetail(); closeSub();
-  lastChange = null;                      // the kitchen it described is gone
-  planKitchen(true);
-  renderAll();
-  showToast('Sample kitchen loaded, and the plan rebuilt around it.');
-}
-function startOver() {
-  if (!confirm('Start over? This clears your kitchen, plan and history from this browser.')) { return; }
+// "Load the sample kitchen" and "Start over" were demo controls and are gone from the published app.
+// One part of Start over had a real job, though: it was the only way out of the sample kitchen a
+// new user can pick at setup, and the welcome toast told them so. So the exit survives, shown only
+// while sample food is loaded — someone using their own food never sees it.
+function leaveSample() {
+  if (!confirm('Leave the sample kitchen? This clears the sample food and anything you’ve added, and starts setup again with your own.')) { return; }
   resetKitchen();
 }
 // Clears this browser's kitchen and opens setup. Start over asks first; signing out and deleting
@@ -5003,7 +4952,7 @@ function resetKitchen() {
   try { localStorage.removeItem(STORE_KEY); } catch (e) {}
   // Testing tools stay as they were: someone testing the app starts over often, and shouldn't
   // have to dig the switch out of About each time.
-  settings.name = ''; settings.since = null; settings.household = 2;
+  settings.name = ''; settings.since = null; settings.household = 2; settings.sample = false;
   settings.dietary = { vegetarian:false, dairyFree:false, nutFree:false, porkFree:false };
   settings.noStaples = {};
   settings.meals = { breakfast:true, lunch:true, dinner:true }; settings.leftovers = false;
