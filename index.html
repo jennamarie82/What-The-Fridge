@@ -108,21 +108,6 @@
 
         <div id="mealCards"></div>
 
-        <!-- allocation toggle -->
-        <div style="margin-top:var(--s8);">
-          <div class="section-label" style="cursor:pointer;" onclick="toggleAlloc()">
-            Where everything goes <span id="allocArrow" style="font-size:14px;">&#x25B8;</span>
-          </div>
-          <div id="allocSection" style="display:none;">
-            <div class="alloc-card">
-              <table class="alloc-table">
-                <thead><tr><th>Food</th><th>Day 1</th><th>Day 2</th><th>Day 3</th></tr></thead>
-                <tbody id="allocBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
       </div>
     </div>
 
@@ -180,9 +165,7 @@
           <div class="profile-menu-item" onclick="openSub('meals')"><span>Meals &amp; cooking</span><span class="arrow" id="mealsArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('dietary')"><span>Dietary preferences</span><span class="arrow" id="dietArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('staples')"><span>Staples you keep</span><span class="arrow" id="staplesArrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openSub('notify')"><span>Reminders</span><span class="arrow" id="notifyArrow">not yet &rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('waste')"><span>Where food is going</span><span class="arrow" id="wasteArrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openReceipt('Settings')"><span>Upload receipt</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('about')"><span>About What the Fridge</span><span class="arrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('feedback')"><span>Send feedback</span><span class="arrow">&rsaquo;</span></div>
         </div>
@@ -191,8 +174,8 @@
         <div>
           <!-- Shown only when accounts are set up (account-config.js); see account.js. -->
           <div class="profile-menu-item" id="accountRow" style="display:none;" onclick="openSub('account')"><span>Account</span><span class="arrow" id="accountArrow">Sign in &rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="loadSampleKitchen()"><span>Load the sample kitchen</span><span class="arrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="startOver()"><span>Start over</span><span class="arrow">&rsaquo;</span></div>
+          <!-- Only while the sample kitchen chosen at setup is loaded; see leaveSample() in app.js. -->
+          <div class="profile-menu-item" id="leaveSampleRow" style="display:none;" onclick="leaveSample()"><span>Leave the sample kitchen</span><span class="arrow">use my own food &rsaquo;</span></div>
         </div>
         <!-- Shown only when About > Testing tools is on (app.js renderAll). -->
         <div id="testTools" style="display:none;">
@@ -260,13 +243,7 @@
 <footer>
   What the Fridge &middot; BUS 860 Group 3 &middot; plan around your own food, or look around with a sample kitchen.<br>
   Your plan, pantry and settings are saved in this browser, and in your account if you sign in (Supabase, Canada). A receipt or shelf photo you take is sent to Claude to read it, and never stored.<br>
-  <span id="appVersion"></span><br>
-  <span style="display:inline-block;margin-top:10px;">
-    Demo controls (not part of the app):
-    <button class="demo-btn" onclick="simulateMidnight()">Simulate midnight →</button>
-    <button class="demo-btn" onclick="loadSampleKitchen()">Load sample kitchen</button>
-    <button class="demo-btn" onclick="startOver()">Start over</button>
-  </span>
+  <span id="appVersion"></span>
 </footer>
 
 <!-- ?v= makes every phone fetch the new files after a release; change it with APP_VERSION in app.js. -->
