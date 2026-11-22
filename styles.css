@@ -784,6 +784,13 @@ input:focus-visible, select:focus-visible, a:focus-visible {
   padding:var(--s4) var(--s8); border-radius:20px;
   font-size:13px; font-weight:600; z-index:60;
   opacity:0; transition:all .35s var(--ease);
+  /* Hidden means gone, not just transparent. The hidden position — translateY(100px) below
+     bottom:80px — puts the toast right over the tab bar, and opacity:0 alone left it there
+     catching taps. Tapping any tab after a cook, swap or skip hit the invisible toast instead,
+     and its Undo button sat inside the Settings tab's box, so heading to Settings quietly undid
+     the meal. visibility also takes the Undo button out of keyboard focus order, which matters
+     on the desktop layout; it waits out the fade via the `all` transition above. */
+  visibility:hidden; pointer-events:none;
   /* A long message wraps inside the frame instead of running off both edges. It used to be
      `nowrap` with no max-width, so a swap message ran 644px wide in a 351px phone — 146px lost
      off each side. The pill still hugs short messages; max-width is relative to the screen. */
@@ -798,7 +805,7 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 }
 .toast { display:flex; align-items:center; gap:10px; }
 .toast > span { min-width:0; }   /* a flex item won't shrink below its text without this */
-.toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+.toast.show { transform:translateX(-50%) translateY(0); opacity:1; visibility:visible; pointer-events:auto; }
 .toast-action {
   background:none; border:1px solid rgba(255,255,255,.6); color:#fff;
   font-family:inherit; font-size:12px; font-weight:700; padding:3px 10px;
