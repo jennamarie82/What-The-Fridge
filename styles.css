@@ -1251,6 +1251,10 @@ footer {
 .w-row .w-name { font-weight:600; }
 .w-row .w-n { color:var(--ink-soft); font-weight:700; font-size:12px; }
 .w-row.quiet .w-name { font-weight:500; color:var(--ink-soft); }
+/* The kinds a family row covers ("Cherry tomatoes, Tomatoes"), under the family name. */
+.w-row .w-kinds { display:block; font-size:11px; font-weight:500; color:var(--ink-soft); margin-top:2px; }
+/* Pantry search: a food found by its family's name says which family matched. */
+.psi-fam { font-size:11px; font-weight:500; color:var(--ink-soft); }
 
 /* Whose miss: the filled share is the planner's, so the bar is not a thing to feel bad about. */
 .w-split { background:var(--white); border-radius:var(--r); padding:var(--s8); }

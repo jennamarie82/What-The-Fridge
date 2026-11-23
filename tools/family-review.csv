@@ -1,0 +1,96 @@
+food,family,route,target,contexts,diet,note
+# PROPOSED ROUTES - NOT WIRED INTO THE APP. Nothing in this file changes what the planner does.
+#
+# Each row is a food that belongs to a family in families.csv but that the planner cannot use
+# today: no approved recipe asks for it, it has no counts_as, and no approved stand-in offers it.
+# Ren can keep it in the Pantry, but it is never planned around. Each row proposes how it could be.
+#
+# route = counts_as  the same food in another form; usable wherever the target is. Approve by
+#                    copying the target into the food's counts_as column in ingredients.csv.
+#         stand-in   a different food that works only in the listed kinds of dish. Approve by
+#                    adding a row to substitutions.csv (for = target, use = food).
+#         none       no honest route; the food stays tracked but unplanned.
+# target, contexts, diet, note = as in substitutions.csv. Contexts are only for stand-ins.
+#
+# NOTE FOR THE TEAM: substitutions.csv rule 1 requires the `use` food to be recipe-matchable, and
+# most foods below are pantry_only. A stand-in row here can only be approved if rule 1 is relaxed
+# for `use` (the app only needs the food on hand, not in a recipe). That is the team's call.
+#
+# Status of every row: proposed by Claude on 2026-11-22, not reviewed.
+sun-dried-tomatoes,tomatoes,stand-in,tomatoes,pasta-sauce,,"Much stronger and drier: about 1/4 cup chopped for each fresh tomato, plus a splash of water."
+skyr,yogurt,counts_as,greek-yogurt,,,"Strained the same way as Greek yogurt and just as thick."
+plant-yogurt,yogurt,stand-in,yogurt,smoothie|yogurt-bowl|oatmeal,+DF,"Check the label for sugar; plain works best."
+drinkable-yogurt,yogurt,stand-in,yogurt,smoothie,,"Already runny, so cut any other liquid in the smoothie."
+kefir,yogurt,stand-in,buttermilk,baking-sweet|marinade,,"Same tang and thickness; use cup for cup."
+chives,green-onions,stand-in,green-onion,eggs|salad-raw|taco-wrap|rice-bowl|soup-stew,,"Milder; add at the end as a garnish rather than cooking them."
+chicken-wings,chicken,none,,,,"No approved recipe cooks wings, and no other cut cooks the same way."
+canned-chicken,chicken,counts_as,cooked-chicken,,,"Already cooked; drain well."
+deli-chicken,deli-meat,stand-in,deli-turkey,taco-wrap|salad-raw,,
+bologna,deli-meat,none,,,,
+bratwurst,sausage,counts_as,sausage,,,"A fresh sausage, cooked the same way."
+hot-dogs,sausage,none,,,,"Pre-cooked and a different texture from the fresh sausage recipes use."
+ground-bison,beef,stand-in,ground-beef,taco-wrap|pasta-sauce|soup-stew|rice-bowl|roast-bake-savoury|stir-fry,,"Leaner, so it cooks faster and can dry out; take it off the heat sooner."
+bison,beef,stand-in,beef-steak,roast-bake-savoury|stir-fry|taco-wrap,,"Leaner than beef; cook it a little less."
+lamb,lamb,stand-in,beef-roast,braise|curry|soup-stew,,"Slow-cooked cuts only; richer than beef."
+mahi-mahi,white-fish,counts_as,white-fish,,,"A firm white fish, like the others already counted as white fish."
+trout,salmon,stand-in,salmon,roast-bake-savoury|rice-bowl,,"Thinner fillets cook in about half the time."
+canned-salmon,canned-fish,stand-in,canned-tuna,salad-raw|taco-wrap|roast-bake-savoury|pasta-sauce,,"Pick out any larger bones."
+sardines,canned-fish,none,,,,
+imitation-crab,crab,stand-in,crab,salad-raw|taco-wrap|rice-bowl,,"Made from fish and often wheat and egg; not for crab cakes."
+cheese-slices,sliced-cheese,counts_as,american-cheese,,,"For processed slices. Sliced cheddar or Swiss should be added as that cheese instead."
+gouda,sliced-cheese,stand-in,cheddar,taco-wrap|roast-bake-savoury|eggs|pasta-sauce,,"Melts well; slightly sweeter."
+havarti,sliced-cheese,stand-in,monterey-jack,taco-wrap|roast-bake-savoury|eggs,,"Melts the same way."
+burrata,mozzarella,stand-in,mozzarella,salad-raw,,"Tear it over at the end; it doesn't melt like mozzarella."
+string-cheese,mozzarella,stand-in,mozzarella,roast-bake-savoury|pasta-sauce|taco-wrap|eggs,,"Low-moisture, so fine melted but not for a fresh salad."
+halloumi,grilling-cheese,stand-in,paneer,curry|roast-bake-savoury|stir-fry|taco-wrap,,"Saltier, so go easy on added salt."
+mascarpone,soft-cheese,stand-in,cream-cheese,baking-sweet|sweet-toast|pasta-sauce,,"Softer and richer; no tang."
+half-and-half,cream,stand-in,heavy-cream,soup-stew|pasta-sauce|curry|eggs,,"Won't whip; simmer gently or it can split."
+light-cream,cream,stand-in,heavy-cream,soup-stew|pasta-sauce|curry|eggs,,"Won't whip; simmer gently or it can split."
+whipped-cream,cream,none,,,,"A topping, already sweetened."
+other-plant-milk,milk,counts_as,milk,,,"Matches almond, oat and soy milk, which already count as milk."
+evaporated-milk,milk,none,,,,
+egg-whites,eggs,stand-in,eggs,eggs,,"About 3 tbsp (45 ml) for each egg."
+swiss-chard,cooking-greens,stand-in,spinach,soup-stew|pasta-sauce|eggs|curry|stir-fry,,"Strip the stems, or cook them a few minutes before the leaves."
+collard-greens,cooking-greens,stand-in,kale,soup-stew|braise|stir-fry,,"Slice thin; tougher than kale."
+mustard-greens,cooking-greens,stand-in,kale,soup-stew|stir-fry|curry,,"Peppery; use a little less."
+rapini,cooking-greens,stand-in,kale,pasta-sauce|stir-fry,,"Bitter; blanch it for a minute first."
+watercress,salad-greens,stand-in,arugula,salad-raw|taco-wrap,,"Just as peppery."
+endive,salad-greens,none,,,,
+microgreens,salad-greens,none,,,,"A garnish, not enough to stand in for a salad green."
+roasted-red-peppers,bell-peppers,stand-in,bell-pepper,pasta-sauce|taco-wrap|salad-raw|eggs,,"Already soft; add near the end."
+pickled-jalapenos,chilies,stand-in,chili-peppers,taco-wrap|rice-bowl|eggs,,"Tangier; skip any vinegar the recipe adds."
+banana-peppers,pickled-peppers,counts_as,pepperoncini,,,"Near enough the same pickled pepper, a little milder."
+frozen-cranberries,berries,none,,,,"Too tart to stand in for other berries."
+plums,stone-fruit,stand-in,peaches,yogurt-bowl|oatmeal|baking-sweet,,
+apricots,stone-fruit,stand-in,peaches,yogurt-bowl|oatmeal|baking-sweet,,"Smaller; about two apricots for each peach."
+frozen-peaches,stone-fruit,counts_as,peaches,,,"Like the other frozen fruit already counted."
+frozen-cherries,stone-fruit,counts_as,cherries,,,"Like the other frozen fruit already counted."
+papaya,tropical-fruit,stand-in,mango,smoothie|yogurt-bowl|salad-raw,,
+guava,tropical-fruit,none,,,,
+passion-fruit,tropical-fruit,none,,,,
+lychee,tropical-fruit,none,,,,
+frozen-tropical-fruit,tropical-fruit,stand-in,mango,smoothie|yogurt-bowl,,
+lemon-juice,lemons,stand-in,lemon,dressing|marinade|soup-stew|pasta-sauce|curry|stir-fry,,"About 2 tbsp for each lemon. There's no zest, so skip any step that zests."
+lime-juice,limes,stand-in,lime,taco-wrap|marinade|dressing|curry|stir-fry|rice-bowl,,"About 2 tbsp for each lime. There's no zest, so skip any step that zests."
+grapefruit,oranges,none,,,,
+orange-juice,oranges,stand-in,orange,dressing|marinade|smoothie,,"Juice only, so not where the recipe uses segments or zest."
+spaghetti-squash,winter-squash,none,,,,"Cooks and eats nothing like the other squash."
+frozen-zucchini-noodles,summer-squash,none,,,,
+frozen-hash-browns,potatoes,stand-in,potatoes,eggs|roast-bake-savoury,,"Already shredded; cook from frozen."
+instant-mashed,potatoes,none,,,,
+riced-broccoli,broccoli,none,,,,
+cauliflower-rice,cauliflower,none,,,,
+frozen-brussels-sprouts,brussels-sprouts,counts_as,brussels-sprouts,,,"Like the other frozen vegetables already counted."
+frozen-artichoke-hearts,artichokes,counts_as,artichoke-hearts,,,"Thaw and pat dry."
+fresh-artichokes,artichokes,none,,,,"Needs trimming and cooking that no recipe step covers."
+corn-cob,corn,counts_as,corn,,,"Cut the kernels off: one cob gives about 3/4 cup."
+snap-peas,peas,none,,,,
+black-rice,rice,stand-in,brown-rice,rice-bowl,,"Cooks in about the same time and turns the dish purple."
+macadamia,nuts,stand-in,almonds,yogurt-bowl|oatmeal|salad-raw,,
+hazelnuts,nuts,stand-in,almonds,yogurt-bowl|oatmeal|salad-raw|baking-sweet,,
+brazil-nuts,nuts,stand-in,almonds,yogurt-bowl|oatmeal|salad-raw,,"Chop them; they're large."
+mixed-nuts,nuts,stand-in,almonds,yogurt-bowl|oatmeal|salad-raw,,"Unsalted only, or skip the salt in the recipe."
+pine-nuts,nuts,none,,,,
+almond-butter,nut-butters,stand-in,peanut-butter,sweet-toast|smoothie|oatmeal|yogurt-bowl,-NF,"Marked as removing nut-free, in case a recipe's tag treats peanuts as a legume."
+seed-butter,nut-butters,stand-in,peanut-butter,sweet-toast|smoothie|oatmeal|yogurt-bowl,,"Sunflower seed butter. Leaves the recipe's nut-free tag as the database set it."
+croissants,bread,none,,,,
