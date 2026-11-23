@@ -2739,71 +2739,11 @@ function openSub(which) {
   // The switches that used to be here did nothing: no reminder was ever sent. A setting that looks
   // finished and changes nothing teaches people not to trust the ones that work, so this screen
   // now says plainly what happens instead.
-  if (which === 'waste') {
-    title = 'Where food is going';
-    var w = wasteStats();
-    if (!w.total) {
-      body = '<p class="sub-intro">Nothing logged as thrown out yet.</p>' +
-        '<div class="note-card">When something does go, mark it <b>Threw it out</b> in the Pantry — or use ' +
-        '<b>Log several at once</b> under Needs attention. This page then shows which foods keep getting away ' +
-        'and why, which is the part worth knowing before the next shop.</div>';
-    } else {
-      var dir = w.prev30 === 0 ? '' : w.last30 < w.prev30 ? ' <span class="w-better">down from ' + w.prev30 + '</span>'
-              : w.last30 > w.prev30 ? ' <span class="w-worse">up from ' + w.prev30 + '</span>'
-              : ' &middot; same as the 30 before';
-      body =
-        '<p class="sub-intro">Everything here is what you told the app went bad. It is a record to act on, ' +
-        'not a score — nothing on this page counts against you.</p>' +
-
-        '<div class="w-head"><div class="w-big">' + w.last30 + '</div>' +
-          '<div class="w-cap">thrown out in the last 30 days' + dir + '</div>' +
-          '<div class="w-cap">against <b>' + w.rescued30 + '</b> rescued just in time</div></div>';
-
-      // Repeat offenders first: the one thing on this page that changes what Ren buys next week.
-      var repeats = w.ings.filter(function(x) { return x.n > 1; });
-      body += '<div class="section-label">Keeps getting away</div>';
-      body += repeats.length
-        ? '<div class="w-list">' + repeats.slice(0, 6).map(function(x) {
-            return '<div class="w-row"><span class="w-name">' + esc(ingName(x.key)) + '</span>' +
-              '<span class="w-n">' + x.n + ' times</span></div>';
-          }).join('') + '</div>'
-        : '<div class="note-card">Nothing has gone twice yet. No pattern to fix — just bad luck so far.</div>';
-
-      if (w.reasons.length) {
-        body += '<div class="section-label">Why</div><div class="w-list">' +
-          w.reasons.slice(0, 5).map(function(r) {
-            return '<div class="w-row"><span class="w-name">' + esc(wasteReasonLabel(r.key)) + '</span>' +
-              '<span class="w-n">' + r.n + '</span></div>';
-          }).join('') +
-          (w.unsaid ? '<div class="w-row quiet"><span class="w-name">Not said</span><span class="w-n">' + w.unsaid + '</span></div>' : '') +
-          '</div>';
-      }
-
-      // The honest half. If most of what was lost was never in a plan, the planner missed it.
-      if (w.planned + w.unplanned) {
-        var share = Math.round(w.unplanned / (w.planned + w.unplanned) * 100);
-        body += '<div class="section-label">Whose miss</div>' +
-          '<div class="w-split"><div class="w-bar"><div class="w-bar-fill" style="width:' + share + '%;"></div></div>' +
-            '<div class="w-cap"><b>' + w.unplanned + '</b> of ' + (w.planned + w.unplanned) +
-            ' were never in a plan — the planner never found a meal for them. ' +
-            '<b>' + w.planned + '</b> were on the plan and didn’t get cooked.</div></div>';
-      }
-
-      if (w.dated) {
-        body += '<div class="section-label">How late</div><div class="w-list">' +
-          '<div class="w-row"><span class="w-name">Still inside its window</span><span class="w-n">' + w.late.same + '</span></div>' +
-          '<div class="w-row"><span class="w-name">A day or three past</span><span class="w-n">' + w.late.few + '</span></div>' +
-          '<div class="w-row"><span class="w-name">More than three days past</span><span class="w-n">' + w.late.week + '</span></div>' +
-          '</div><p class="field-hint">Things going by a day are a planning problem. Things going by a week are a ' +
-          'forgetting problem, and the two need different fixes.</p>';
-      }
-    }
-  }
-
   if (which === 'about') {
     title = 'About What the Fridge';
     body =
       '<div style="text-align:center;margin:var(--s8) 0;"><img src="logo-setup-t.webp" alt="What the Fridge" style="height:120px;width:auto;"></div>' +
+      MISSION_HTML +
       '<p class="sub-intro" style="font-size:15px;line-height:1.6;">What the Fridge plans three days of breakfast, lunch and dinner around the food already in your kitchen, ' +
       'so nothing expires forgotten and you always know what\'s for dinner.</p>' +
       '<div class="note-card" style="margin-top:var(--s6);">' +
@@ -3320,31 +3260,12 @@ function renderAll() {
   if (tt) { tt.style.display = settings.testTools ? '' : 'none'; }
   var ls = document.getElementById('leaveSampleRow');
   if (ls) { ls.style.display = settings.sample ? '' : 'none'; }
-  var wa = document.getElementById('wasteArrow');
-  if (wa) {
-    var w30 = wasteLog.filter(function(x) {
-      return x.date > todayKey(addDays(new Date(), -30));
-    }).length;
-    wa.innerHTML = (w30 ? w30 + ' this month ' : '') + '&rsaquo;';
-  }
   saveState();
 }
 
 // ═══════════════ PROFILE ═══════════════
 // Counted only from the user's own cook log, so nothing here is an estimate. There is no
 // money figure: the app has no prices to base one on.
-// Consecutive-day streaks were replaced because they were unreachable, not merely hard. Measured
-// over eight weeks: a household cooking six days out of seven cooks 48 meals and never gets a
-// streak past 6, so the rungs at 7, 14, 30, 60 and 180 could not be reached by anyone who ever
-// orders a pizza. A count over a window rewards the same habit and forgives a night off.
-function cookedDaysIn(daysBack, offset) {
-  var from = todayKey(addDays(new Date(), -(daysBack + (offset || 0))));
-  var to   = todayKey(addDays(new Date(), -(offset || 0)));
-  var days = {};
-  cookLog.forEach(function(c) { if (c.date > from && c.date <= to) days[c.date] = true; });
-  return Object.keys(days).length;
-}
-
 // Ingredients rescued inside a window, so the headline number stops being only cumulative. A
 // running total of 340 and one of 360 feel identical; "34 in the last 30 days" still says
 // something, and says it honestly on a quiet month too.
@@ -3447,27 +3368,33 @@ function renderProfile() {
     '<div class="profile-name">' + esc(settings.name || 'Your kitchen') + '</div>' +
     '<div class="profile-sub">Household of ' + settings.household + (since ? ' &middot; planning since ' + since : '') + '</div>';
 
+  // The three stat tiles that sat here (meals cooked, days cooked this month, rescued) were
+  // removed: two measured how often Ren cooks, which is not what the app is for, and the third
+  // repeated the milestone card below it.
   var cooked = cookLog.length;
-  var days30 = cookedDaysIn(30);
   var rescued = cookLog.reduce(function(s, c) { return s + (c.rescued || 0); }, 0);
-  document.getElementById('profileStats').innerHTML =
-    '<div class="profile-stat"><div class="num">' + cooked + '</div><div class="label">Meals<br>cooked</div></div>' +
-    '<div class="profile-stat"><div class="num">' + days30 + '</div><div class="label">Days cooked<br>this month</div></div>' +
-    '<div class="profile-stat"><div class="num">' + rescued + '</div><div class="label">Rescued<br>just in time</div></div>';
 
-  // The ledger line. Deliberately a ratio and not a fourth stat tile or a milestone ladder: a
-  // count that only climbs is dispiriting, and the way to "win" a low-waste badge is to stop
-  // logging. Logging a loss costs nothing here — it never touches the streak, and never reduces
+  // The ledger line, now at the foot of the Food rescued card. Deliberately a ratio and not a
+  // milestone ladder of its own: a count that only climbs is dispiriting, and the way to "win" a
+  // low-waste badge is to stop logging. Logging a loss costs nothing here — it never reduces
   // `rescued`, because those ingredients really were used in time.
   var lost = wasteLog.length;
-  var ledger = document.getElementById('profileLedger');
-  if (ledger) {
-    ledger.innerHTML = !cooked && !lost ? '' :
+  var lost30 = wasteLog.filter(function(x) { return x.date > todayKey(addDays(new Date(), -30)); }).length;
+  var ledger = !cooked && !lost ? '' :
+    '<div class="profile-ledger">' +
       '<span class="led-good">' + rescued + ' rescued</span>' +
       '<span class="led-dot">·</span>' +
       '<span class="led-lost">' + lost + ' got away</span>' +
-      (lost ? '<div class="led-hint">' + esc(wasteHint()) + '</div>' : '');
-  }
+      (lost ? '<div class="led-hint">' + esc(wasteHint()) + '</div>' : '') +
+    '</div>';
+  // The breakdown that used to be its own Settings screen opens in place. Its open state lives in
+  // wasteOpen so it stays open when the screen re-renders after an action.
+  var wasteMore =
+    '<button class="waste-toggle" aria-expanded="' + !!wasteOpen + '" aria-controls="wasteMore" onclick="toggleWaste()">' +
+      '<span>' + (wasteOpen ? 'Hide where food is going' : 'See where food is going') +
+        (lost30 && !wasteOpen ? ' <span class="wt-n">' + lost30 + ' this month</span>' : '') + '</span>' +
+      '<span class="wt-arrow" aria-hidden="true">' + (wasteOpen ? '&#9652;' : '&#9662;') + '</span></button>' +
+    (wasteOpen ? '<div class="waste-more" id="wasteMore">' + wasteInsightsHTML() + '</div>' : '');
 
   // One list of thresholds, derived once. It used to be written out three times — the ladder
   // call and two parallel arrays for the progress bar — so any change had to be made in all
@@ -3512,8 +3439,17 @@ function renderProfile() {
       '<div class="s">' + (r.next === 1 ? 'Cook anything from the plan to start'
         : rescued + ' so far &middot; ' + (r.next - rescued) + ' to go') + '</div></div></div>' +
       '<div class="progress-track"><div class="progress-fill leaf" style="width:' + rPct + '%;"></div></div>' +
-      '<div class="ladder">' + r.rungs + '</div>' + windowLine + '<p class="witty">' + rWit + '</p></div>';
+      '<div class="ladder">' + r.rungs + '</div>' + windowLine + '<p class="witty">' + rWit + '</p>' +
+      ledger + wasteMore + '</div>';
 }
+
+// The mission, said once. The welcome screen and About both show it, and two hand-copied
+// versions would drift the first time someone reworded one.
+var MISSION_HTML = '<p class="setup-purpose"><span class="eyebrow">Our mission</span>WTF works to cut food waste by ' +
+  'making the most of the food you already have, in delicious recipes that use what\'s closest to its date first.</p>';
+
+var wasteOpen = false;
+function toggleWaste() { wasteOpen = !wasteOpen; renderProfile(); }
 
 // ═══════════════ ADD & EDIT FOOD ═══════════════
 // How often each ingredient appears in the approved recipes, and the unit they most often use,
@@ -3781,6 +3717,71 @@ function logWaste(e) {
   wasteLog.push({ date:todayKey(), ing:e.ing, qty:e.qty, unit:e.unit,
                   reason:null, daysPast:past, wasPlanned:wasPlanned });
   pantry.splice(pantry.indexOf(e), 1);
+}
+
+// What used to be its own "Where food is going" screen, now opened in place inside the Food
+// rescued card. The rescues and the losses are one story, so they sit together; the detail
+// stays one tap away rather than crowding the milestone.
+function wasteInsightsHTML() {
+  var h = '';
+  var w = wasteStats();
+  if (!w.total) {
+    h = '<p class="sub-intro">Nothing logged as thrown out yet.</p>' +
+      '<div class="note-card">When something does go, mark it <b>Threw it out</b> in the Pantry — or use ' +
+      '<b>Log several at once</b> under Needs attention. This then shows which foods keep getting away ' +
+      'and why, which is the part worth knowing before the next shop.</div>';
+  } else {
+    var dir = w.prev30 === 0 ? '' : w.last30 < w.prev30 ? ' <span class="w-better">down from ' + w.prev30 + '</span>'
+            : w.last30 > w.prev30 ? ' <span class="w-worse">up from ' + w.prev30 + '</span>'
+            : ' &middot; same as the 30 before';
+    h =
+      '<p class="sub-intro">Everything here is what you told the app went bad. It is a record to act on, ' +
+      'not a score — nothing here counts against you.</p>' +
+
+      '<div class="w-head"><div class="w-big">' + w.last30 + '</div>' +
+        '<div class="w-cap">thrown out in the last 30 days' + dir + '</div>' +
+        '<div class="w-cap">against <b>' + w.rescued30 + '</b> rescued just in time</div></div>';
+
+    // Repeat offenders first: the one thing on this page that changes what Ren buys next week.
+    var repeats = w.ings.filter(function(x) { return x.n > 1; });
+    h += '<div class="section-label">Keeps getting away</div>';
+    h += repeats.length
+      ? '<div class="w-list">' + repeats.slice(0, 6).map(function(x) {
+          return '<div class="w-row"><span class="w-name">' + esc(ingName(x.key)) + '</span>' +
+            '<span class="w-n">' + x.n + ' times</span></div>';
+        }).join('') + '</div>'
+      : '<div class="note-card">Nothing has gone twice yet. No pattern to fix — just bad luck so far.</div>';
+
+    if (w.reasons.length) {
+      h += '<div class="section-label">Why</div><div class="w-list">' +
+        w.reasons.slice(0, 5).map(function(r) {
+          return '<div class="w-row"><span class="w-name">' + esc(wasteReasonLabel(r.key)) + '</span>' +
+            '<span class="w-n">' + r.n + '</span></div>';
+        }).join('') +
+        (w.unsaid ? '<div class="w-row quiet"><span class="w-name">Not said</span><span class="w-n">' + w.unsaid + '</span></div>' : '') +
+        '</div>';
+    }
+
+    // The honest half. If most of what was lost was never in a plan, the planner missed it.
+    if (w.planned + w.unplanned) {
+      var share = Math.round(w.unplanned / (w.planned + w.unplanned) * 100);
+      h += '<div class="section-label">Whose miss</div>' +
+        '<div class="w-split"><div class="w-bar"><div class="w-bar-fill" style="width:' + share + '%;"></div></div>' +
+          '<div class="w-cap"><b>' + w.unplanned + '</b> of ' + (w.planned + w.unplanned) +
+          ' were never in a plan — the planner never found a meal for them. ' +
+          '<b>' + w.planned + '</b> were on the plan and didn’t get cooked.</div></div>';
+    }
+
+    if (w.dated) {
+      h += '<div class="section-label">How late</div><div class="w-list">' +
+        '<div class="w-row"><span class="w-name">Still inside its window</span><span class="w-n">' + w.late.same + '</span></div>' +
+        '<div class="w-row"><span class="w-name">A day or three past</span><span class="w-n">' + w.late.few + '</span></div>' +
+        '<div class="w-row"><span class="w-name">More than three days past</span><span class="w-n">' + w.late.week + '</span></div>' +
+        '</div><p class="field-hint">Things going by a day are a planning problem. Things going by a week are a ' +
+        'forgetting problem, and the two need different fixes.</p>';
+    }
+  }
+  return h;
 }
 
 // The reason is the only part of a waste entry that can change anything later, so it is asked
@@ -5044,8 +5045,7 @@ function renderSetup() {
       '<h2>What the Fridge</h2>' +
       // The purpose first, then what the app does in three lines, so a new user knows what they're
       // signing up for before the first question.
-      '<p class="setup-purpose"><span class="eyebrow">Our mission</span>WTF works to cut food waste by making the most of the food you already have, ' +
-        'in delicious recipes that use what\'s closest to its date first.</p>' +
+      MISSION_HTML +
       '<ul class="setup-how">' +
         '<li><b>Tell it what\'s in your kitchen.</b> Snap a receipt or your shelves, or type it in.</li>' +
         '<li><b>Get three days of meals</b> (breakfast, lunch and dinner) planned around that food.</li>' +

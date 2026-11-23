@@ -465,18 +465,6 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 .profile-name { text-align:center; font-size:18px; font-weight:700; }
 .profile-sub { text-align:center; font-size:13px; color:var(--ink-soft); margin-bottom:var(--s12); }
 
-.profile-stat-row {
-  display:flex; gap:var(--s4); margin-bottom:var(--s8);
-}
-.profile-stat {
-  flex:1; text-align:center;
-  background:var(--white); border-radius:var(--r);
-  padding:var(--s8) var(--s4);
-  box-shadow:0 1px 3px var(--shadow);
-}
-.profile-stat .num { font-size:24px; font-weight:800; color:var(--leaf); }
-.profile-stat .label { font-size:11px; color:var(--ink-soft); margin-top:2px; }
-
 .profile-menu-item {
   display:flex; justify-content:space-between; align-items:center;
   padding:var(--s8);
@@ -824,6 +812,23 @@ input:focus-visible, select:focus-visible, a:focus-visible {
   font-family:inherit; font-size:13px; font-weight:600; color:var(--leaf);
   background:none; border:1px dashed var(--leaf); border-radius:var(--r); cursor:pointer;
 }
+
+/* Where food is going, opened in place at the foot of the Food rescued card. The card is white,
+   so the white lists inside it take the cream background to stay visible as rows. */
+.reward-card .profile-ledger { border-top:1px solid var(--border); padding-top:var(--s6); margin-top:var(--s6); }
+.waste-toggle {
+  display:flex; justify-content:space-between; align-items:center; width:100%; min-height:44px;
+  margin-top:var(--s6); padding:var(--s4) var(--s6); border:none; border-radius:var(--r);
+  background:var(--cream-deep); color:var(--ink); font:inherit; font-size:13px; font-weight:700;
+  cursor:pointer; text-align:left;
+}
+.waste-toggle .wt-n { font-weight:500; color:var(--ink-soft); margin-left:var(--s2); }
+.waste-toggle .wt-arrow { color:var(--ink-soft); font-size:12px; }
+.waste-more { margin-top:var(--s6); }
+.waste-more .sub-intro { font-size:12px; margin-bottom:var(--s4); }
+.waste-more .w-list, .waste-more .w-split { background:var(--cream); }
+.waste-more .w-row { padding:10px var(--s6); }
+.waste-more .note-card:first-of-type { margin-top:0; }
 
 /* ═══════════════ FOOTER ═══════════════ */
 footer {
@@ -1176,7 +1181,6 @@ footer {
 
 /* A ratio, not a scoreboard — the loss sits beside the rescue, never instead of it. */
 .profile-ledger { text-align:center; font-size:13px; margin-top:var(--s4); }
-.profile-ledger:empty { display:none; }
 .profile-ledger .led-good { color:var(--leaf); font-weight:700; }
 .profile-ledger .led-dot  { color:var(--ink-soft); margin:0 6px; }
 .profile-ledger .led-lost { color:var(--ink-soft); font-weight:700; }
