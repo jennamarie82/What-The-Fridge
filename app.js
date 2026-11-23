@@ -394,24 +394,69 @@ function isMealEntry(e) { return !!e && !e.off && !e.leftover; }
 function usableDinner(d) { return isMealEntry(d) && d.status !== 'skipped' && !d.dietBlocked; }
 
 function round2(n) { return Math.round(n * 100) / 100; }
+// Stored quantities keep their precision. Rounding them to two places on every deduction made
+// Undo drift (0.625 came back as 0.63); a millionth only clears floating-point dust.
+function roundStore(n) { return Math.round(n * 1e6) / 1e6; }
 
-function fmtQty(qty, unit) {
-  if (qty === null || qty === undefined) { return 'amount not recorded'; }
-  var s = String(round2(qty));
-  if (!unit || unit === 'ea') { return s; }
-  return s + ' ' + unit;
+// A pantry amount as a person would say it: "1⅓ cup", not "1.33 cup". Same display as a recipe.
+function fmtQty(qty, unit) { return kitchenQty(qty, unit); }
+
+// ─── practical amounts ───
+// Scaling a recipe to the household gives amounts nobody can measure: half an egg, 0.63 cup, a
+// third of a tortilla. practicalQty() rounds a scaled amount to what a cook would actually use,
+// and amountFor() returns it, so the amount shown, the amount checked against the pantry and the
+// amount deducted when the meal is cooked are the same number.
+//   Counted foods: whole, at least one; the ones commonly used by the half (an onion, an
+//     avocado, a lemon) go to the nearest half, at least a half.
+//   Slices and stalks: whole. Cans, blocks, heads, bunches, jars: nearest half.
+//   Spoons and cups: kitchen fractions, dropping to the next measure down when small.
+//   Pounds: nearest quarter. Ounces, grams, millilitres: whole.
+var HALVES = { onion:1, 'red-onion':1, 'bell-pepper':1, carrot:1, avocado:1, tomatoes:1, cucumber:1,
+               zucchini:1, bananas:1, potatoes:1, 'sweet-potato':1, apples:1, pear:1, lemon:1, lime:1,
+               orange:1, lettuce:1, cabbage:1, eggplant:1, mango:1, 'chili-peppers':1, cauliflower:1,
+               broccoli:1, 'butternut-squash':1 };
+var HALF_UNITS = { can:1, block:1, head:1, bunch:1, jar:1 };
+// Steps a kitchen measure comes in, as fractions of one.
+var MEASURE_STEPS = { cup:[0.25, 1 / 3, 0.5, 2 / 3, 0.75, 1], tbsp:[0.5, 1], tsp:[0.25, 0.5, 0.75, 1] };
+function snapTo(qty, steps) {
+  var whole = Math.floor(qty), part = qty - whole, best = 0;
+  [0].concat(steps).forEach(function(s) { if (Math.abs(part - s) < Math.abs(part - best)) best = s; });
+  return whole + best;
+}
+function practicalQty(qty, unit, ids) {
+  if (qty === null || qty === undefined) return null;
+  if (qty <= 0) return 0;
+  unit = unit || 'ea';
+  if (unit === 'ea') {
+    var halves = (ids || []).length > 0 && (ids || []).every(function(id) { return HALVES[id]; });
+    return halves ? Math.max(0.5, Math.round(qty * 2) / 2) : Math.max(1, Math.round(qty));
+  }
+  if (unit === 'slice' || unit === 'stalk') return Math.max(1, Math.round(qty));
+  if (HALF_UNITS[unit]) return Math.max(0.5, Math.round(qty * 2) / 2);
+  if (unit === 'lb') return Math.max(0.25, Math.round(qty * 4) / 4);
+  if (unit === 'oz' || unit === 'g' || unit === 'ml') return Math.max(1, Math.round(qty));
+  if (MEASURE_STEPS[unit]) {
+    // Round in the measure it will be shown in (0.08 cup becomes 1½ tbsp), then convert back.
+    var shown = unit, q = qty;
+    if (shown === 'cup' && q < 0.25) { q = q * 16; shown = 'tbsp'; }
+    if (shown === 'tbsp' && q < 1) { q = q * 3; shown = 'tsp'; }
+    q = Math.max(MEASURE_STEPS[shown][0], snapTo(q, MEASURE_STEPS[shown]));
+    return roundStore(convert(q, shown, unit));
+  }
+  return qty;   // kg, l and anything else: as scaled
 }
 // A recipe amount as a cook would measure it. Scaling a recipe to a household gave "0.67 egg" and
 // "0.08 cup breadcrumbs" (T8). Spoon, cup and count amounts now read as kitchen fractions, and an
-// amount too small for its measure moves to the next one down (0.08 cup is 1¼ tbsp). Weights and
-// volumes round to whole numbers. Display only: the plan still checks and deducts the exact amount.
+// amount too small for its measure moves to the next one down (0.08 cup is 1¼ tbsp). Grams and
+// millilitres round to whole numbers. Recipe amounts reach here already rounded by practicalQty(),
+// so what this shows is what the plan checks and deducts; pantry amounts use it too.
 var FRACTIONS = [[0, ''], [0.25, '¼'], [1 / 3, '⅓'], [0.5, '½'], [2 / 3, '⅔'], [0.75, '¾'], [1, '']];
 function kitchenQty(qty, unit) {
   if (qty === null || qty === undefined) { return 'amount not recorded'; }
   if (qty <= 0) { return (!unit || unit === 'ea') ? '0' : '0 ' + unit; }
   if (unit === 'cup' && qty < 0.25) { qty = qty * 16; unit = 'tbsp'; }
   if (unit === 'tbsp' && qty < 1) { qty = qty * 3; unit = 'tsp'; }
-  if (UNIT_BASE[unit] && ['tsp', 'tbsp', 'cup'].indexOf(unit) === -1) {
+  if (UNIT_BASE[unit] && ['tsp', 'tbsp', 'cup', 'lb'].indexOf(unit) === -1) {
     return (qty >= 10 ? Math.round(qty) : Math.round(qty * 10) / 10) + ' ' + unit;
   }
   var whole = Math.floor(qty), part = qty - whole, best = FRACTIONS[0];
@@ -419,8 +464,13 @@ function kitchenQty(qty, unit) {
   if (best[0] === 1) { whole++; best = FRACTIONS[0]; }
   if (!whole && !best[1]) best = FRACTIONS[1];          // never show 0 for something the recipe uses
   var s = (whole ? String(whole) : '') + best[1];
-  return (!unit || unit === 'ea') ? s : s + ' ' + unit;
+  if (!unit || unit === 'ea') return s;
+  // "2 cups", "1½ cans": a word unit takes a plural past one. Abbreviations (tbsp, lb) don't.
+  var plural = whole > 1 || (whole === 1 && best[1]);
+  return s + ' ' + (plural && UNIT_PLURAL[unit] ? UNIT_PLURAL[unit] : unit);
 }
+var UNIT_PLURAL = { cup:'cups', slice:'slices', can:'cans', block:'blocks', head:'heads',
+                    bunch:'bunches', stalk:'stalks', jar:'jars', clove:'cloves', piece:'pieces' };
 function esc(s) {
   return String(s).replace(/[&<>"']/g, function(c) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]; });
 }
@@ -615,7 +665,9 @@ function stockOf(ingId, unit, reserved) {
     var c = convert(r.qty, r.unit, unit);
     if (c === null) lessThan = true; else known -= c;
   });
-  return { any:any, known:round2(Math.max(0, known)), uncertain:uncertain, lessThan:lessThan };
+  // Kept exact: rounding to two places made a third of a cup on hand (0.333…) read as 0.33,
+  // short of the 0.333… a recipe asks for.
+  return { any:any, known:roundStore(Math.max(0, known)), uncertain:uncertain, lessThan:lessThan };
 }
 
 function lineIds(line) { return line.any || line.all || [line.id]; }
@@ -630,7 +682,8 @@ function lineName(line) { return lineIds(line).map(foodName).join(line.all ? ' a
 // Everything that checks, sets aside or deducts food goes through here.
 function amountFor(line) {
   if (line.qty === null || line.qty === undefined) return null;
-  return Math.round(line.qty * recipeScale(line.r) * 1000) / 1000;
+  // Rounded to a practical amount, so what is checked and deducted is what Ren measures.
+  return practicalQty(line.qty * recipeScale(line.r), line.unit, lineIds(line));
 }
 function servingsFor(r) {
   return settings.household * (r && r.type === 'dinner' && leftoversOn() ? 2 : 1);
@@ -706,9 +759,9 @@ function deductLine(line) {
     es.forEach(function(e) {
       if (left <= 1e-9) return;
       var t = Math.min(e.qty, convert(left, line.unit, e.unit));
-      e.qty = round2(e.qty - t);
+      e.qty = roundStore(e.qty - t);
       left -= convert(t, e.unit, line.unit);
-      taken.push({ entry:e.id, qty:round2(t) });
+      taken.push({ entry:e.id, qty:roundStore(t) });
     });
   });
   return taken;
@@ -716,7 +769,7 @@ function deductLine(line) {
 function restoreTaken(taken) {
   (taken || []).forEach(function(t) {
     var e = entryById(t.entry);
-    if (e && e.qty !== null) { e.qty = round2(e.qty + t.qty); }
+    if (e && e.qty !== null) { e.qty = roundStore(e.qty + t.qty); }
   });
 }
 // Uses up a whole meal. Returns what was taken plus how many lines were rescued: used in the last
@@ -1958,7 +2011,21 @@ function nutritionHTML(r) {
 function scaledNote(line) {
   var a = amountFor(line);
   if (a === null || Math.abs(a - line.qty) < 1e-6) return '';
-  return ' <span class="scaled">→ ' + esc(kitchenQty(a, line.unit)) + '</span>';
+  var noun = (!line.unit || line.unit === 'ea') ? countNoun(lineIds(line), a) : '';
+  return ' <span class="scaled">→ ' + esc(kitchenQty(a, line.unit) + (noun ? ' ' + noun : '')) + '</span>';
+}
+// What a bare count is a count of, so "→ 1" reads "→ 1 egg". Only for a single plainly named food;
+// a choice of foods, or a name like "Chicken (whole / pieces)", is left as the number.
+function countNoun(ids, n) {
+  if (ids.length !== 1) return '';
+  var name = ingName(ids[0]).toLowerCase();
+  if (/[(/]/.test(name)) return '';
+  if (n <= 1) {
+    if (/oes$/.test(name)) return name.slice(0, -2);              // tomatoes, potatoes
+    if (/[^s]s$/.test(name)) return name.slice(0, -1);            // eggs, bananas
+    return name;
+  }
+  return /s$/.test(name) ? name : name + 's';
 }
 // What the recipe's amounts are scaled to, in plain words, under the ingredients.
 // The one caveat about freshness on this screen sits here, beside the dates it qualifies.
@@ -3578,7 +3645,7 @@ function openEditItem(entryId) {
   var e = entryById(entryId);
   if (!e) return;
   var y = todayKey(addDays(new Date(), -1));
-  draft = { id:e.id, ing:e.ing, zone:e.zone, qty:e.qty === null ? '' : String(e.qty), unit:e.unit || defaultUnit(e.ing),
+  draft = { id:e.id, ing:e.ing, zone:e.zone, qty:e.qty === null ? '' : String(round2(e.qty)), unit:e.unit || defaultUnit(e.ing),
             when: !e.bought ? 'unknown' : (e.bought === todayKey() ? 'today' : (e.bought === y ? 'yesterday' : 'date')),
             date:e.bought || '', expires:e.expires || '' };
   justAdded = [];
