@@ -157,8 +157,6 @@
           <img class="wtf-logo" src="logo-header-t.webp" alt="What the Fridge">
         </div>
         <div id="profileHead"></div>
-        <div class="profile-stat-row" id="profileStats"></div>
-        <div class="profile-ledger" id="profileLedger"></div>
         <div id="profileRewards"></div>
 
         <div class="section-label">Preferences</div>
@@ -167,17 +165,16 @@
           <div class="profile-menu-item" onclick="openSub('meals')"><span>Meals &amp; cooking</span><span class="arrow" id="mealsArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('dietary')"><span>Dietary preferences</span><span class="arrow" id="dietArrow">&rsaquo;</span></div>
           <div class="profile-menu-item" onclick="openSub('staples')"><span>Staples you keep</span><span class="arrow" id="staplesArrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openSub('waste')"><span>Where food is going</span><span class="arrow" id="wasteArrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openSub('about')"><span>About What the Fridge</span><span class="arrow">&rsaquo;</span></div>
-          <div class="profile-menu-item" onclick="openSub('feedback')"><span>Send feedback</span><span class="arrow">&rsaquo;</span></div>
         </div>
 
-        <div class="section-label">Your data</div>
+        <div class="section-label">Account &amp; Support</div>
         <div>
           <!-- Shown only when accounts are set up (account-config.js); see account.js. -->
           <div class="profile-menu-item" id="accountRow" style="display:none;" onclick="openSub('account')"><span>Account</span><span class="arrow" id="accountArrow">Sign in &rsaquo;</span></div>
           <!-- Only while the sample kitchen chosen at setup is loaded; see leaveSample() in app.js. -->
           <div class="profile-menu-item" id="leaveSampleRow" style="display:none;" onclick="leaveSample()"><span>Leave the sample kitchen</span><span class="arrow">use my own food &rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="openSub('about')"><span>About What the Fridge</span><span class="arrow">&rsaquo;</span></div>
+          <div class="profile-menu-item" onclick="openSub('feedback')"><span>Send feedback</span><span class="arrow">&rsaquo;</span></div>
         </div>
         <!-- Shown only when About > Testing tools is on (app.js renderAll). -->
         <div id="testTools" style="display:none;">
