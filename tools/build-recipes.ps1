@@ -11,6 +11,9 @@
     tools/context-review.csv         - the kinds of dish each recipe was read as, which decide where a
                                        stand-in from tools/substitutions.csv may be offered
 
+  Ingredient families (tools/families.csv) are written into recipes.js for grouping only; the
+  routes proposed in tools/family-review.csv are checked but not wired.
+
   Nutrition per serving is estimated from tools/nutrition.csv (per-food values) and
   tools/servings.csv (estimated servings per recipe).
 
@@ -252,6 +255,48 @@ foreach ($s in (Read-Table "$PSScriptRoot\substitutions.csv")) {
   $subs += [pscustomobject]$o
 }
 
+# -- ingredient families (tools/families.csv) and proposed routes (tools/family-review.csv) --
+# A family is the parent category a food belongs to: cherry and sun-dried tomatoes are both
+# tomatoes. It is for grouping only (the waste patterns, pantry search) and never decides what a
+# recipe can use: that still takes counts_as or an approved stand-in. family-review.csv proposes
+# those routes for family members the planner can't use yet; it is checked here but not wired.
+$allIds = @{}; foreach ($i in $allIngredients) { if (-not $allIds.ContainsKey($i.id)) { $allIds[$i.id] = $i } }
+$famOf = @{}; $families = [ordered]@{}
+foreach ($f in (Read-Table "$PSScriptRoot\families.csv")) {
+  $where = "families.csv '$($f.family)'"
+  if ($families.Contains($f.family)) { $problems += "$where`: listed twice" }
+  $families[$f.family] = $f.name
+  $members = @($f.members -split '\|' | Where-Object { $_ })
+  if ($members.Count -lt 2) { $problems += "$where`: a family needs at least two foods" }
+  foreach ($m in $members) {
+    if (-not $allIds.ContainsKey($m)) { $problems += "$where`: '$m' isn't in ingredients.csv"; continue }
+    if ($famOf[$m]) { $problems += "$where`: '$m' is already in family '$($famOf[$m])'" }
+    $famOf[$m] = $f.family
+  }
+}
+$usedIds = @{}; foreach ($r in $recipes) { foreach ($l in $r.ing) { foreach ($id in @($l.items)) { $usedIds[$id] = $true } } }
+$offered = @{}; foreach ($s in $subs) { $offered[$s.use] = $true }
+$proposed = @{}; $routeCount = @{ 'counts_as' = 0; 'stand-in' = 0; 'none' = 0 }
+foreach ($p in (Read-Table "$PSScriptRoot\family-review.csv")) {
+  $where = "family-review.csv '$($p.food)'"
+  if (-not $allIds.ContainsKey($p.food)) { $problems += "$where`: isn't in ingredients.csv"; continue }
+  if ($famOf[$p.food] -ne $p.family) { $problems += "$where`: is in family '$($famOf[$p.food])', not '$($p.family)'" }
+  if ($proposed[$p.food]) { $problems += "$where`: listed twice" }
+  $proposed[$p.food] = $true
+  if (-not $routeCount.ContainsKey($p.route)) { $problems += "$where`: route '$($p.route)' should be counts_as, stand-in or none"; continue }
+  $routeCount[$p.route]++
+  if ($p.route -eq 'none') { continue }
+  if (-not $byId.ContainsKey($p.target)) { $problems += "$where`: target '$($p.target)' isn't a recipe ingredient" }
+  $ctx = @($p.contexts -split '\|' | Where-Object { $_ })
+  if ($p.route -eq 'stand-in' -and -not $ctx.Count) { $problems += "$where`: a stand-in needs contexts" }
+  if ($p.route -eq 'counts_as' -and $ctx.Count) { $problems += "$where`: counts_as holds everywhere, so it takes no contexts" }
+  foreach ($c in $ctx) { if ($ctxVocab -notcontains $c) { $problems += "$where`: unknown context '$c'" } }
+  if ($p.diet -and $p.diet -notmatch '^[+-](V|DF|NF|PF)$') { $problems += "$where`: diet '$($p.diet)' should be +/- then V, DF, NF or PF" }
+}
+# Family members the planner can't use and nobody has proposed a route for yet.
+$famUnrouted = @($famOf.Keys | Where-Object {
+  -not $usedIds[$_] -and -not $allIds[$_].counts_as -and -not $offered[$_] -and -not $proposed[$_] } | Sort-Object)
+
 # Keywords for each context, tried against the title first and then the steps. Rough on purpose:
 # a stand-in also needs the asked-for food missing and the stand-in in the kitchen, so a context
 # that's slightly too generous rarely fires. context-review.csv is where it gets checked.
@@ -434,6 +479,7 @@ $ingOut = @($allIngredients | ForEach-Object {
   if ($_.staple -eq '1') { $o['staple'] = $true }
   if ($_.pantry_only -eq '1') { $o['extra'] = $true }
   if ($_.counts_as) { $o['counts'] = $_.counts_as }
+  if ($famOf[$_.id]) { $o['fam'] = $famOf[$_.id] }
   $o
 })
 # The same id can appear on more than one row (a staple phrase listed near the top); keep the first.
@@ -459,7 +505,8 @@ $js = $header +
   'window.WTF_NORMS = ' + ($norms | ConvertTo-Json -Depth 5 -Compress) + ";`n" +
   'window.WTF_INGREDIENTS = ' + (ConvertTo-Json -InputObject $ingOut -Depth 5 -Compress) + ";`n" +
   'window.WTF_RECIPES = ' + (ConvertTo-Json -InputObject @($recipes) -Depth 6 -Compress) + ";`n" +
-  'window.WTF_SUBS = ' + (ConvertTo-Json -InputObject @($subs) -Depth 5 -Compress) + ";`n"
+  'window.WTF_SUBS = ' + (ConvertTo-Json -InputObject @($subs) -Depth 5 -Compress) + ";`n" +
+  'window.WTF_FAMILIES = ' + ($families | ConvertTo-Json -Compress) + ";`n"
 [IO.File]::WriteAllText((Join-Path $root 'recipes.js'), $js, $utf8)
 $ctxReview | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $PSScriptRoot 'context-review.csv')
 $review | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $PSScriptRoot 'ingredient-review.csv')
@@ -474,4 +521,6 @@ foreach ($g in ($recipes | Group-Object { $_.type })) {
 }
 "lines counted for nutrition: lowest share $(@($recipes | ForEach-Object { $_.nut.cover } | Sort-Object)[0])%"
 "stand-ins: $($subs.Count) rows   recipes with no context: $(@($recipes | Where-Object { -not $_.ctx.Count }).Count)   contexts: " + (($recipes | ForEach-Object { $_.ctx } | Group-Object | Sort-Object Count -Descending | ForEach-Object { "$($_.Name) $($_.Count)" }) -join ', ')
+"families: $($families.Count) holding $($famOf.Count) foods   proposed routes (not wired): $($routeCount['counts_as']) counts_as, $($routeCount['stand-in']) stand-in, $($routeCount['none']) none   family members with no route or proposal: $($famUnrouted.Count)"
+if ($famUnrouted.Count) { "  " + ($famUnrouted -join ', ') }
 if ($problems.Count) { "PROBLEMS:"; $problems } else { "checks passed" }

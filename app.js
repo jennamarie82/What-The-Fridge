@@ -42,6 +42,14 @@ INGREDIENTS.forEach(function(i) { ingIndex[i.id] = i; });
 function ingById(id) { return ingIndex[id] || null; }
 function ingName(id) { var i = ingIndex[id]; return i ? i.name : id; }
 
+// Families (tools/families.csv): the parent category a food belongs to, so cherry and sun-dried
+// tomatoes both read as tomatoes. For grouping only — what Ren sees in the waste patterns and
+// what pantry search finds. A family never lets one food count as another in a recipe; that
+// still takes counts_as or an approved stand-in, because sun-dried tomatoes don't belong in a BLT.
+var FAMILIES = window.WTF_FAMILIES || {};
+function famOf(id) { var i = ingIndex[id]; return i && i.fam ? i.fam : null; }
+function famName(fam) { return FAMILIES[fam] || fam; }
+
 // ═══════════════ PANTRY ═══════════════
 // One entry per thing on the shelf: two packs of chicken bought on different days are two entries.
 //   ing       ingredient id from the shared list
@@ -1905,9 +1913,13 @@ function filterPantrySearch() {
   resultsEl.style.display = '';
   normalEl.style.display = 'none';
 
-  // filter in-stock pantry items whose name contains the query
+  // filter in-stock pantry items whose name, or family's name, contains the query — so "cheese"
+  // finds the Gouda and "tomato" finds the sun-dried ones
   var matches = pantry.filter(function(e) {
-    return inStock(e) && ingName(e.ing).toLowerCase().indexOf(q) !== -1;
+    if (!inStock(e)) return false;
+    var f = famOf(e.ing);
+    return ingName(e.ing).toLowerCase().indexOf(q) !== -1 ||
+           (f && famName(f).toLowerCase().indexOf(q) !== -1);
   });
 
   if (!matches.length) {
@@ -1931,9 +1943,12 @@ function filterPantrySearch() {
     html += items.map(function(e) {
       var f = freshness(e);
       var name = ingName(e.ing);
-      // highlight the matching substring
+      // highlight the matching substring. A food found by its family ("cheese" finding Gouda) has
+      // nothing in its own name to highlight, so it says which family matched instead.
       var idx = name.toLowerCase().indexOf(q);
-      var highlighted = esc(name.slice(0, idx)) + '<mark>' + esc(name.slice(idx, idx + q.length)) + '</mark>' + esc(name.slice(idx + q.length));
+      var highlighted = idx < 0
+        ? esc(name) + ' <span class="psi-fam">' + esc(famName(famOf(e.ing))) + '</span>'
+        : esc(name.slice(0, idx)) + '<mark>' + esc(name.slice(idx, idx + q.length)) + '</mark>' + esc(name.slice(idx + q.length));
       return '<div class="pantry-search-item" onclick="closePantrySearch();openEditItem(\'' + e.id + '\')">' +
         '<div class="psi-left">' +
           '<div class="psi-name">' + highlighted + '</div>' +
@@ -3814,7 +3829,9 @@ function wasteInsightsHTML() {
     h += '<div class="section-label">Keeps getting away</div>';
     h += repeats.length
       ? '<div class="w-list">' + repeats.slice(0, 6).map(function(x) {
-          return '<div class="w-row"><span class="w-name">' + esc(ingName(x.key)) + '</span>' +
+          // Which kinds, when a family covers more than one, so "Tomatoes" isn't a mystery.
+          return '<div class="w-row"><span class="w-name">' + esc(x.name) +
+              (x.kinds.length > 1 ? '<span class="w-kinds">' + esc(x.kinds.map(ingName).join(', ')) + '</span>' : '') + '</span>' +
             '<span class="w-n">' + x.n + ' times</span></div>';
         }).join('') + '</div>'
       : '<div class="note-card">Nothing has gone twice yet. No pattern to fix — just bad luck so far.</div>';
@@ -3856,10 +3873,13 @@ function wasteInsightsHTML() {
 // counts, and nagging for it would make logging feel like a punishment.
 // What the log is for. A tally on its own just tells Ren she wasted food, which she knew; the
 // repeat offender and the reason behind it are the parts she can act on next shop.
+// A waste entry's group: its family when it has one, otherwise the food itself.
+function wasteKey(id) { var f = famOf(id); return f ? 'fam:' + f : id; }
+function wasteKeyName(key) { return key.indexOf('fam:') === 0 ? famName(key.slice(4)) : ingName(key); }
+
 function wasteHint() {
-  var byIng = {}, byReason = {}, unplanned = 0;
+  var byReason = {}, unplanned = 0;
   wasteLog.forEach(function(w) {
-    byIng[w.ing] = (byIng[w.ing] || 0) + 1;
     if (w.reason) byReason[w.reason] = (byReason[w.reason] || 0) + 1;
     if (w.wasPlanned === false) unplanned++;
   });
@@ -3880,13 +3900,14 @@ function wasteHint() {
     return 'Mostly three days not stretching far enough. Fewer perishables per shop would help more than planning harder.';
   }
 
-  var worst = top(byIng);
-  if (worst && byIng[worst] > 1) {
+  // Grouped by family the same way as the breakdown, so the hint and the list never disagree.
+  var worst = wasteStats().ings[0];
+  if (worst && worst.n > 1) {
     var tail = why === 'toomuch' ? ' Try buying half as much.'
-             : why === 'forgot'  ? ' Worth planning it on day 1.'
+             : why === 'forgot'  ? ' Worth putting on day 1 next time.'
              : why === 'disliked'? ' Maybe mark it “not for us”.'
              : '';
-    return ingName(worst) + ' has got away ' + byIng[worst] + ' times.' + tail;
+    return worst.name + ' got away ' + worst.n + ' times.' + tail;
   }
   return 'Every one logged is one you’ll spot sooner next time.';
 }
@@ -3918,9 +3939,13 @@ function wasteStats() {
     var to   = todayKey(addDays(new Date(), -(offset || 0)));
     return wasteLog.filter(function(w) { return w.date > from && w.date <= to; });
   };
-  var byIng = {}, byReason = {}, planned = 0, unplanned = 0, late = { same:0, few:0, week:0 }, dated = 0;
+  var byIng = {}, kinds = {}, byReason = {}, planned = 0, unplanned = 0, late = { same:0, few:0, week:0 }, dated = 0;
   wasteLog.forEach(function(w) {
-    byIng[w.ing] = (byIng[w.ing] || 0) + 1;
+    // Counted by family, so cherry tomatoes twice and tomatoes once is "tomatoes, 3 times" — the
+    // pattern worth acting on — rather than two separate foods that each look like bad luck.
+    var k = wasteKey(w.ing);
+    byIng[k] = (byIng[k] || 0) + 1;
+    (kinds[k] = kinds[k] || {})[w.ing] = true;
     byReason[w.reason || ''] = (byReason[w.reason || ''] || 0) + 1;
     if (w.wasPlanned === true) planned++; else if (w.wasPlanned === false) unplanned++;
     if (typeof w.daysPast === 'number') {
@@ -3935,7 +3960,14 @@ function wasteStats() {
   return {
     total: wasteLog.length,
     last30: within(30).length, prev30: within(30, 30).length,
-    ings: rank(byIng), reasons: rank(byReason).filter(function(r) { return r.key; }),
+    ings: rank(byIng).map(function(x) {
+      x.kinds = Object.keys(kinds[x.key]);
+      // One kind only: its own name says more than the family's ("Gouda", not "Cheese for
+      // slicing & melting").
+      x.name = x.kinds.length > 1 ? wasteKeyName(x.key) : ingName(x.kinds[0]);
+      return x;
+    }),
+    reasons: rank(byReason).filter(function(r) { return r.key; }),
     unsaid: byReason[''] || 0,
     planned: planned, unplanned: unplanned,
     late: late, dated: dated,

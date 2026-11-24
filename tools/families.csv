@@ -1,0 +1,70 @@
+family,name,members
+# Ingredient families: the parent category a food belongs to, so "cherry tomatoes" and
+# "sun-dried tomatoes" are both understood as tomatoes.
+#
+# GROUPING ONLY. A family never makes one food count as another in a recipe. The planner still
+# uses a food only through the two approved routes:
+#   counts_as (ingredients.csv)  - the same food in another form, e.g. frozen spinach = spinach
+#   substitutions.csv            - a different food, approved only in named kinds of dish
+# Matching on the family would put sun-dried tomatoes in a BLT and kefir in a cake, which is the
+# unapproved substitution the spec forbids. Routes for family members the planner can't use yet
+# are PROPOSED in family-review.csv for the team to approve.
+#
+# family  = key (lowercase, hyphens)
+# name    = what Ren sees, e.g. in "Keeps getting away"
+# members = ingredient ids, pipe-separated. Each id belongs to at most one family.
+#
+tomatoes,Tomatoes,tomatoes|cherry-tomatoes|sun-dried-tomatoes
+canned-tomatoes,Canned tomatoes & sauce,canned-tomatoes|passata|tomato-paste|marinara
+yogurt,Yogurt,yogurt|greek-yogurt|skyr|plant-yogurt|drinkable-yogurt|kefir
+onions,Onions,onion|red-onion|shallot|leeks|frozen-onions
+green-onions,Green onions & chives,green-onion|chives
+chicken,Chicken,chicken|chicken-breast|chicken-thighs|chicken-drumsticks|chicken-wings|ground-chicken|cooked-chicken|frozen-chicken-breast|canned-chicken
+turkey,Turkey,ground-turkey|turkey-breast|cooked-turkey
+deli-meat,Deli meat,deli-turkey|deli-chicken|ham|salami|bologna|pepperoni
+sausage,Sausages,sausage|smoked-sausage|turkey-sausage|chicken-sausage|bratwurst|hot-dogs
+pork,Pork,pork|pork-chops|pork-tenderloin|ground-pork|ribs
+bacon,Bacon,bacon|pancetta|canadian-bacon
+beef,Beef,ground-beef|beef-steak|beef-roast|ground-bison|bison
+lamb,Lamb,lamb|ground-lamb
+white-fish,White fish,white-fish|lean-white-fish|mahi-mahi|frozen-fish-fillets
+salmon,Salmon & trout,salmon|frozen-salmon|smoked-salmon|trout
+canned-fish,Canned fish,canned-tuna|canned-salmon|sardines|anchovies
+shrimp,Shrimp,shrimp|frozen-shrimp
+crab,Crab,crab|imitation-crab
+sliced-cheese,Cheese for slicing & melting,cheese|cheddar|monterey-jack|swiss|provolone|american-cheese|cheese-slices|gouda|havarti
+mozzarella,Mozzarella,mozzarella|burrata|string-cheese
+grilling-cheese,Paneer & halloumi,paneer|halloumi
+soft-cheese,Cream cheese & mascarpone,cream-cheese|mascarpone
+cream,Cream,heavy-cream|half-and-half|light-cream|whipped-cream
+milk,Milk,milk|almond-milk|oat-milk|soy-milk|other-plant-milk|evaporated-milk
+eggs,Eggs,eggs|egg-whites
+cooking-greens,Cooking greens,spinach|kale|swiss-chard|collard-greens|mustard-greens|rapini|frozen-spinach|frozen-kale
+salad-greens,Salad greens,lettuce|spring-mix|arugula|watercress|endive|microgreens
+bell-peppers,Bell peppers,bell-pepper|roasted-red-peppers|frozen-peppers-onions
+chilies,Chili peppers,chili-peppers|hot-chilies|pickled-jalapenos
+pickled-peppers,Pepperoncini & banana peppers,pepperoncini|banana-peppers
+berries,Berries,berries|strawberries|blueberries|raspberries|blackberries|frozen-strawberries|frozen-blueberries|frozen-raspberries|frozen-blackberries|frozen-mixed-berries|frozen-cranberries
+stone-fruit,Stone fruit,peaches|plums|apricots|cherries|frozen-peaches|frozen-cherries
+tropical-fruit,Tropical fruit,mango|pineapple|papaya|guava|passion-fruit|lychee|frozen-mango|frozen-pineapple|frozen-tropical-fruit
+bananas,Bananas,bananas|frozen-bananas
+lemons,Lemons,lemon|lemon-juice
+limes,Limes,lime|lime-juice
+oranges,Oranges,orange|clementines|grapefruit|orange-juice
+winter-squash,Winter squash & pumpkin,butternut-squash|acorn-squash|kabocha-squash|delicata-squash|buttercup-squash|hubbard-squash|red-kuri-squash|sugar-pumpkin|spaghetti-squash|frozen-butternut-squash|pumpkin-puree
+summer-squash,Zucchini & summer squash,zucchini|yellow-squash|pattypan-squash|frozen-zucchini-noodles
+potatoes,Potatoes,potatoes|frozen-fries|frozen-hash-browns|instant-mashed
+sweet-potatoes,Sweet potatoes,sweet-potato|yams|frozen-sweet-potato
+broccoli,Broccoli,broccoli|frozen-broccoli|riced-broccoli
+cauliflower,Cauliflower,cauliflower|frozen-cauliflower|cauliflower-rice
+brussels-sprouts,Brussels sprouts,brussels-sprouts|frozen-brussels-sprouts
+artichokes,Artichokes,artichoke-hearts|frozen-artichoke-hearts|fresh-artichokes
+mushrooms,Mushrooms,mushrooms|frozen-mushrooms
+corn,Corn,corn|corn-cob|frozen-corn|canned-corn
+peas,Peas,peas|frozen-peas|snap-peas
+green-beans,Green beans,green-beans|frozen-green-beans
+rice,Rice,rice|basmati-rice|jasmine-rice|arborio-rice|brown-rice|cooked-rice|wild-rice|black-rice
+nuts,Nuts,almonds|walnuts|pecans|cashews|pistachios|macadamia|hazelnuts|brazil-nuts|mixed-nuts|pine-nuts|peanuts
+nut-butters,Nut & seed butters,peanut-butter|almond-butter|seed-butter
+bread,Bread,bread|baguette|brioche|bagels|english-muffins|buns|pita|naan|croissants
+tortillas,Tortillas,flour-tortillas|corn-tortillas
