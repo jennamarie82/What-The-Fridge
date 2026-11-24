@@ -89,6 +89,10 @@ h1 { font-size:22px; font-weight:700; text-align:center; margin-bottom:4px; }
 }
 .view::-webkit-scrollbar { display:none; }
 .view-pad { padding:0 var(--s8) var(--s12); }
+/* Plan and Pantry carry the floating Add food button (.fab, 52px). Without room below the last
+   row, that row stopped just under the button: the Plan's Show / Hide finished meals sat behind
+   it. This clearance lets anything at the bottom scroll up past the button. */
+#planTab .view-pad, #pantryTab .view-pad { padding-bottom:calc(52px + var(--s12) * 2); }
 /* Back to the previous tab. Stays at the top while the tab scrolls, so it's always one tap away. */
 .back-bar {
   position:sticky; top:0; z-index:6;

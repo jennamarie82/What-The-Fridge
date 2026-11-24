@@ -2810,13 +2810,17 @@ function openSub(which) {
     title = 'About What the Fridge';
     body =
       '<div style="text-align:center;margin:var(--s8) 0;"><img src="logo-setup-t.webp" alt="What the Fridge" style="height:120px;width:auto;"></div>' +
+      // The mission says why; How it works says what. A sentence between them ("plans three days
+      // of breakfast, lunch and dinner… so nothing expires forgotten") repeated both, was wrong
+      // when meals are switched off or lunch is leftovers, and promised an outcome the app can't
+      // guarantee: it decides what to use first, not whether food goes off. Its one fact, the
+      // three-day horizon, is now in How it works.
       MISSION_HTML +
-      '<p class="sub-intro" style="font-size:15px;line-height:1.6;">What the Fridge plans three days of breakfast, lunch and dinner around the food already in your kitchen, ' +
-      'so nothing expires forgotten and you always know what\'s for dinner.</p>' +
       '<div class="note-card" style="margin-top:var(--s6);">' +
         '<strong>How it works</strong><br>' +
-        'Add your groceries to the Pantry (manually or by snapping a receipt). The planner picks from our ' + recipes.length + ' recipes, ' +
-        'putting food closest to the end of its window first. Mark a meal cooked and its ingredients come out of the pantry.' +
+        'Add your groceries to the Pantry: type them in, or snap a receipt or your shelves. The planner fills today and ' +
+        'the next two days with the meals you\'ve chosen in Meals &amp; cooking, from our ' + recipes.length + ' recipes, ' +
+        'putting food closest to the end of its estimated window first. Mark a meal cooked and its ingredients come out of the pantry.' +
         // Moved here from the Reminders screen, which existed only to say there were no
         // reminders. This is the one part of it that described something the app does.
         ' If a day passes with a meal you didn\'t mark, the app asks what happened next time you open it, ' +
