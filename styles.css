@@ -834,6 +834,33 @@ input:focus-visible, select:focus-visible, a:focus-visible {
 .waste-more .w-row { padding:10px var(--s6); }
 .waste-more .note-card:first-of-type { margin-top:0; }
 
+/* Food added since the plan was made: one line and a Re-plan button above the plan. */
+.kitchen-note {
+  display:flex; align-items:center; gap:var(--s6); margin-bottom:var(--s6);
+  padding:var(--s6) var(--s8); background:var(--leaf-light); border-radius:var(--r);
+}
+.kitchen-note .kn-text { flex:1; min-width:0; }
+.kitchen-note strong { display:block; font-size:13px; color:var(--ink); }
+.kitchen-note span { font-size:12px; line-height:1.45; color:var(--ink-soft); }
+.kitchen-note .btn { flex-shrink:0; margin-top:0; }
+
+/* Start with tomorrow: a near-empty kitchen's first plan leads with the two easiest meals. */
+.starter-card {
+  background:var(--white); border-radius:var(--r); box-shadow:0 1px 3px var(--shadow);
+  border-left:4px solid var(--leaf); padding:var(--s8); margin-bottom:var(--s8);
+}
+.starter-card .st-head strong { display:block; font-size:16px; font-weight:800; color:var(--ink); }
+.starter-card .st-head span { display:block; font-size:12px; line-height:1.5; color:var(--ink-soft); margin-top:var(--s2); }
+.st-row {
+  display:block; width:100%; text-align:left; font:inherit; cursor:pointer;
+  margin-top:var(--s6); padding:var(--s6); border:none; border-radius:var(--r); background:var(--cream);
+}
+.st-row .st-type { display:block; font-size:11px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:var(--leaf); }
+.st-row .st-name { display:block; font-size:14px; font-weight:700; color:var(--ink); margin-top:2px; }
+.st-row .st-time { font-size:12px; font-weight:500; color:var(--ink-soft); }
+.st-row .st-sub { display:block; font-size:12px; line-height:1.5; color:var(--ink-soft); margin-top:var(--s2); }
+.starter-card .st-foot { font-size:11px; color:var(--ink-soft); margin-top:var(--s6); }
+
 /* ═══════════════ FOOTER ═══════════════ */
 footer {
   text-align:center; font-size:11px; color:#999;
