@@ -1,5 +1,8 @@
-# WIRED INTO THE APP on 2026-11-19 (feedback 6C), at the team's request. The rows themselves are
-# still the draft below and still want a review: each one can now change what Ren is told to cook.
+# WIRED INTO THE APP on 2026-11-19 (feedback 6C), at the team's request. REVIEWED 2026-11-26: all
+# 78 rows checked by Claude at the team's request, and the team accepted the review (open assumption
+# #33). One note corrected (dijon to mustard). Rules 3 to 5 measured in the app: the -DF and -NF rows
+# are never offered to a household with that setting, and meat stand-ins never to a vegetarian one.
+# Each row can change what Ren is told to cook, so any new or changed row needs the same review.
 # The build checks rules 1-3 and the review notes' five checks; the app applies rules 3-5.
 # Recipe contexts are derived by keyword in build-recipes.ps1 and listed in context-review.csv.
 #
@@ -132,7 +135,7 @@ butter,olive-oil,stir-fry|roast-bake-savoury|eggs,+DF,"For cooking only — not 
 butter,vegetable-oil,stir-fry|roast-bake-savoury,+DF,"For cooking only. Neutral, so you lose the buttery taste."
 olive-oil,vegetable-oil,stir-fry|roast-bake-savoury|marinade,,
 garlic,garlic-powder,soup-stew|roast-bake-savoury|marinade,,"About 1/8 tsp per clove. Not for a dish where raw garlic is the point."
-dijon,mustard,dressing|marinade,,"Plain yellow is sharper and less complex. Use slightly less."
+dijon,mustard,dressing|marinade,,"Plain yellow is milder, more vinegary and less complex. Use the same amount."
 rice-vinegar,apple-cider-vinegar,dressing|stir-fry,,"Sharper — cut it with a pinch of sugar."
 red-wine-vinegar,balsamic-vinegar,dressing,,"Sweeter and much darker; it will colour a pale dressing."
 maple-syrup,honey,sweet-toast|oatmeal|baking-sweet,,"Thicker. Warm it slightly if it needs to pour."

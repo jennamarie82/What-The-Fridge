@@ -1,8 +1,21 @@
 # What the Fridge - Living Spec
 
-Version: 1.19 (2026-11-26; v1.18, v1.17, v1.16, v1.15, v1.14 and v1.13 archived in `governance/history/`). v1.19 records the team's decisions on accounts: who holds the Supabase dashboard and the Gmail login, who answers deletion requests, and the ratified privacy wording; it also closes blindspot 22 and settles open assumptions #9, #10, #11, #14 and #27 (English receipts only, no reminders, "no estimate" accepted, AI recipes deferred). v1.14 added accounts and saved data (Supabase) and the shelf-photo rules agreed on 2026-11-12; v1.15 recorded the team's sign-in email sender; v1.16 marks accounts live and tested; v1.17 adopts the 248-row shelf-life norms file; v1.18 brings the spec up to the live app as of 2026-11-24 (PRs #43–#53: editing scanned items, a larger food list and more freshness estimates, the release cleanup, hiding finished meals, guided pairing, ingredient families and practical amounts).
+Version: 1.19 (2026-11-26). What changed in each version is listed under "Version history" at the end; earlier versions are kept in `governance/history/`.
 Team: Group 3
 App name: What the Fridge (wordmark: **WTF**)
+
+What the Fridge is a phone web app that plans a household's next three days of meals from 579 approved recipes, around the food already in the kitchen, using what is closest to the end of its freshness window first. Ren, the household's planner, decides; the app does the searching and matching.
+
+### Reading this spec
+
+- **What is current.** "Current app" describes the app as it is now. Sections headed "History" and notes about prototypes (prototype7 to prototype10, earlier versions built before the app went live on 2026-10-01) are kept for the record; where a feature was later removed or changed, the note says so.
+- **Status words.** *Ratified*: the team agreed it belongs in v1. *Decided*: the team settled an open question. *Deferred*: not in v1. *Open*: still to settle.
+- **The agent and the app** are the same thing: "the agent" is the app's planning behaviour.
+- **NOTICE, UNDERSTAND, ACT** are the three steps of Ren's use (spot what's about to turn, see a feasible plan, adjust and confirm); "the ACT step" means Ren confirming or changing a meal.
+- **Exercise 4** is the BUS 860 course milestone at which the team commits v1.
+- **Claude** means two different things: Claude in the app is the Anthropic model that reads receipt and shelf photos; Claude as the team's assistant helped build the app and keeps the Build and Fix Log.
+- **Where files live.** Paths under `knowledge/`, `deliverables/` and `governance/` are in the team's Shared Drive folder ("this folder"). The app, the 579-recipe database (`knowledge/Combined_Recipe_Database.md`), `tools/`, `worker/` and `supabase/` are in the GitHub repository `jennamarie82/What-The-Fridge`.
+- **Terms.** *PR #n*: a numbered pull request, the reviewed change that put a feature live. *Worker*: the team's small Cloudflare Worker service that passes a photo to Claude and returns what it read. *Supabase*: the database service that holds signed-in accounts; *row-level security* is its rule that each person reads and writes only their own record; the *anon key* is the public key the app uses, which works only within those rules. *localStorage*: the browser's own storage on Ren's device. *Service worker*: the browser helper that keeps an offline copy. *Tesseract.js*: on-phone text reading, used only when the Worker can't be reached.
 
 ## Purpose and user
 
@@ -56,6 +69,7 @@ What the Fridge draws on two inputs, and no other source.
 | 11 | Food list | `tools/ingredients.csv` (app repository) | 639 foods: every food a recipe line links to, plus about 320 pantry-only foods (frozen fruit and vegetables, pasta shapes, squash, snacks, cans, jars, spices and other everyday items) that can be stocked and recognised on receipts and photos but never change how a recipe is read | Yes — 201 pantry-only foods added 2026-11-20 (PR #43) |
 | 12 | Nutrition and servings estimates | `tools/nutrition.csv`, `tools/servings.csv` (app repository) | Typical per-100 g values per food, and an estimated serving count per recipe. Not from an approved source: they drive the labelled nutrition estimates and the scaling of recipe amounts (open assumptions #17, #25) | Yes — all 579 recipes |
 | 13 | Ingredient families | `tools/families.csv`, `tools/family-review.csv` (app repository) | 54 parent categories holding 238 foods (Tomatoes, Cheese, Onions…), used only to group foods in pantry search and the waste breakdown. A family never lets one food count as another in a recipe. `family-review.csv` proposes how each family member the planner can't use today could be routed (counts_as or a stand-in); it is checked by the build but **not wired** (open assumption #30) | Yes — 2026-11-22 (PR #52) |
+| 14 | Ingredient stand-ins | `tools/substitutions.csv` (app repository) | 78 rows, each naming a food a recipe asks for, a food that can stand in for it, and in which kinds of recipe; since 2026-11-26 (PR #56) also the extra cooking time a stand-in needs (raw rice for cooked rice, for example). The app offers a stand-in only from this file and always states the swap | Yes — in use since 2026-11-19 (PR #39, at the team's request); **all 78 rows reviewed 2026-11-26** and the review accepted by the team (open assumption #33) |
 
 ### Input 1: Ingredient inventory
 
@@ -88,7 +102,7 @@ Smallest useful snapshot first: perishables, opened packages, cooked leftovers, 
 - **Servings are not stated.** The database gives no serving counts or nutrition. Both are estimated in `tools/servings.csv` and `tools/nutrition.csv`, labelled as estimates wherever they appear, and the serving estimates are what recipe amounts are scaled from.
 - **Dietary tags are part of the source.** Each recipe lists the restrictions it *satisfies* (Vegetarian, Dairy-free, Nut-free, Pork-free). An absent tag means the recipe contains that item in a required ingredient. The agent reads these rather than inferring them — see "Dietary restrictions," below.
 - **One photo per recipe.** 579 images in the app repository's `recipe-images/`, named as a slug of the recipe title (the manifest in `knowledge/` covers the first 300).
-- Any further expansion follows the same rule: the team approves the new recipes into this file before the agent may use them.
+- Any further expansion follows the same rule: the team approves the new recipes into this file before the agent may use them. Criteria, approved 2026-11-26 (open assumption #6): a new recipe (1) is approved by the team before it is added; (2) is not a duplicate of a dish already in the file; (3) states its ingredients with quantities, numbered steps, a real total time and a dietary tag line; (4) has a photo; (5) takes the next number in sequence, never reusing or renumbering one; and (6) passes the build with every ingredient line linked to a food.
 
 ### Accounts and saved data
 
@@ -125,6 +139,7 @@ How it works:
 - Coordinate ingredient usage across meals within the same three-day plan to prevent double-allocation of scarce items
 - Offer, for a food Ren picks, the other foods on hand that share an approved recipe with it, and the approved recipes that use both (guided pairing)
 - Group related foods into families for pantry search and the waste breakdown — never to count one food as another in a recipe
+- Offer a stand-in for a missing ingredient only from `tools/substitutions.csv`, always stating the swap and any extra cooking time
 
 **The agent CANNOT:**
 - Access Ren's grocery account, loyalty card, or retailer purchase history
@@ -136,9 +151,9 @@ How it works:
 - Send any of Ren's data off the device other than a receipt or shelf photo Ren chooses to send to be read and, only after Ren signs in, Ren's own saved data to Ren's account (see "Accounts and saved data")
 - Read or change anyone else's saved data
 
-**Source boundary:** All ingredient knowledge comes from Ren's manual entries, uploaded receipt photos and shelf photos (read by Claude through the team's Worker, then confirmed by Ren). Data loaded from Ren's account is Ren's own earlier entries, not a new source. All recipe knowledge comes from `knowledge/Combined_Recipe_Database.md`. Shelf-life estimation uses the norms in `knowledge/shelf-life-norms.md`. No other source is authorized.
+**Source boundary:** All ingredient knowledge comes from Ren's manual entries, uploaded receipt photos and shelf photos (read by Claude through the team's Worker, then confirmed by Ren). Data loaded from Ren's account is Ren's own earlier entries, not a new source. All recipe knowledge comes from `knowledge/Combined_Recipe_Database.md`. Shelf-life estimation uses the norms in `knowledge/shelf-life-norms.md`. Ren's own settings — household size, dietary restrictions, which meals to plan, whether the household eats leftovers, weekday cook-time limits, staples kept, and recipe likes, dislikes and favourites — are also inputs; they only filter, order or scale recipes from the approved file and never add one (ratified 2026-11-26, open assumptions #15 and #19). No other source is authorized.
 
-**Household data the app now holds, pending ratification.** Several kinds of data sit outside the boundary above and must either be brought inside it or removed before v1 is committed: the recipe preference store (like / not-for-us / favourite), the dietary restriction settings, household size, and — since 2026-10-29 — the meal choices from the setup questionnaire (which meals to plan, whether the household eats leftovers, and a weekday cook-time limit per meal). None of them introduce a recipe — they only filter, reorder, or scale what the approved files already contain — but they are inputs the agent reads, and the spec should say so explicitly rather than leaving them undocumented. Since 2026-11-20, a signed-in Ren's copies of all of these are also stored in Ren's account (see "Accounts and saved data"). Estimated nutrition and estimated servings are a different case: recipe data the approved files do not contain (open assumptions #17 and #25).
+**Household data the app holds — ratified 2026-11-26 and now named inside the source boundary above.** The note below records why it was raised. Several kinds of data sat outside the boundary and had to be brought inside it or removed before v1 was committed: the recipe preference store (like / not-for-us / favourite), the dietary restriction settings, household size, and — since 2026-10-29 — the meal choices from the setup questionnaire (which meals to plan, whether the household eats leftovers, and a weekday cook-time limit per meal). None of them introduce a recipe — they only filter, reorder, or scale what the approved files already contain — but they are inputs the agent reads, and the spec should say so explicitly rather than leaving them undocumented. Since 2026-11-20, a signed-in Ren's copies of all of these are also stored in Ren's account (see "Accounts and saved data"). Estimated nutrition and estimated servings are a different case: recipe data the approved files do not contain (open assumptions #17 and #25).
 
 ## What good looks like
 
@@ -164,7 +179,7 @@ When the agent reads a receipt photo, it shows Ren every extracted line and the 
 
 - Apply a freshness estimate to an ingredient with no known purchase date. An undated item stays flagged as unknown, not assumed fresh.
 - Hide the basis for a freshness estimate. Every dated ingredient's purchase date and the shelf-life assumption used must appear alongside it.
-- Generate a grocery list or place an order.
+- Send a grocery list anywhere or place an order. (Showing Ren, in the app, what the plan is short of — the "What to pick up" list — is allowed: kept by team decision on 2026-11-26, open assumption #32. It is built only from the approved recipes and Ren's kitchen, and nothing is ordered or sent.)
 - Use a recipe source the team has not approved.
 - Report that Ren approved a plan when Ren has not confirmed it.
 - Present a low-confidence receipt read as confirmed without Ren's review.
@@ -197,7 +212,7 @@ Decided with Ren on 2026-09-17, in response to the team's own note that early pr
 - **Ingredient chips with micro-illustrations.** Each ingredient in the detail view carries a tiny illustration or icon alongside the freshness chip for visual texture and scannability.
 - **Freshness cues: gentle nudge, not alarm.** Freshness estimates use soft, warm coloring (amber, not alarm red) and friendly phrasing. An ingredient near or past its estimated window must still be visibly distinct, and its purchase date and shelf-life basis must still be shown — gentle tone never becomes hidden information.
 - **Day-and-meal navigation.** The Plan tab organizes by day (Day 1, Day 2, Day 3), each showing the household's planned meals (up to breakfast, lunch, and dinner; a leftovers lunch is marked as such) in a vertically scrollable layout. The next upcoming meal is spotlighted at the top.
-- **Delight: waste-reduction streaks and stats.** ASSUMPTION — built in prototype7, not yet ratified as in-scope for Exercise 4. Since 2026-11-21 there is one milestone, **Food rescued**, on the Settings screen: a count of ingredients Ren cooked in the last two days of their estimated window, with a ladder of steps. The cooking-frequency ladder and the stat tiles were removed (PRs #47, #50), because how often Ren cooks is not what the app is for. The Food rescued card also holds the "rescued · got away" line and, one tap away, "Where food is going" (what was thrown out, why, and whether it was ever planned). Logging a loss never reduces the rescued count. It draws only from Ren's own cooking and waste logs — no new data source, no money figure, and no claim of a verified saving. The team must confirm before Exercise 4 whether this stays in v1.
+- **Delight: waste-reduction streaks and stats.** **Ratified 2026-11-26** (open assumption #4). Since 2026-11-21 there is one milestone, **Food rescued**, on the Settings screen: a count of ingredients Ren cooked in the last two days of their estimated window, with a ladder of steps. The cooking-frequency ladder and the stat tiles were removed (PRs #47, #50), because how often Ren cooks is not what the app is for. The Food rescued card also holds the "rescued · got away" line and, one tap away, "Where food is going" (what was thrown out, why, and whether it was ever planned). Logging a loss never reduces the rescued count. It draws only from Ren's own cooking and waste logs — no new data source, no money figure, and no claim of a verified saving.
 
 ### Current app
 
@@ -217,7 +232,13 @@ What the app does as of 2026-11-24, beyond prototype10:
 - **Installed copies stay current** (on `meal-preferences`): app files load with a version number and the offline helper checks for changes on every open.
 - **Pantry search** (PR #15, completed on `meal-preferences`): a search button on the Pantry finds stocked items by name, grouped by fridge, freezer and cupboard. PR #15 shipped without its page markup and reverted part of `index.html` (see blindspot 15); both are repaired on `meal-preferences`. Since 2026-11-22 search also finds a food by its family ("cheese" finds Gouda) and says which family matched (PR #52).
 
-Added 2026-11-20 to 2026-11-24 (PRs #43–#53):
+Added 2026-11-19 to 2026-11-26 (PRs #39–#56):
+
+- **Survey feedback** (PR #39, 2026-11-20): every change to the plan leaves a short note of what changed, with Undo; each new day opens with a summary of yesterday, settles any unanswered meal, then plans today; **"What to pick up"** lists what the plan is short of, meal by meal, plus a few foods that would make more recipes cookable (shown only in the app; nothing is sent or ordered; open assumption #32); **stand-ins** let a meal one or two items short be offered with the swap stated, from `tools/substitutions.csv` only (knowledge item 14); and Ren chooses which staples the household keeps.
+- **Back button, Settings and welcome** (PR #40): a Back button inside the app, the Profile tab renamed Settings, and a first screen that says what WTF is for.
+- **Start with tomorrow** (PR #56, 2026-11-26): when the kitchen is nearly empty and nothing in the plan can be cooked yet, the Plan tab leads with tomorrow's breakfast and lunch, chosen to use the household's food and need the fewest extras, with what each meal is missing.
+- **Food added after the plan** (PR #56): adding food to the pantry after a plan was made is now noticed; the Plan tab names what was added and offers to re-plan. Using food up does not trigger it.
+- **Stand-in cooking time** (PR #56): a stand-in that needs cooking (raw rice for cooked rice) adds its time to the meal, so weekday time limits and every displayed time include it.
 
 - **Correcting a scan before saving** (PR #44): on the receipt and shelf-photo review, every line can be given a different food, amount or unit; a not-food line can be marked as food; and a food the read missed can be added. See Input 1.
 - **More foods, and more freshness estimates** (PRs #43, #45): 201 pantry-only foods were added (food list 438 → 639), chosen by testing common supermarket names, which also fixed wrong matches such as potato chips read as Potatoes and ice cream as Heavy cream. With the 248-row norms adopted (knowledge item 8), 415 of the 639 foods get an estimate where they are usually kept; 188 still have no guide and say so. Recipes are read exactly as before.
@@ -278,13 +299,13 @@ Known defects and gaps:
 
 ### Recipe preferences
 
-ASSUMPTION — built in prototype7, not yet ratified by the team. Ren can mark any recipe **liked**, **not for us**, or **favourite**. A disliked recipe is swapped out of the plan and not suggested again; a favourite is resurfaced more often.
+**Ratified 2026-11-26** (built in prototype7; open assumption #15). Ren can mark any recipe **liked**, **not for us**, or **favourite**. A disliked recipe is swapped out of the plan and not suggested again; a favourite is resurfaced more often.
 
-This introduces a per-user preference store, which is a data input the "Source boundary" above does not currently authorize, and it overlaps the deferred P1 item "Saved/imported recipes." The team must decide before Exercise 4 whether this is in scope for v1 and, if so, extend the source boundary to cover it. Two rules apply regardless: preferences only ever filter or reorder recipes drawn from the approved files — they never introduce a new recipe — and a disliked recipe must remain recoverable, since a mis-tap should not permanently narrow the household's options.
+This is a per-user preference store; the source boundary above now names it. It does not pull forward the deferred P1 item "Saved/imported recipes," since it adds no recipe. Two rules apply: preferences only ever filter or reorder recipes drawn from the approved files — they never introduce a new recipe — and a disliked recipe must remain recoverable, since a mis-tap should not permanently narrow the household's options.
 
 ### Dietary restrictions
 
-ASSUMPTION — built in prototype9, not yet ratified. This pulls forward part of the deferred P1 item "Dietary/allergy profile," so the team must decide before Exercise 4 whether it belongs in v1.
+**Ratified 2026-11-26** (built in prototype9; open assumption #18). This pulls forward part of the deferred P1 item "Dietary/allergy profile"; the allergy part stays deferred.
 
 Ren sets restrictions on the household (vegetarian, dairy-free, nut-free, no pork). Since 2026-09-18 the tags come from the approved database itself — each recipe lists the restrictions it *satisfies*, and the agent inverts that to know what the recipe contains rather than judging for itself. A restriction is applied as a **hard filter, never a ranking preference**: a restricted recipe is not suggested, not offered by Swap, and not used to fill a new day.
 
@@ -317,12 +338,12 @@ Rules that hold regardless of the scope decision:
 - Let Ren set up the pantry from photos of the fridge, freezer and cupboard, reviewed item by item (see Input 1, shelf photos).
 - Let Ren correct any line of a receipt or shelf-photo read — food, amount, unit — or add a missed item, before anything is saved.
 - Round scaled recipe amounts to practical measures, and use the rounded amount for display, the kitchen check and deduction alike.
-- Let Ren sign in with an email code, so the pantry, plan and history are kept across browsers and devices; using the app without an account stays possible (see "Accounts and saved data"). Live since 2026-11-20, awaiting ratification.
+- Let Ren sign in with an email code, so the pantry, plan and history are kept across browsers and devices; using the app without an account stays possible (see "Accounts and saved data"). Live since 2026-11-20, ratified 2026-11-26.
 
 ### Version 1 does not
 
 - Track inventory automatically from anywhere other than what Ren enters or a receipt Ren uploads.
-- Generate or send a grocery list.
+- Send a grocery list or order anything. It shows Ren, in the app, what the plan is short of ("What to pick up", open assumption #32); the shopping decision stays Ren's.
 - Access any grocery account or retailer.
 - Purchase groceries.
 - Guarantee food safety. A freshness window is a stated estimate from purchase date and general shelf-life norms, not a verified check of an ingredient's actual condition, and Ren can always override or reject it.
@@ -333,8 +354,8 @@ Not built now; may return in a later version:
 
 - **P1 — Saved/imported recipes.** A personal library of favorited or imported recipes, beyond the single approved file. Any additional recipe source still needs separate team approval under "Input 2: Recipe database" before the agent may use it.
 - **P1 — Household sharing.** More than one person using or editing the same household's plan. Accounts (decided 2026-11-20) are one person each; sharing one pantry between accounts stays deferred.
-- **P1 — Controlled substitutions.** The agent proposing a specific ingredient swap to rescue an otherwise-infeasible meal, with the swap and its effect shown explicitly.
-- **P1 — Leftover-to-lunch bridge.** PULLED FORWARD 2026-10-29 (pending merge, awaiting ratification) in a simpler form than first described: the dinner is planned for twice the household and the next day's lunch is its leftovers, so no separate leftover inventory is tracked. What remains deferred is tracking actual leftover portions (for a dinner that made more or less than planned).
+- **P1 — Controlled substitutions.** PULLED FORWARD 2026-11-19 (PR #39, at the team's request): the agent offers a stand-in to rescue a meal one or two items short, only from `tools/substitutions.csv`, with the swap stated. The table's rows were reviewed on 2026-11-26 (open assumption #33).
+- **P1 — Leftover-to-lunch bridge.** PULLED FORWARD 2026-10-29 (live; ratified with the setup questions on 2026-11-26) in a simpler form than first described: the dinner is planned for twice the household and the next day's lunch is its leftovers, so no separate leftover inventory is tracked. What remains deferred is tracking actual leftover portions (for a dinner that made more or less than planned).
 - **P1 — AI-generated recipes and a web recipe API.** Discussed 2026-10-13 (Claude writing a recipe from what is in the pantry, or pulling recipes from a licensed API, labelled and checked by the app against diet, time and pantry). Not built. Either needs an amendment to "Input 2: Recipe database" first, since both are recipe sources outside the approved file.
 - **P1 — Dietary/allergy profile.** PARTIALLY PULLED FORWARD — recipe-level dietary filtering is built in prototype9 (see "Dietary restrictions," above) and awaits ratification. What remains deferred is the part that matters most for safety: ingredient-level allergen data, so an allergy can be treated as a genuine hard constraint rather than a tag match.
 - **P1 — Onboarding flow.** PULLED FORWARD — a five-step setup questionnaire (name; household and diet; meals and leftovers; weekday cook times; empty or sample kitchen) is built (2026-10-29, pending merge) and awaits ratification. Reduces the cold-start problem identified in synthetic interviews (see `knowledge/synthetic-interviews.md`, Scenarios 3 and 5).
@@ -344,7 +365,7 @@ Not built now; may return in a later version:
 
 ### Deliverable
 
-An iPhone app. Built as a web app installable from Safari (Share → Add to Home Screen), live on GitHub Pages since 2026-10-01, with server-side pieces kept to two: the Cloudflare Worker that reads receipt and shelf photos, and the Supabase project that holds signed-in accounts and their saved data (live since 2026-11-20). Whether this is the v1 build approach, and whether a separate plan document still gets produced underneath the app, are ASSUMPTIONs the team must confirm before Exercise 4 (open assumption #5).
+An iPhone app. Built as a web app installable from Safari (Share → Add to Home Screen), live on GitHub Pages since 2026-10-01, with server-side pieces kept to two: the Cloudflare Worker that reads receipt and shelf photos, and the Supabase project that holds signed-in accounts and their saved data (live since 2026-11-20). The team ratified this as the v1 build approach on 2026-11-26 (open assumption #5); the plan is produced and shown in the app.
 
 The information architecture, screen inventory, and visual identity tokens are documented in `deliverables/design-spec.md` (extracted from the living spec to keep this document focused on the agent's behavior and boundaries, not implementation detail). The design spec implements the voice and visual direction defined under "What good looks like" above and must not contradict any rule in this spec.
 
@@ -370,10 +391,10 @@ The team (not Ren alone) is accountable for the agent's output quality. Ren make
 
 The team applies four checks before committing any version of this spec:
 
-- **Evidence:** Ren confirmed spending ~20 minutes per planning session searching recipes and checking ingredients; estimates food waste at approximately $30–50/month from forgotten perishables. (ASSUMPTION: exact figures not yet validated with data — team should track during pilot.)
+- **Evidence:** Ren confirmed spending ~20 minutes per planning session searching recipes and checking ingredients; estimates food waste at approximately $30–50/month from forgotten perishables. (Not measured: these figures were not tracked during the course and remain Ren's estimates, not validated data. Closed on 2026-11-26, open assumption #8.)
 - **Use:** Ren committed to using the app for three consecutive planning cycles during the pilot to test whether it actually changes behavior.
 - **Boundaries:** Team confirmed that a three-day plan covering breakfast, lunch, and dinner is the target scope for v1; since 2026-10-29 a household may plan a subset of those meals. The approved source supports this with 579 recipes across all three meal types (113 breakfast, 168 lunch, 298 dinner) — ample for a three-day rotation without repetition, including under dietary restrictions and weekday time limits.
-- **Completion:** PENDING — cold read not yet conducted. See below.
+- **Completion:** Done 2026-11-26 — the whole team re-read the spec, and an independent cold read was conducted. See below.
 
 ### Blindspot pass
 
@@ -383,13 +404,13 @@ Conducted 2026-09-17 by the team. Risks identified:
 2. **Double-allocation of a scarce ingredient.** If two or more meals in the same plan share a critical ingredient and the inventory has only enough for one, the agent must catch this at plan-generation time, not after Ren accepts. Status: addressed in spec ("Coordinate ingredient usage across all meals in the plan to prevent double-allocation").
 3. **Inventory too limited for any feasible plan.** If Ren's inventory can't support a full three-day meal plan, the agent must say so plainly rather than stretching or inventing. Status: addressed ("state its feasibility plainly — zero purchases required, or a clear explanation of the shortfall if not").
 4. **Blurry or partial receipt photo.** If the receipt photo is too blurry to read or partially cut off, the agent should flag the entire receipt as unreadable rather than silently guessing at items. Status: **decided 2026-11-26** — no separate flow: unreadable lines come back unmatched and every line is reviewed before saving (open assumption #10, blindspot 14).
-5. **Ren forgets to log a cooked meal.** Inventory drifts from reality if Ren doesn't confirm what was cooked. Status: open — no reminder is sent. The notification screen that once held a "Did you cook it?" toggle was removed on 2026-11-21; instead, a day that passes with an unmarked meal is asked about the next time the app opens, and nothing leaves the pantry until Ren answers (About says so). **Decided 2026-11-26:** no reminder in v1 (open assumption #11).
+5. **Ren forgets to log a cooked meal.** Inventory drifts from reality if Ren doesn't confirm what was cooked. Status: **decided** — no reminder is sent. The notification screen that once held a "Did you cook it?" toggle was removed on 2026-11-21; instead, a day that passes with an unmarked meal is asked about the next time the app opens, and nothing leaves the pantry until Ren answers (About says so). **Decided 2026-11-26:** no reminder in v1 (open assumption #11).
 6. **Shelf-life norms vary by storage method.** The same ingredient (e.g., chicken) has very different shelf life fresh vs. frozen. The agent must account for the storage location Ren reports, not apply a single default. Status: addressed — `knowledge/shelf-life-norms.md` provides separate fridge/freezer/pantry norms per item, and the Pantry screen tracks storage zones.
 7. **Breakfast recipe pool was thin.** Originally only 3 breakfast recipes. Status: resolved — the combined database carries 113 breakfast recipes (41 before the 2026-10-29 expansion), well beyond a three-day rotation.
 
 Added 2026-09-18, after prototype8 and prototype9 made the app stateful:
 
-8. **Dietary filtering could be mistaken for allergy safety.** Filtering matches recipe-level tags. A household could reasonably read "nut-free" as a guarantee when it is really a tag match over a small curated file, with no ingredient-level or label-level checking behind it. Status: open — the app states the limitation on the dietary screen, but the team must decide whether to keep an allergy-shaped option at all before ingredient-level data exists. Offering one that cannot be trusted is worse than not offering it.
+8. **Dietary filtering could be mistaken for allergy safety.** Filtering matches recipe-level tags. A household could reasonably read "nut-free" as a guarantee when it is really a tag match over a small curated file, with no ingredient-level or label-level checking behind it. Status: **closed 2026-11-26** — the team ratified recipe-level filtering (open assumption #18). The app offers no allergy option and says on both the setup and Dietary screens that the filters are not allergy-safe.
 9. **The midnight roll discards a day regardless of what happened on it.** If Ren never confirmed Monday's meals, Monday still disappears at midnight and its ingredients are never deducted — inventory silently drifts in the optimistic direction. Status: **addressed in prototype10** — the roll now queues any meal still `pending` and asks Ren what happened, deducting only on the answer. The roll itself never deducts and never assumes. What remains open is risk 5's other half: whether a nudge reaches Ren before the roll rather than after it.
 10. **A restriction can shrink the compliant pool below three distinct meals.** With several restrictions on, the approved files may not hold enough compliant recipes to fill three days without repeating. Status: addressed for now — the agent repeats a compliant meal rather than leaving an empty slot, and flags the slot only when nothing compliant exists at all. Whether repetition is acceptable to the household is a question for the pilot.
 
@@ -416,43 +437,67 @@ Added 2026-11-26, after the changes of 2026-11-20 to 2026-11-24:
 
 ### Cold read
 
-PENDING — not yet conducted. The team should give this spec to someone who was not part of the planning conversation and ask them to explain, from the spec alone: (1) who Ren is and what Ren needs, (2) what the agent produces, (3) what the agent won't do, (4) how to tell if the agent is working correctly. Gaps found should be addressed in the next version.
+**Conducted 2026-11-26.** The spec (v1.19) was given to a reader with no prior context — an AI reader (Claude, in a fresh session given only this file, with no access to the project, the app or the conversation that produced it) — and asked to explain, from the spec alone: (1) who Ren is and what Ren needs, (2) what the agent produces, (3) what the agent won't do, (4) how to tell if the agent is working correctly. The same day, every team member re-read the spec. The reader answered all four correctly, and said the Purpose, stories, Must never and Meal plan standard sections explain themselves well. It flagged 16 places that slowed an outsider down. Addressed in v1.19:
+
+- Undefined terms ("Exercise 4", PR numbers, Worker, Supabase, row-level security, anon key, localStorage, ratification, NOTICE / UNDERSTAND / ACT, the two meanings of "Claude"): a "Reading this spec" section at the top.
+- A changelog-heavy opening: the version notes moved to "Version history" at the end, and the spec now opens with what the app is.
+- Hard to tell current from historical text: the reading notes say which sections are history; removed features are marked where they appear.
+- Unclear where files live (Shared Drive vs repository): stated in the reading notes.
+- The household data note still read as pending, and the evidence figures as an assumption to track: both updated.
+- The Must never rule on grocery lists contradicted the app's "What to pick up" list: the team decided to keep the list and the rule now says what is and isn't allowed (open assumption #32).
+- Open assumptions #22 and #23 out of order: fixed.
+
+Left as they are: older figures inside the History sections (for example "300 images", "18 of 300"), which are true of the time they describe. A cold read by a person outside the team would still be worthwhile before any wider release.
 
 ### Open assumptions
 
 | # | Assumption | Location in spec | Status | Resolve by |
 |---|---|---|---|---|
 | 1 | Inventory file format and location | Knowledge > Input 1 | **Resolved** — the inventory lives in the browser's storage on Ren's device; there is no inventory file. Since 2026-11-20 it is also saved to a signed-in Ren's account (#28) | — |
-| 2 | Receipt intake format and misread-item flow | Knowledge > Input 1 | **Resolved in the app (2026-10-21), awaiting ratification** — camera or camera-roll photo, read by Claude (on-phone fallback), every line reviewed and confirmed by Ren | Before Exercise 4 |
-| 3 | Profile tab vs. fixed assumptions for v1 | Scope > Deliverable (design-spec) | Open — now the Settings tab (Preferences; Account & Support), tidied 2026-11-22 (PR #50), awaiting ratification | Before Exercise 4 |
-| 4 | Streaks/stats view in scope or deferred | What good looks like > Voice and visual | Open — reduced on 2026-11-21 to one milestone, Food rescued, with the waste breakdown inside it; cooking ladder and stat tiles removed. Awaiting ratification | Before Exercise 4 |
-| 5 | Build approach (native vs. wrapped web app) | Scope > Deliverable | Open — a home-screen web app is live on GitHub Pages (since 2026-10-01) with a Cloudflare Worker for receipts, awaiting the team's decision | Before Exercise 4 |
-| 6 | Recipe file as v1 seed; expansion criteria | Knowledge > Input 2 | **Expanded** to 579 on 2026-10-29 (duplicates of existing dishes not taken). Criteria for any further expansion still to be written down | When team next expands |
+| 2 | Receipt intake format and misread-item flow | Knowledge > Input 1 | **Ratified 2026-11-26** — camera or camera-roll photo, read by Claude (on-phone fallback), every line reviewed, correctable and confirmed by Ren | — |
+| 3 | Profile tab vs. fixed assumptions for v1 | Scope > Deliverable (design-spec) | **Ratified 2026-11-26** — the Settings tab (Preferences; Account & Support), as tidied 2026-11-22 (PR #50) | — |
+| 4 | Streaks/stats view in scope or deferred | What good looks like > Voice and visual | **Ratified 2026-11-26** — one milestone, Food rescued, with the waste breakdown inside it (cooking ladder and stat tiles removed 2026-11-21) | — |
+| 5 | Build approach (native vs. wrapped web app) | Scope > Deliverable | **Ratified 2026-11-26** — a home-screen web app on GitHub Pages (live since 2026-10-01), with a Cloudflare Worker for photos and Supabase for optional accounts | — |
+| 6 | Recipe file as v1 seed; expansion criteria | Knowledge > Input 2 | **Expanded** to 579 on 2026-10-29 (duplicates of existing dishes not taken). **Criteria written down and approved 2026-11-26** (see "Any further expansion" under Input 2) | — |
 | 7 | Receipt-reading confidence threshold | What good looks like > Receipt-reading standard | **Replaced** by reviewing every line before anything is added (2026-10-21) | — |
-| 8 | Evidence figures (planning time, waste $) | Governance > Checks applied | Open | During pilot |
+| 8 | Evidence figures (planning time, waste $) | Governance > Checks applied | **Closed 2026-11-26, not measured** — the planning-time and waste figures were not tracked during the course; they remain Ren's estimates, stated as such under Checks applied | — |
 | 9 | Non-English receipt handling | Governance > Blindspot pass | **Decided 2026-11-26:** v1 supports English receipts only. A receipt in another language goes through the same line-by-line review, so nothing is added without Ren checking it | — |
 | 10 | Blurry/partial receipt failure flow | Governance > Blindspot pass | **Decided 2026-11-26:** no separate flow in v1. Lines Claude can't read come back unmatched, an unreadable photo yields "no food items could be matched", and every line is reviewed before saving | — |
 | 11 | Cooked-meal reminder mechanism | Governance > Blindspot pass | **Decided 2026-11-26:** no reminders in v1. Unmarked meals are asked about the next time the app opens, and nothing leaves the pantry until Ren answers. Push reminders are a later idea | — |
 | 12 | Breakfast recipe expansion timeline | Knowledge > Input 2 | Resolved — expanded file created | — |
-| 13 | Onboarding flow design | Scope > Deferred (P1) | **Built** 2026-10-29 as a five-step questionnaire (pending merge), awaiting ratification | Before Exercise 4 |
-| 14 | Shelf-life norms accuracy for edge-case items | Knowledge > shelf-life-norms.md | Open — the 248-row file was adopted 2026-11-20; 188 of 639 foods (mostly sauces, specialty flours and grains, frozen snacks) still have no norm and show "no estimate". **Accepted for v1 on 2026-11-26:** saying "no estimate" follows the rule never to guess; coverage is reviewed during the pilot | During pilot |
-| 15 | Recipe preferences (like / not-for-us / favourite) in scope; source boundary extended to cover a preference store | What good looks like > Recipe preferences | Open — built in prototype7, awaiting ratification | Before Exercise 4 |
+| 13 | Onboarding flow design | Scope > Deferred (P1) | **Ratified 2026-11-26** — the five-step setup questionnaire (built 2026-10-29) | — |
+| 14 | Shelf-life norms accuracy for edge-case items | Knowledge > shelf-life-norms.md | **Accepted for v1 2026-11-26** — the 248-row file was adopted 2026-11-20; 188 of 639 foods (mostly sauces, specialty flours and grains, frozen snacks) still have no norm and show "no estimate". **Accepted for v1 on 2026-11-26:** saying "no estimate" follows the rule never to guess; coverage is reviewed during the pilot | During pilot |
+| 15 | Recipe preferences (like / not-for-us / favourite) in scope; source boundary extended to cover a preference store | What good looks like > Recipe preferences | **Ratified 2026-11-26** — preferences only filter or reorder approved recipes, and a dislike can be undone; the source boundary now names them | — |
 | 16 | Unapproved recipe in prototype sample data ("Avocado & Black Bean Wrap") | What good looks like > Current prototype | **Resolved in prototype8** — replaced with Quick Black Bean & Rice Burrito Bowl; all 18 catalogued recipes trace to an approved file | — |
-| 17 | Nutrition data has no approved source — the recipe files carry none, so the figures shown are estimates | What good looks like > Current app | Open — computed for all 579 recipes from typical food values (`tools/nutrition.csv`) and kept labelled as indicative; the team must ratify this or source real values | Before Exercise 4 |
-| 18 | Dietary filtering in scope for v1; and whether recipe-level tags are a defensible basis for it | What good looks like > Dietary restrictions | Open — built in prototype9, awaiting ratification. Not allergy-safe without ingredient-level data | Before Exercise 4 |
-| 19 | Household size, dietary settings and (since 2026-10-29) meal choices, leftovers and weekday cook times are agent inputs the source boundary does not yet authorize | Knowledge > Source boundary | Open — document them inside the boundary or remove them | Before Exercise 4 |
-| 20 | Rolling three-day horizon replaces a fixed plan; behaviour of the midnight roll on a partly-cooked day | Scope > Version 1 (P0) does | Partly resolved in prototype10 — unconfirmed meals are carried forward as a question instead of discarded. Still open: whether the prompt should block the roll or queue behind it | During pilot |
+| 17 | Nutrition data has no approved source — the recipe files carry none, so the figures shown are estimates | What good looks like > Current app | **Ratified 2026-11-26 as labelled estimates** — computed for all 579 recipes from typical food values (`tools/nutrition.csv`) and always shown as an estimate | — |
+| 18 | Dietary filtering in scope for v1; and whether recipe-level tags are a defensible basis for it | What good looks like > Dietary restrictions | **Ratified 2026-11-26** — recipe-level filtering, with the app stating on the setup and Dietary screens that it is not allergy-safe | — |
+| 19 | Household size, dietary settings and (since 2026-10-29) meal choices, leftovers and weekday cook times are agent inputs the source boundary does not yet authorize | Knowledge > Source boundary | **Ratified 2026-11-26** — named inside the source boundary as Ren's own settings, which only filter, order or scale approved recipes | — |
+| 20 | Rolling three-day horizon replaces a fixed plan; behaviour of the midnight roll on a partly-cooked day | Scope > Version 1 (P0) does | **Resolved, ratified 2026-11-26** — unconfirmed meals are carried forward as a question (prototype10); since PR #39 each new day opens with a summary of yesterday, answers are settled first, and the plan is fitted around them | — |
 | 21 | The prototype models 18 of 300 recipes, because pantry-ingredient mapping is hand-authored | What good looks like > Current app | **Resolved** — the mapping is generated from the database by the build; all 579 recipes take part | — |
+| 22 | Recipe times now range beyond 30 minutes; the agent must respect the stated time when a meal has to be quick | Knowledge > Input 2 | **Ratified 2026-11-26** — weekday limits per meal from the household's answers (defaults: breakfast 20, lunch 30 minutes); weekends unlimited | — |
 | 23 | Four catalogued recipes mark an ingredient optional that the database treats as required | What good looks like > Current app (defect 4) | **Resolved in the database's favour** — recipes are read from the database, so those ingredients are required | — |
-| 22 | Recipe times now range beyond 30 minutes; the agent must respect the stated time when a meal has to be quick | Knowledge > Input 2 | **Resolved in the app, awaiting ratification** — weekday limits per meal from the household's answers (defaults: breakfast 20, lunch 30 minutes); weekends unlimited | Before Exercise 4 |
-| 24 | Receipt photos are sent to Claude (Anthropic) through the team's Cloudflare Worker to be read | Knowledge > Input 1 | Open — built and disclosed in the app (2026-10-21); the team must ratify sending receipt photos off the device, and the monthly spend limit | Before Exercise 4 |
-| 25 | Estimated servings per recipe (`tools/servings.csv`) drive both the nutrition figures and the scaling of recipe amounts | Knowledge > Input 2 | Open — estimates, not stated values. All 579 re-checked on 2026-10-29 (173 changed; see blindspot 13); the team should ratify them as labelled estimates | Before Exercise 4 |
+| 24 | Receipt photos are sent to Claude (Anthropic) through the team's Cloudflare Worker to be read | Knowledge > Input 1 | **Ratified 2026-11-26** — receipt photos Ren chooses to send are read by Claude through the Worker and not stored by the app; disclosed in the app; monthly spend limit in place | — |
+| 25 | Estimated servings per recipe (`tools/servings.csv`) drive both the nutrition figures and the scaling of recipe amounts | Knowledge > Input 2 | **Ratified 2026-11-26 as labelled estimates** — all 579 re-checked on 2026-10-29 (173 changed; see blindspot 13); scaled amounts rounded to practical measures since PR #51 | — |
 | 26 | The Shared Drive copy of `knowledge/Combined_Recipe_Database.md` was the earlier 300-recipe version; the 579-recipe repository copy is the one the app is built from | Knowledge reference, item 1 | **Resolved 2026-10-29** — the Shared Drive copy was moved to `knowledge/superseded/`, leaving the repository copy as the single approved source | — |
 | 27 | AI-generated recipes or a web recipe API | Scope > Deferred (P1) | **Decided 2026-11-26:** deferred beyond v1. v1 uses only the approved recipe file; any new recipe source needs Input 2 amended first | — |
-| 28 | Accounts and saved data through Supabase (email code, Canada region, per-person security rules) | Knowledge > Accounts and saved data | **Decided, built and live 2026-11-20** (branch `feat/accounts`, merged). Project created and set up by the team; tested on the live site (code email, sign-in, saving, a second device and syncing all worked). Sign-in codes sent from whatthefridge.teamren@gmail.com (created 2026-11-20). **Settled 2026-11-26:** the repository owner holds the Supabase dashboard and the Gmail login and answers emailed deletion requests; the privacy wording was corrected and ratified by the team (see "Who holds what"). Still to do: the team's ratification of accounts as a v1 feature | Before Exercise 4 |
-| 29 | Shelf photos are sent to Claude (Anthropic) through the team's Worker to be read, under the rules agreed on 2026-11-12 | Knowledge > Input 1 (shelf photos) | **Agreed 2026-11-12, built** (PRs #32, #34). Untested on real fridges and on a phone; time saved on setup not yet measured | During pilot |
-| 30 | Routing family members the planner can't use today (`tools/family-review.csv`: 12 by counts_as, 43 by an approved stand-in, 22 none) | Knowledge reference, item 13 | Open — proposed and checked by the build, **not wired**. The stand-in routes would also need `substitutions.csv` rule 1 relaxed for pantry-only foods. The team's call | When the team decides |
-| 31 | Guided pairing, hiding finished meals and used-up food, and practical (rounded) amounts | Current app | **Built 2026-11-22 (PRs #48, #49, #51)**, awaiting ratification. All three work only within the approved recipes and Ren's own entries; none adds a data source | Before Exercise 4 |
+| 28 | Accounts and saved data through Supabase (email code, Canada region, per-person security rules) | Knowledge > Accounts and saved data | **Decided, built and live 2026-11-20** (branch `feat/accounts`, merged). Project created and set up by the team; tested on the live site (code email, sign-in, saving, a second device and syncing all worked). Sign-in codes sent from whatthefridge.teamren@gmail.com (created 2026-11-20). **Settled 2026-11-26:** the repository owner holds the Supabase dashboard and the Gmail login and answers emailed deletion requests; the privacy wording was corrected and ratified by the team (see "Who holds what"). Accounts ratified as a v1 feature on 2026-11-26 | — |
+| 29 | Shelf photos are sent to Claude (Anthropic) through the team's Worker to be read, under the rules agreed on 2026-11-12 | Knowledge > Input 1 (shelf photos) | **Agreed 2026-11-12, built** (PRs #32, #34), **ratified 2026-11-26**. Tested on a real pantry photo; time saved on setup not measured | — |
+| 30 | Routing family members the planner can't use today (`tools/family-review.csv`: 12 by counts_as, 43 by an approved stand-in, 22 none) | Knowledge reference, item 13 | **Decided 2026-11-26: left out of v1.** Families stay grouping-only; the routing proposal stays a draft for a later version (it would also need `substitutions.csv` rule 1 relaxed for pantry-only foods) | — |
+| 31 | Guided pairing, hiding finished meals and used-up food, and practical (rounded) amounts | Current app | **Built 2026-11-22 (PRs #48, #49, #51), ratified 2026-11-26.** All three work only within the approved recipes and Ren's own entries; none adds a data source | — |
+| 32 | The "What to pick up" list (PR #39, 2026-11-20) shows what the plan is short of, against a Must never that said "Generate a grocery list" | What good looks like > Must never; Scope > Version 1 does not | **Decided 2026-11-26: kept.** Found by the cold read. The rule now forbids sending a list or ordering, and allows showing Ren, in the app, what the plan is short of | — |
+| 33 | The stand-in table (`tools/substitutions.csv`, 78 rows) has been used by the app since 2026-11-19, but its rows are still the draft | Knowledge reference, item 14; Scope > Deferred (Controlled substitutions) | **Reviewed and closed 2026-11-26.** Found while bringing the spec up to date. At the team's request Claude checked all 78 rows for food sense and diet effects, and the team accepted the review. One note was corrected (Dijon to yellow mustard: milder, not sharper). Measured in the app: the two rows that remove a dietary property (tofu to paneer, tahini to peanut butter) are never offered to a dairy-free or nut-free household, and the 10 meat stand-ins are never offered to a vegetarian one. Any new or changed row needs the same review | — |
+
+### Version history
+
+Superseded versions are kept in `governance/history/` (v1.0 to v1.18).
+
+- **v1.19 (2026-11-26)** — The team's decisions of 26 Nov. Accounts: the repository owner holds the Supabase dashboard and the Gmail login and answers emailed deletion requests, and the corrected privacy wording is ratified. Open items: thirteen ratified; #9 and #10 (English receipts only), #11 (no reminders), #14 ("no estimate" accepted) and #27 (AI recipes deferred) decided; #30 family routing left out of v1; #32 "What to pick up" kept; #6 expansion criteria written; #8 closed as not measured; blindspot 22 closed. Cold read conducted, and its findings addressed (the reading notes at the top, this history, the household data note, the grocery-list rule). Also describes PRs #39, #40 and #56 (survey feedback, Settings, start with tomorrow), adds knowledge item 14 (stand-ins), and records #33: the stand-in rows reviewed and the review accepted.
+- **v1.18 (2026-11-26)** — Brought the spec up to the live app as of 2026-11-24 (PRs #43–#53): correcting scanned items, a larger food list and more freshness estimates, the release cleanup, hiding finished meals, guided pairing, ingredient families and practical amounts.
+- **v1.17 (2026-11-20)** — Adopted the 248-row shelf-life norms file.
+- **v1.16 (2026-11-20)** — Accounts marked live and tested.
+- **v1.15 (2026-11-20)** — Recorded the team's sign-in email sender.
+- **v1.14 (2026-11-20)** — Added accounts and saved data (Supabase), and the shelf-photo rules agreed on 2026-11-12.
+- **v1.0 to v1.13 (2026-09-17 to 2026-10-29)** — From the first spec to the live app with all 579 recipes; each is in `governance/history/`.
 
 ---
 
