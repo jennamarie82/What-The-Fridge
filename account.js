@@ -12,7 +12,7 @@
 //     loaded. The newest save wins for the pantry, plan and settings; the cooking and waste logs
 //     are merged, never overwritten, so no history is lost.
 //   - A device's existing kitchen is never uploaded without Ren choosing to.
-// Photos are never stored. Only the public anon key is in the app (account-config.js); what it
+// Photos are never stored by the app. Only the public anon key is in the app (account-config.js); what it
 // can do is limited by the table's row-level security to each person's own row.
 
 var account = {
@@ -295,8 +295,10 @@ function accountRerender() {
 }
 function accountPrivacyHTML() {
   return '<div class="note-card" style="margin-top:var(--s6);"><strong>What an account stores</strong><br>' +
-    'Your settings, kitchen, plan, recipe likes and your cooking and waste history, saved with Supabase in Canada ' +
-    'so you can use them on any device. Only you can see them. Receipt and shelf photos are never stored. ' +
+    'Your email address, settings, kitchen, plan, recipe likes and your cooking and waste history, saved with Supabase ' +
+    'in Canada so you can use them on any device. Other people using the app can\'t see them. One team member manages ' +
+    'the database and opens it only to deal with a request from you. Receipt and shelf photos are sent to Claude ' +
+    '(Anthropic) to be read and aren\'t stored by the app. ' +
     'You can delete your account and everything in it here at any time.</div>';
 }
 function accountSignInHTML(ctx) {
@@ -382,7 +384,7 @@ function renderAccountRow() {
   var note = document.getElementById('storageNote');
   if (note) {
     note.textContent = account.user
-      ? 'Saved in this browser and in your account (Supabase, Canada), so it’s on every device you sign in on. Photos you send to be read are never stored.'
+      ? 'Saved in this browser and in your account (Supabase, Canada), so it’s on every device you sign in on. Photos you send to be read aren’t stored by the app.'
       : 'Saved in this browser only. Sign in under Account to keep it on every device. Nothing else leaves your phone except a receipt or shelf photo you choose to send.';
   }
 }

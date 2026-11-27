@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-26 (final review)';
+var APP_VERSION = '2026-11-26 (privacy wording)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -2853,7 +2853,8 @@ function openSub(which) {
       '<div class="note-card" style="margin-top:var(--s4);">' +
         '<strong>Privacy</strong><br>' +
         'Your food, plan and settings are saved in this browser. If you sign in (Settings &rsaquo; Account), they are also saved ' +
-        'to your account with Supabase in Canada, so you can use them on other devices; only you can see them, and you can delete ' +
+        'to your account with Supabase in Canada, so you can use them on other devices. Other people using the app can\'t see them; ' +
+        'one team member manages the database and opens it only to deal with a request from you. You can delete ' +
         'your account and everything in it there. When you scan a receipt or photograph your shelves, the photo is sent to ' +
         'Claude (by Anthropic) to read it, and isn\'t stored by the app.' +
       '</div>' +
