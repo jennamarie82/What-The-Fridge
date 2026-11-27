@@ -1,6 +1,6 @@
 // Shown in About and the page footer so anyone can tell which build their phone is running.
 // Change it with each release, together with ?v= on the files in index.html.
-var APP_VERSION = '2026-11-20 (freshness for more foods)';
+var APP_VERSION = '2026-11-26 (final review)';
 
 // ═══════════════ SETTINGS ═══════════════
 var settings = {
@@ -2031,16 +2031,25 @@ function scaledNote(line) {
 }
 // What a bare count is a count of, so "→ 1" reads "→ 1 egg". Only for a single plainly named food;
 // a choice of foods, or a name like "Chicken (whole / pieces)", is left as the number.
+// Food names ending in s are already plural ("Eggs") and are made singular for one. A name in the
+// singular is often a mass noun ("Bread", "Celery", "Cooked rice"), where adding an s read
+// "→ 2 breads" and "→ 2 celerys" (measured over every recipe line at households 1 to 4), so only
+// the singular names listed here, which are things you count, get a noun.
+var COUNT_PLURAL = { 'beef steak':'beef steaks', 'bell pepper':'bell peppers', 'butternut squash':'butternut squashes',
+  'cabbage':'cabbages', 'cauliflower':'cauliflowers', 'chicken breast':'chicken breasts', 'cucumber':'cucumbers',
+  'eggplant':'eggplants', 'kiwi':'kiwis', 'lettuce':'lettuces', 'mango':'mangoes', 'onion':'onions',
+  'red onion':'red onions', 'turkey sausage':'turkey sausages', 'zucchini':'zucchinis', 'bok choy':'bok choy' };
 function countNoun(ids, n) {
   if (ids.length !== 1) return '';
   var name = ingName(ids[0]).toLowerCase();
-  if (/[(/]/.test(name)) return '';
-  if (n <= 1) {
-    if (/oes$/.test(name)) return name.slice(0, -2);              // tomatoes, potatoes
-    if (/[^s]s$/.test(name)) return name.slice(0, -1);            // eggs, bananas
-    return name;
-  }
-  return /s$/.test(name) ? name : name + 's';
+  if (/[(/]/.test(name) || / and /.test(name)) return '';
+  if (COUNT_PLURAL[name]) return n <= 1 ? name : COUNT_PLURAL[name];
+  if (!/[^s]s$/.test(name)) return '';                            // a mass noun: the number alone
+  if (n > 1) return name;
+  if (/leaves$/.test(name)) return name.slice(0, -6) + 'leaf';    // bay leaves
+  if (/ies$/.test(name)) return name.slice(0, -3) + 'y';          // anchovies
+  if (/(ch|sh|x|o)es$/.test(name)) return name.slice(0, -2);      // radishes, tomatoes
+  return name.slice(0, -1);                                       // eggs, bananas
 }
 // What the recipe's amounts are scaled to, in plain words, under the ingredients.
 // The one caveat about freshness on this screen sits here, beside the dates it qualifies.
