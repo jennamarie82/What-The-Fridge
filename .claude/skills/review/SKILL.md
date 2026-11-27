@@ -27,6 +27,8 @@ So: serve the app, drive it, and print the numbers before saying anything is tru
 cd <repo> && python -m http.server 8765 --bind 127.0.0.1
 ```
 
+(On a Windows machine without Python, any static file server on the repository folder works.)
+
 Then use the browser tools against `http://localhost:8765/`. Call functions directly —
 `coverage()`, `scoreRecipe()`, `freshness()`, `planAround()`, `wasteStats()` — with
 constructed pantries and plans. `finishSetup('sample')` gives a populated kitchen.
@@ -46,7 +48,7 @@ Two traps when testing:
 
 **Read `CLAUDE.md` in the repository root before relying on the list below.** It is the
 governing document and it changes; what follows is a summary written against version 1.11,
-brought up to version 1.16 for accounts, and could be out of date. Where the two disagree, the
+brought up to version 1.16 for accounts and checked against version 1.18, and could be out of date. Where the two disagree, the
 spec wins and this file needs updating.
 
 Note that the spec references `knowledge/`, `governance/` and `deliverables/` paths that mostly
