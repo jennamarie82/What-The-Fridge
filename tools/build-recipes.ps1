@@ -252,6 +252,11 @@ foreach ($s in (Read-Table "$PSScriptRoot\substitutions.csv")) {
   $o = [ordered]@{ for = $s.for; use = $s.use; ctx = $ctx }
   if ($s.diet) { $o['diet'] = $s.diet }
   if ($s.note) { $o['note'] = $s.note }
+  # Minutes the swap adds (cooking raw rice for cooked rice). The app adds them to the recipe's time.
+  if ($s.extra_mins) {
+    if ($s.extra_mins -notmatch '^\d+$') { $problems += "$where`: extra_mins '$($s.extra_mins)' should be a whole number of minutes" }
+    else { $o['mins'] = [int]$s.extra_mins }
+  }
   $subs += [pscustomobject]$o
 }
 

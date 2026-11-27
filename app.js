@@ -461,7 +461,8 @@ function practicalQty(qty, unit, ids) {
 var FRACTIONS = [[0, ''], [0.25, '¼'], [1 / 3, '⅓'], [0.5, '½'], [2 / 3, '⅔'], [0.75, '¾'], [1, '']];
 function kitchenQty(qty, unit) {
   if (qty === null || qty === undefined) { return 'amount not recorded'; }
-  if (qty <= 0) { return (!unit || unit === 'ea') ? '0' : '0 ' + unit; }
+  // Zero takes the plural like any amount that isn't one: "0 cups left", not "0 cup".
+  if (qty <= 0) { return (!unit || unit === 'ea') ? '0' : '0 ' + (UNIT_PLURAL[unit] || unit); }
   if (unit === 'cup' && qty < 0.25) { qty = qty * 16; unit = 'tbsp'; }
   if (unit === 'tbsp' && qty < 1) { qty = qty * 3; unit = 'tsp'; }
   if (UNIT_BASE[unit] && ['tsp', 'tbsp', 'cup', 'lb'].indexOf(unit) === -1) {
@@ -894,8 +895,23 @@ function timeLimit(type, dayIdx) {
 }
 function fitsTime(r, dayIdx) {
   var lim = timeLimit(r.type, dayIdx);
-  return !lim || r.mins <= lim;
+  return !lim || recipeMins(r) <= lim;
 }
+// A recipe's time as this kitchen will cook it. The database states each recipe's own time, but
+// a stand-in can mean cooking something first: raw rice where the recipe asks for cooked rice
+// adds about 20 minutes (extra_mins in tools/substitutions.csv). Without this a 12-minute rice
+// bowl passed the 20-minute breakfast limit while really taking about 32 — the spec's "respect
+// the stated time when a meal has to be quick", quietly broken by a swap.
+function standInMins(r) { var s = standInFor(r); return s && s.row.mins ? s.row.mins : 0; }
+function recipeMins(r) { return typeof r.mins === 'number' ? r.mins + standInMins(r) : r.mins; }
+// The time as words: the recipe's own, plus what the stand-in adds, said separately so the
+// database's stated time stays visible ("25 mins + about 20 min to cook the white rice").
+function timeText(r) {
+  var s = standInFor(r);
+  return s && s.row.mins ? r.time + ' + about ' + s.row.mins + ' min to cook the ' + ingName(s.row.use).toLowerCase() : r.time;
+}
+// The short form for the badge on a meal photo.
+function timeBadge(r) { var extra = standInMins(r); return extra && typeof r.mins === 'number' ? (r.mins + extra) + ' mins' : r.time; }
 
 function scoreRecipe(r, dayIdx, reserved) {
   var missing = 0, short = 0, check = 0, ok = 0, urgency = 0, stale = 0;
@@ -913,7 +929,8 @@ function scoreRecipe(r, dayIdx, reserved) {
   // Mornings are short; on a weekday this only matters when nothing within the limit fits,
   // and then the quickest of the rest wins.
   var lim = timeLimit(r.type, dayIdx) || (r.type === 'breakfast' ? 20 : 0);
-  if (lim && r.mins > lim) s -= 50 + (r.mins - lim) * 3;
+  var mins = recipeMins(r);
+  if (lim && mins > lim) s -= 50 + (mins - lim) * 3;
   if (dayIdx === 0 && /overnight/i.test(r.time)) s -= 200;          // can't be ready today
   var p = getPref(r.id);
   if (p.fav) s += 30; else if (p.vote === 'up') s += 10;
@@ -997,6 +1014,7 @@ function planKitchen(keep) {
     if (own) plan[j].ownLunch = true;
     if (plan[j].recipe !== before) changed++;
   }
+  applyStarter();                     // a near-empty kitchen: tomorrow's breakfast and lunch first
   planSig = kitchenSig();
   planBuiltEmpty = pantryEmpty();
   return changed;
@@ -1286,7 +1304,7 @@ function renderMeals() {
     var card = document.createElement('div');
     card.className = 'meal-card' + (slot === spot ? ' spotlight' : '') + (entry.status !== 'pending' ? ' done' : '') + (entry.dietBlocked ? ' blocked' : '');
     card.setAttribute('role', 'button');
-    card.setAttribute('aria-label', Type + ': ' + (left ? 'leftovers, ' : '') + r.name + ', ' + (left ? 'nothing to cook' : r.time) +
+    card.setAttribute('aria-label', Type + ': ' + (left ? 'leftovers, ' : '') + r.name + ', ' + (left ? 'nothing to cook' : timeText(r)) +
       (entry.status === 'accepted' ? (left ? ', eaten' : ', cooked') : entry.status === 'skipped' ? ', skipped' : ''));
     card.setAttribute('tabindex', '0');
     card.onclick = function() { openDetail(idx); };
@@ -1312,13 +1330,13 @@ function renderMeals() {
     card.innerHTML =
       '<div class="meal-hero" style="background:' + heroFor(r) + ';">' +
         '<span class="meal-type-badge ' + type + '">' + (left ? 'lunch · leftovers' : type) + '</span>' +
-        '<span class="time-badge">' + (left ? 'reheat' : r.time) + '</span>' +
+        '<span class="time-badge">' + (left ? 'reheat' : timeBadge(r)) + '</span>' +
         badge +
         (pref.fav ? '<span class="fav-badge" title="Favourite">' + rateIcons.fav + '</span>' : '') +
       '</div>' +
       '<div class="meal-info">' +
         '<h4>' + r.name + '</h4>' +
-        '<p class="meta">' + (left ? 'Lunch · leftovers from last night\'s dinner' : Type + ' · ' + r.time) + '</p>' +
+        '<p class="meta">' + (left ? 'Lunch · leftovers from last night\'s dinner' : Type + ' · ' + timeText(r)) + '</p>' +
         (why ? '<p class="meal-why' + (ch ? ' changed' : '') + '">' + esc(why) + '</p>' : '') +
         '<div class="chip-row">' + chips + '</div>' +
       '</div>';
@@ -1807,7 +1825,7 @@ function renderPairing() {
       '<div class="pair-list">' + both.slice(0, 8).map(function(c) {
         return '<div class="pair-recipe">' +
           '<div class="prc-name">' + esc(c.r.name) + '</div>' +
-          '<div class="prc-meta">' + esc(slotName(c.idx)) + ' · ' + esc(c.r.time) + '</div>' +
+          '<div class="prc-meta">' + esc(slotName(c.idx)) + ' · ' + esc(timeText(c.r)) + '</div>' +
           '<div class="prc-gap' + (c.gaps.length ? '' : ' ok') + '">' +
             (c.gaps.length ? 'Needs ' + esc(nameList(c.gaps)) : 'Nothing missing') + '</div>' +
           '<button class="btn primary small" onclick="placePairing(\'' + c.r.id + '\')">Add to plan</button>' +
@@ -2178,7 +2196,7 @@ function whyLine(r, dayIdx, where, verdict) {
 
   if (!missing) {
     var lim = (typeof dayIdx === 'number') ? timeLimit(r.type, dayIdx) : null;
-    if (lim && r.mins && r.mins <= lim) { return 'Quick enough for your ' + lim + '-minute ' + r.type + '.'; }
+    if (lim && r.mins && recipeMins(r) <= lim) { return 'Quick enough for your ' + lim + '-minute ' + r.type + '.'; }
     return where === 'detail' ? 'Nothing missing.' : '';   // the card's chip already says so
   }
   if (p.vote === 'up') return 'You liked this one before.';
@@ -2212,7 +2230,7 @@ function openDetail(idx) {
   var rows = ingredientRowsHTML(r, idx);
   var html = seenChangeHTML(entry) + ratingBarHTML(r.id) +
     '<div class="detail-facts">' +
-      '<div class="detail-fact">⏱ ' + r.time + '</div>' +
+      '<div class="detail-fact">⏱ ' + esc(timeText(r)) + '</div>' +
     '</div>' +
     '<div class="section-label" style="margin-top:0;">Ingredients &middot; from your kitchen</div>' +
     '<div class="ingredient-card">' + rows.html + '</div>' +
@@ -2445,6 +2463,144 @@ function dismissChanges() {
 // The line under a changed meal's name, until Ren opens it.
 function changedLine(ch) {
   return (ch.from ? 'Was ' + ch.from + '. ' : '') + 'Changed because ' + ch.why + '.';
+}
+
+// ═══════════════ FOOD ADDED SINCE THE PLAN ═══════════════
+// planSig has always recorded the kitchen a plan was built for, but nothing ever compared it, so
+// adding food to an existing plan changed nothing and said nothing. Measured: a plan built from
+// eggs, then spinach and tomatoes added — 0 meals changed, no message; Re-plan then changed all
+// nine and used the new food in four. Only additions are named: cooking something down to
+// nothing also changes the kitchen, and that is no reason to re-plan.
+function addedSincePlan() {
+  if (!planSig || plan.length !== 9 || planBuiltEmpty) return [];
+  var seen = {};
+  return pantry.filter(function(e) { return inStock(e) && planSig.indexOf(e.id) === -1; })
+    .map(function(e) { return ingName(e.ing).toLowerCase(); })
+    .filter(function(n) { if (seen[n]) return false; seen[n] = true; return true; });
+}
+function renderKitchenNote() {
+  var el = document.getElementById('kitchenNote');
+  if (!el) return;
+  var added = addedSincePlan();
+  if (!added.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="kitchen-note"><div class="kn-text"><strong>You’ve added ' + esc(listOf(added, 3)) +
+      ' since this plan was made.</strong><span>Re-plan to fit ' + (added.length > 1 ? 'them' : 'it') +
+      ' in. Meals you’ve already cooked or skipped stay as they are.</span></div>' +
+    '<button class="btn primary small" onclick="replanNow()">Re-plan</button></div>';
+}
+
+// ═══════════════ START WITH TOMORROW ═══════════════
+// Measured on an empty kitchen with one to three foods added (chicken, rice, broccoli; eggs,
+// spinach, tomatoes): no approved recipe can be cooked from them, so all nine meals needed
+// shopping and the Plan tab opened on "Short of 14 foods". Someone just back from a trip needs
+// tomorrow's breakfast and lunch, not three days. Picking those two from recipes that use their
+// food and need the fewest extras came to 3–6 items instead of 13–16.
+//
+// It shows only while nothing in the plan can be cooked and nothing has been cooked or skipped
+// yet, and it replaces only tomorrow's breakfast and lunch, so the card and the plan agree.
+// What each meal is missing is said per meal, as the spec requires, never as a shopping list.
+var STARTER_SLOTS = [3, 4];          // tomorrow's breakfast and lunch
+var STARTER_MAX_EXTRAS = 3;          // more than this isn't a start, so the easiest meal is offered
+function yourFoods() {
+  var seen = {}, out = [];
+  pantry.forEach(function(e) { if (inStock(e) && !seen[e.ing]) { seen[e.ing] = true; out.push(e.ing); } });
+  return out;
+}
+function starterActive() {
+  if (pantryEmpty() || plan.length !== 9) return false;
+  var started = plan.some(function(e) { return isMealEntry(e) && e.status !== 'pending'; });
+  var cookable = plan.some(function(e, i) {
+    if (!isMealEntry(e) || e.status !== 'pending' || e.dietBlocked) return false;
+    var r = recipeById(e.recipe);
+    return r && fullyCovered(r, reservationsExcept(i), Math.floor(i / 3));
+  });
+  return !started && !cookable;
+}
+// The meal for one of tomorrow's slots: among recipes that use the household's food, the one with
+// the fewest things missing (then the one using the most of their food, then the planner's score).
+// If even that needs more than STARTER_MAX_EXTRAS, the easiest meal of the type is offered instead.
+function starterPick(type, exclude) {
+  var foods = yourFoods(), best = null, easiest = null;
+  var better = function(a, b) {
+    return !b || a.miss < b.miss || (a.miss === b.miss && (a.uses > b.uses || (a.uses === b.uses && a.s > b.s)));
+  };
+  recipes.forEach(function(r) {
+    if (!eligible(r, type) || exclude.indexOf(r.id) > -1 || !fitsTime(r, 1)) return;
+    var c = { r:r, miss:missingFor(r, 1, {}).length, s:scoreRecipe(r, 1, {}).score,
+              uses:foods.filter(function(id) { return recipeUses(r, id); }).length };
+    if (c.uses && better(c, best)) best = c;
+    if (better(c, easiest)) easiest = c;
+  });
+  if (best && best.miss <= STARTER_MAX_EXTRAS) return best.r;
+  return easiest ? easiest.r : null;
+}
+function applyStarter() {
+  if (!starterActive()) return;
+  STARTER_SLOTS.forEach(function(i) {
+    var e = plan[i];
+    if (!isMealEntry(e) || e.status !== 'pending' || e.dietBlocked) return;
+    // Only the other starter slot is off limits. Tomorrow comes first: when its best meal was
+    // already planned for today (measured: chicken's best lunch and the eggs' best breakfast both
+    // were), tomorrow takes it and that slot gets the next best, rather than tomorrow settling for
+    // a meal that doesn't use the household's food at all.
+    var exclude = STARTER_SLOTS.filter(function(j) { return j !== i && isMealEntry(plan[j]); })
+      .map(function(j) { return plan[j].recipe; });
+    var r = starterPick(MEAL_TYPES[i % 3], exclude);
+    if (!r || r.id === e.recipe) return;
+    plan[i] = { recipe:r.id, status:'pending' };
+    if (e.ownLunch) plan[i].ownLunch = true;
+    plan.forEach(function(x, j) {
+      if (j === i || !isMealEntry(x) || x.status !== 'pending' || x.recipe !== r.id) return;
+      var others = plan.map(function(y, k) { return k !== j && isMealEntry(y) ? y.recipe : null; }).filter(Boolean);
+      var p = pickRecipe(MEAL_TYPES[j % 3], Math.floor(j / 3), reservationsExcept(j), others);
+      if (p) { var own = x.ownLunch; plan[j] = { recipe:p.id, status:'pending' }; if (own) plan[j].ownLunch = true; }
+    });
+  });
+}
+function renderStarter() {
+  var el = document.getElementById('starter');
+  if (!el) return;
+  if (!starterActive()) { el.innerHTML = ''; return; }
+  var foods = yourFoods();
+  var info = STARTER_SLOTS.map(function(i) {
+    var e = plan[i];
+    if (!isMealEntry(e)) return null;
+    var r = recipeById(e.recipe);
+    return { i:i, r:r, miss:missingFor(r, 1, reservationsExcept(i)),
+             used:foods.filter(function(id) { return recipeUses(r, id); }).map(ingName) };
+  }).filter(Boolean);
+  if (!info.length) { el.innerHTML = ''; return; }
+  var needs = function(m) { return m.miss.length ? 'needs ' + nameList(m.miss) : 'needs nothing more'; };
+  var rows = info.map(function(m) {
+    var type = MEAL_TYPES[m.i % 3], sub;
+    if (m.used.length) {
+      sub = 'Uses your ' + nameList(m.used) + ' · ' + needs(m);
+    } else {
+      // Say where their food is going instead, so a meal that doesn't use it doesn't read as the
+      // plan ignoring it. Only a slot that really uses it is named.
+      // Tomorrow's other meal first, since it's on this same card; then the plan in order.
+      var where = null, goes = [], order = STARTER_SLOTS.concat([0, 1, 2, 5, 6, 7, 8]);
+      for (var k = 0; k < order.length && !where; k++) {
+        var j = order[k], x = plan[j];
+        if (j === m.i || !isMealEntry(x)) continue;
+        var rr = recipeById(x.recipe);
+        goes = foods.filter(function(id) { return recipeUses(rr, id); }).map(ingName);
+        if (goes.length) where = slotName(j, true);
+      }
+      // "goes" only for one food with a singular name: "your eggs go", "your chicken breast goes".
+      var plural = goes.length > 1 || /s$/i.test(goes[0] || '');
+      sub = (where ? 'Your ' + nameList(goes) + (plural ? ' go' : ' goes') + ' into ' + where + '. ' : '') +
+        'This is the easiest ' + type + ' to start with: it ' + needs(m) + '.';
+    }
+    return '<button class="st-row" onclick="openDetail(' + m.i + ')">' +
+        '<span class="st-type">' + (m.used.length ? 'Tomorrow’s ' + type : 'Easy start · ' + type) + '</span>' +
+        '<span class="st-name">' + esc(m.r.name) + ' <span class="st-time">' + esc(timeText(m.r)) + '</span></span>' +
+        '<span class="st-sub">' + esc(sub.charAt(0).toUpperCase() + sub.slice(1)) + '</span></button>';
+  }).join('');
+  el.innerHTML = '<div class="starter-card"><div class="st-head"><strong>Start with tomorrow</strong>' +
+      '<span>Nothing in the next three days can be cooked from your kitchen yet. These are the easiest two ' +
+      'to get ready for tomorrow.</span></div>' + rows +
+    '<p class="st-foot">The rest of the three days is below, and fills in as you add food.</p></div>';
 }
 
 // ═══════════════ WHAT TO PICK UP (feedback 6B) ═══════════════
@@ -3329,6 +3485,8 @@ function renderAll() {
   syncPlanShape();
   renderGreeting();
   renderDaySelector();
+  renderKitchenNote();
+  renderStarter();
   renderChanges();
   renderReconcile();
   renderBanner();

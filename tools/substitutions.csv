@@ -16,6 +16,10 @@
 #            dairy-containing dish dairy-free; "-NF" means it STOPS being nut-free. Blank = no
 #            change. See RULE 3.
 # note     = what Ren needs to know to actually do it — amount, timing, taste. Plain language.
+# extra_mins = minutes the swap adds to the recipe's stated time, when it means cooking something
+#            first (raw rice for cooked rice). Taken from the row's own note. Blank = none. The app
+#            adds it to the time it shows and to the quick-meal limits, so a swap can't make a
+#            meal look quicker than it is.
 #
 # ── RULES THE BUILD SHOULD ENFORCE ──
 # 1. `for` and `use` must both be recipe-matchable ids (pantry_only != 1), like counts_as.
@@ -34,7 +38,7 @@
 # The recipe-to-context mapping (decision 1 in the review notes) is derived from each recipe's title
 # and method by keyword in build-recipes.ps1; tools/context-review.csv lists it for checking.
 
-for,use,contexts,diet,note
+for,use,contexts,diet,note,extra_mins
 # ── fruit, sweet dishes ──
 berries,bananas,sweet-toast|oatmeal|yogurt-bowl|smoothie,,"Slice thin. Sweeter than berries, so go easy on any honey or syrup."
 berries,peaches,sweet-toast|oatmeal|yogurt-bowl|smoothie,,"Works fresh or frozen. Dice small for toast."
@@ -92,10 +96,10 @@ white-beans,chickpeas,salad-raw|soup-stew|curry,,"Firmer, holds its shape."
 rice,quinoa,rice-bowl|salad-raw,,"Cooks in about half the time. Rinse it first."
 # Food that only needs cooking first. Matching was exact, so a bag of rice didn't cover "cooked
 # rice" and raw chicken didn't cover "cooked chicken" (feedback 6). Added 2026-11-19, for review.
-cooked-rice,rice,rice-bowl|stir-fry|soup-stew|curry|taco-wrap|salad-raw|eggs,,"Cook it first: about 1/3 cup uncooked makes 1 cup cooked. Allow 20 minutes."
-cooked-rice,brown-rice,rice-bowl|stir-fry|soup-stew|curry|salad-raw,,"Cook it first: about 1/3 cup uncooked makes 1 cup cooked. Brown rice takes about 45 minutes."
-cooked-chicken,chicken-breast,salad-raw|taco-wrap|soup-stew|rice-bowl|pasta-sauce|roast-bake-savoury,,"Cook it first: poach or pan-fry it for about 15 minutes until cooked through, then shred or dice."
-cooked-chicken,chicken-thighs,salad-raw|taco-wrap|soup-stew|rice-bowl|pasta-sauce|roast-bake-savoury,,"Cook it first: pan-fry or bake it for about 20 minutes until cooked through, then shred or dice."
+cooked-rice,rice,rice-bowl|stir-fry|soup-stew|curry|taco-wrap|salad-raw|eggs,,"Cook it first: about 1/3 cup uncooked makes 1 cup cooked. Allow 20 minutes.",20
+cooked-rice,brown-rice,rice-bowl|stir-fry|soup-stew|curry|salad-raw,,"Cook it first: about 1/3 cup uncooked makes 1 cup cooked. Brown rice takes about 45 minutes.",45
+cooked-chicken,chicken-breast,salad-raw|taco-wrap|soup-stew|rice-bowl|pasta-sauce|roast-bake-savoury,,"Cook it first: poach or pan-fry it for about 15 minutes until cooked through, then shred or dice.",15
+cooked-chicken,chicken-thighs,salad-raw|taco-wrap|soup-stew|rice-bowl|pasta-sauce|roast-bake-savoury,,"Cook it first: pan-fry or bake it for about 20 minutes until cooked through, then shred or dice.",20
 quinoa,bulgur,salad-raw|rice-bowl,,
 couscous,quinoa,salad-raw|rice-bowl,,"Takes longer — start it before the rest."
 # ── nuts: see RULE 3 and the review notes ──
